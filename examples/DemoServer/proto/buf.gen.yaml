@@ -1,0 +1,23 @@
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: ../build/protoc-gen-go
+    opt: paths=source_relative
+  - remote: buf.build/protocolbuffers/go
+    out: ../build/go/
+    opt: paths=source_relative
+  - remote: buf.build/grpc/go
+    out: ../build/go/
+    opt: paths=source_relative
+  # vtprotobuf: 性能最优的 Go protobuf 序列化方案，通过代码生成避免反射
+  # 生成高效的 MarshalVT / UnmarshalVT / SizeVT 方法，比标准实现快 2-5 倍
+  # 需要配合 buf.build/protocolbuffers/go 生成的基础代码一起使用
+  - remote: buf.build/community/planetscale-vtprotobuf
+    out: ../build/vtprotobuf/
+    opt:
+      - paths=source_relative
+      - features=marshal+unmarshal+size+pool
+  - remote: buf.build/protocolbuffers/csharp
+    out: ../build/csharp
+  - remote: buf.build/grpc/csharp
+    out: ../build/csharp

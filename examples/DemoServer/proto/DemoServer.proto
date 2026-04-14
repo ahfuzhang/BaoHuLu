@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package demo;
+
+//import "google/api/annotations.proto";
+//import "google/api/client.proto";
+
+option csharp_namespace = "Demo.Protos";
+option go_package = "github.com/ahfuzhang/BaoHuLu/examples/DemoServer";
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_DISABLED = 2;
+}
+
+message ChildMessage {
+  int32 child_id = 1;
+  string ChildName = 2;
+}
+
+// 这个类型尝试所有的 protobuf 类型，以便测试时可以充分覆盖。
+message AllTypesMessage {
+  double DoubleValue = 1;
+  float FloatValue = 2;
+  int32 Int32Value = 3;
+  int64 Int64Value = 4;
+  uint32 Uint32Value = 5;
+  uint64 Uint64Value = 6;
+  sint32 Sint32Value = 7;
+  sint64 Sint64Value = 8;
+  fixed32 Fixed32Value = 9;
+  fixed64 Fixed64Value = 10;
+  sfixed32 Sfixed32Value = 11;
+  sfixed64 Sfixed64Value = 12;
+  bool BoolValue = 13;
+  string StringValue = 14;
+  bytes BytesValue = 15;
+
+  Status Status = 16;
+  ChildMessage Child = 17;
+
+  repeated int32 Numbers = 18;
+  repeated string Tags = 19;
+
+  // 可用 key：int32/int64/uint32/uint64/sint32/sint64/fixed32/fixed64/sfixed32/sfixed64/bool/string
+  map<int32, int32> m1 = 1000;
+  map<int64, int32> m2 = 1001;
+  map<uint32, int32> m3 = 1002;
+  map<uint64, int32> m4 = 1003;
+  map<sint32, int32> m5 = 1004;
+  map<sint64, int32> m6 = 1005;
+  map<fixed32, int32> m7 = 1006;
+  map<fixed64, int32> m8 = 1007;
+  map<sfixed32, int32> m9 = 1008;
+  map<sfixed64, int32> m10 = 1009;
+  map<bool, int32> m11 = 1010;
+
+  map<string, int32> Scores = 20;
+  int32 big_tag = 65536;
+  // 	19000 到 19999 是保留的
+  // tag 范围:
+  // 	•	1..18999
+  //  •	20000..536870911
+}
+
+message HelloRequest {
+  AllTypesMessage Data = 1;
+}
+
+message HelloResponse {
+  int32 Code = 1;
+  string Message = 2;
+  AllTypesMessage Data = 3;
+}
+
+service DemoService {
+  //option (google.api.api_version) = "v1";
+  rpc Hello(HelloRequest) returns (HelloResponse) {
+    // todo: 未来可以定义很多自己的 option，然后把这个作为元数据，去做代码生成
+    //option (google.api.http) = {get: "/v1/hello"};
+    // todo: 或者更简单：以注释的格式，来辅助代码生成
+  }
+}

@@ -1,0 +1,4 @@
+# 按当前提示词修复 buf generate 的引用错误：Buf 的 deps 必须使用 BSR 模块引用，不能写本机绝对路径。
+version: v2
+deps:
+  - buf.build/googleapis/googleapis

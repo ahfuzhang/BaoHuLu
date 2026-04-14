@@ -3,7 +3,7 @@
 
 > 在中国的经典动画片 《金刚葫芦娃》 中，宝葫芦是七娃的法器，可以把妖怪吸进葫芦里。
 
-> The name originates from the classic Chinese animated film "Calabash Brothers". The calabash is the magic weapon of the seventh brother, which can suck monsters into the calabash.
+> The name originates from the classic Chinese animated film "Calabash Brothers". The magic calabash is the magic weapon of the seventh brother, which can suck monsters into the calabash.
 
 ![](./doc/images/3.png)
 
@@ -21,6 +21,7 @@
   * 支持 protobuf 二进制格式的序列化和反序列
   * 支持 JSON 格式的序列化和反序列化
   * (在使用人数很多的情况下可以考虑) 支持 Thrift 二进制格式的序列化和反序列化
+  * 考虑支持 FlatBuffers
 * 为 QiWa RPC 框架，生成从请求处理 -> 反序列化 -> 触发回调 -> 对响应序列化 这个过程的脚手架代码
 
 ## 设计细节
@@ -51,6 +52,7 @@
 * Serivce 代码生成
   * 短期：仅针对 QiWa 项目生成 RPC 相关的代码
   * 后期：使用者可以自己以 golang template 的语法提供模板，然后生成代码。
+  * 暂不支持 stream 关键字
 * 开发语言支持：
   * golang
   * csharp
@@ -90,3 +92,14 @@
 
   ![](./doc/images/2.png)
 
+
+## AI 使用声明
+
+本项目 99% 以上的代码由 AI 生成。
+
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Fuchun Zhang

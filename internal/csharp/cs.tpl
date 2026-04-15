@@ -648,6 +648,162 @@ public struct {{$goName}}
     public {{.WriterType}} {{.Name}};
 {{- end}}
 
+    // ── ProtobufSize ────────────────────────────────────────────────────────
+
+    public int ProtobufSize()
+    {
+        int _size = 0;
+{{- range .Fields}}
+{{- if .IsMap}}
+        if ({{.Name}} != null)
+        {
+            foreach (var _kv{{.Name}} in {{.Name}})
+            {
+                int _entrySize{{.Name}} = 0;
+{{- if eq .MapKey "string"}}
+                int _klen{{.Name}} = StringByteCount(_kv{{.Name}}.Key);
+                _entrySize{{.Name}} += TagSize(1, WireTypeLenDelim) + LenDelimSize(_klen{{.Name}});
+{{- else if eq .MapKey "bool"}}
+                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(_kv{{.Name}}.Key ? 1UL : 0UL);
+{{- else if eq .MapKey "fixed32"}}
+                _entrySize{{.Name}} += TagSize(1, WireType32Bit) + 4;
+{{- else if eq .MapKey "sfixed32"}}
+                _entrySize{{.Name}} += TagSize(1, WireType32Bit) + 4;
+{{- else if eq .MapKey "fixed64"}}
+                _entrySize{{.Name}} += TagSize(1, WireType64Bit) + 8;
+{{- else if eq .MapKey "sfixed64"}}
+                _entrySize{{.Name}} += TagSize(1, WireType64Bit) + 8;
+{{- else if eq .MapKey "sint32"}}
+                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(ZigZagEncode32(_kv{{.Name}}.Key));
+{{- else if eq .MapKey "sint64"}}
+                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(ZigZagEncode64(_kv{{.Name}}.Key));
+{{- else}}
+                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Key);
+{{- end}}
+{{- if .MapValIsMsg}}
+                int _vsize{{.Name}} = _kv{{.Name}}.Value.ProtobufSize();
+                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vsize{{.Name}});
+{{- else if eq .MapVal "string"}}
+                int _vlen{{.Name}} = StringByteCount(_kv{{.Name}}.Value);
+                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vlen{{.Name}});
+{{- else if eq .MapVal "bytes"}}
+                int _vlen{{.Name}} = _kv{{.Name}}.Value != null ? _kv{{.Name}}.Value.Length : 0;
+                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vlen{{.Name}});
+{{- else if eq .MapVal "double"}}
+                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+{{- else if eq .MapVal "float"}}
+                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+{{- else if eq .MapVal "fixed32"}}
+                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+{{- else if eq .MapVal "sfixed32"}}
+                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+{{- else if eq .MapVal "fixed64"}}
+                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+{{- else if eq .MapVal "sfixed64"}}
+                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+{{- else if eq .MapVal "sint32"}}
+                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(ZigZagEncode32(_kv{{.Name}}.Value));
+{{- else if eq .MapVal "sint64"}}
+                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(ZigZagEncode64(_kv{{.Name}}.Value));
+{{- else if eq .MapVal "bool"}}
+                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(_kv{{.Name}}.Value ? 1UL : 0UL);
+{{- else}}
+                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Value);
+{{- end}}
+                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_entrySize{{.Name}});
+            }
+        }
+{{- else if .IsRepeated}}
+        if ({{.Name}} != null && {{.Name}}.Length > 0)
+        {
+{{- if .IsPackable}}
+{{- if .IsFixed32}}
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Length * 4);
+{{- else if .IsFixed64}}
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Length * 8);
+{{- else if .IsBool}}
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Length);
+{{- else if .IsSint32}}
+            int _packed{{.Name}} = 0;
+            foreach (var _pv{{.Name}} in {{.Name}})
+                _packed{{.Name}} += VarintSize(ZigZagEncode32(_pv{{.Name}}));
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_packed{{.Name}});
+{{- else if .IsSint64}}
+            int _packed{{.Name}} = 0;
+            foreach (var _pv{{.Name}} in {{.Name}})
+                _packed{{.Name}} += VarintSize(ZigZagEncode64(_pv{{.Name}}));
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_packed{{.Name}});
+{{- else}}
+            int _packed{{.Name}} = 0;
+            foreach (var _pv{{.Name}} in {{.Name}})
+                _packed{{.Name}} += VarintSize((ulong)_pv{{.Name}});
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_packed{{.Name}});
+{{- end}}
+{{- else if .IsString}}
+            foreach (var _sv{{.Name}} in {{.Name}})
+            {
+                int _len{{.Name}} = StringByteCount(_sv{{.Name}});
+                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_len{{.Name}});
+            }
+{{- else if .IsBytes}}
+            foreach (var _bv{{.Name}} in {{.Name}})
+            {
+                int _len{{.Name}} = _bv{{.Name}} != null ? _bv{{.Name}}.Length : 0;
+                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_len{{.Name}});
+            }
+{{- else if .ElemIsMsg}}
+            foreach (var _mv{{.Name}} in {{.Name}})
+            {
+                int _subSize{{.Name}} = _mv{{.Name}}.ProtobufSize();
+                if (_subSize{{.Name}} > 0)
+                    _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_subSize{{.Name}});
+            }
+{{- else}}
+            foreach (var _ev{{.Name}} in {{.Name}})
+                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize((ulong)_ev{{.Name}});
+{{- end}}
+        }
+{{- else if .IsMsg}}
+        {
+            int _subSize{{.Name}} = {{.Name}}.ProtobufSize();
+            if (_subSize{{.Name}} > 0)
+                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_subSize{{.Name}});
+        }
+{{- else if .IsString}}
+        if (!string.IsNullOrEmpty({{.Name}}))
+        {
+            int _len{{.Name}} = StringByteCount({{.Name}});
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_len{{.Name}});
+        }
+{{- else if .IsBytes}}
+        if ({{.Name}} != null && {{.Name}}.Length > 0)
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Length);
+{{- else if .IsBool}}
+        if ({{.Name}})
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + 1;
+{{- else if .IsFixed32}}
+        if ({{.Name}} != {{csDefault .WriterType}})
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireType32Bit) + 4;
+{{- else if .IsFixed64}}
+        if ({{.Name}} != {{csDefault .WriterType}})
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireType64Bit) + 8;
+{{- else if .IsSint32}}
+        if ({{.Name}} != 0)
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize(ZigZagEncode32({{.Name}}));
+{{- else if .IsSint64}}
+        if ({{.Name}} != 0)
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize(ZigZagEncode64({{.Name}}));
+{{- else if .IsEnum}}
+        if ((int){{.Name}} != 0)
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize((ulong)(int){{.Name}});
+{{- else}}
+        if ({{.Name}} != {{csDefault .WriterType}})
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize((ulong){{.Name}});
+{{- end}}
+{{- end}}
+        return _size;
+    }
+
     // ── ToProtobuf ───────────────────────────────────────────────────────────
 
     public Error ToProtobuf(ref RentedBuffer buf)
@@ -658,84 +814,130 @@ public struct {{$goName}}
         {
             foreach (var _kv{{.Name}} in {{.Name}})
             {
-                var _entry{{.Name}} = new RentedBuffer(64);
+                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+                int _entrySize{{.Name}} = 0;
+{{- if eq .MapKey "string"}}
+                int _klen{{.Name}} = StringByteCount(_kv{{.Name}}.Key);
+                _entrySize{{.Name}} += TagSize(1, WireTypeLenDelim) + LenDelimSize(_klen{{.Name}});
+{{- else if eq .MapKey "bool"}}
+                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(_kv{{.Name}}.Key ? 1UL : 0UL);
+{{- else if eq .MapKey "fixed32"}}
+                _entrySize{{.Name}} += TagSize(1, WireType32Bit) + 4;
+{{- else if eq .MapKey "sfixed32"}}
+                _entrySize{{.Name}} += TagSize(1, WireType32Bit) + 4;
+{{- else if eq .MapKey "fixed64"}}
+                _entrySize{{.Name}} += TagSize(1, WireType64Bit) + 8;
+{{- else if eq .MapKey "sfixed64"}}
+                _entrySize{{.Name}} += TagSize(1, WireType64Bit) + 8;
+{{- else if eq .MapKey "sint32"}}
+                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(ZigZagEncode32(_kv{{.Name}}.Key));
+{{- else if eq .MapKey "sint64"}}
+                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(ZigZagEncode64(_kv{{.Name}}.Key));
+{{- else}}
+                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Key);
+{{- end}}
+{{- if .MapValIsMsg}}
+                int _valMsgSize{{.Name}} = _kv{{.Name}}.Value.ProtobufSize();
+                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_valMsgSize{{.Name}});
+{{- else if eq .MapVal "string"}}
+                int _vlen{{.Name}} = StringByteCount(_kv{{.Name}}.Value);
+                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vlen{{.Name}});
+{{- else if eq .MapVal "bytes"}}
+                int _vlen{{.Name}} = _kv{{.Name}}.Value != null ? _kv{{.Name}}.Value.Length : 0;
+                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vlen{{.Name}});
+{{- else if eq .MapVal "double"}}
+                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+{{- else if eq .MapVal "float"}}
+                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+{{- else if eq .MapVal "fixed32"}}
+                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+{{- else if eq .MapVal "sfixed32"}}
+                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+{{- else if eq .MapVal "fixed64"}}
+                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+{{- else if eq .MapVal "sfixed64"}}
+                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+{{- else if eq .MapVal "sint32"}}
+                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(ZigZagEncode32(_kv{{.Name}}.Value));
+{{- else if eq .MapVal "sint64"}}
+                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(ZigZagEncode64(_kv{{.Name}}.Value));
+{{- else if eq .MapVal "bool"}}
+                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(_kv{{.Name}}.Value ? 1UL : 0UL);
+{{- else}}
+                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Value);
+{{- end}}
+                WriteVarint(ref buf, (ulong)_entrySize{{.Name}});
                 // key (field 1)
 {{- if eq .MapKey "string"}}
-                WriteTag(ref _entry{{.Name}}, 1, WireTypeLenDelim);
-                WriteString(ref _entry{{.Name}}, _kv{{.Name}}.Key);
+                WriteTag(ref buf, 1, WireTypeLenDelim);
+                WriteString(ref buf, _kv{{.Name}}.Key);
 {{- else if eq .MapKey "bool"}}
-                WriteTag(ref _entry{{.Name}}, 1, WireTypeVarint);
-                WriteVarint(ref _entry{{.Name}}, _kv{{.Name}}.Key ? 1UL : 0UL);
+                WriteTag(ref buf, 1, WireTypeVarint);
+                WriteVarint(ref buf, _kv{{.Name}}.Key ? 1UL : 0UL);
 {{- else if eq .MapKey "fixed32"}}
-                WriteTag(ref _entry{{.Name}}, 1, WireType32Bit);
-                WriteFixed32(ref _entry{{.Name}}, _kv{{.Name}}.Key);
+                WriteTag(ref buf, 1, WireType32Bit);
+                WriteFixed32(ref buf, _kv{{.Name}}.Key);
 {{- else if eq .MapKey "sfixed32"}}
-                WriteTag(ref _entry{{.Name}}, 1, WireType32Bit);
-                WriteFixed32(ref _entry{{.Name}}, (uint)_kv{{.Name}}.Key);
+                WriteTag(ref buf, 1, WireType32Bit);
+                WriteFixed32(ref buf, (uint)_kv{{.Name}}.Key);
 {{- else if eq .MapKey "fixed64"}}
-                WriteTag(ref _entry{{.Name}}, 1, WireType64Bit);
-                WriteFixed64(ref _entry{{.Name}}, _kv{{.Name}}.Key);
+                WriteTag(ref buf, 1, WireType64Bit);
+                WriteFixed64(ref buf, _kv{{.Name}}.Key);
 {{- else if eq .MapKey "sfixed64"}}
-                WriteTag(ref _entry{{.Name}}, 1, WireType64Bit);
-                WriteFixed64(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Key);
+                WriteTag(ref buf, 1, WireType64Bit);
+                WriteFixed64(ref buf, (ulong)_kv{{.Name}}.Key);
 {{- else if eq .MapKey "sint32"}}
-                WriteTag(ref _entry{{.Name}}, 1, WireTypeVarint);
-                WriteVarint(ref _entry{{.Name}}, ZigZagEncode32(_kv{{.Name}}.Key));
+                WriteTag(ref buf, 1, WireTypeVarint);
+                WriteVarint(ref buf, ZigZagEncode32(_kv{{.Name}}.Key));
 {{- else if eq .MapKey "sint64"}}
-                WriteTag(ref _entry{{.Name}}, 1, WireTypeVarint);
-                WriteVarint(ref _entry{{.Name}}, ZigZagEncode64(_kv{{.Name}}.Key));
+                WriteTag(ref buf, 1, WireTypeVarint);
+                WriteVarint(ref buf, ZigZagEncode64(_kv{{.Name}}.Key));
 {{- else}}
-                WriteTag(ref _entry{{.Name}}, 1, WireTypeVarint);
-                WriteVarint(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Key);
+                WriteTag(ref buf, 1, WireTypeVarint);
+                WriteVarint(ref buf, (ulong)_kv{{.Name}}.Key);
 {{- end}}
                 // value (field 2)
 {{- if .MapValIsMsg}}
-                var _vbuf{{.Name}} = new RentedBuffer(64);
-                _kv{{.Name}}.Value.ToProtobuf(ref _vbuf{{.Name}});
-                WriteTag(ref _entry{{.Name}}, 2, WireTypeLenDelim);
-                WriteBytes(ref _entry{{.Name}}, _vbuf{{.Name}}.AsSpan());
-                _vbuf{{.Name}}.Dispose();
+                WriteTag(ref buf, 2, WireTypeLenDelim);
+                WriteVarint(ref buf, (ulong)_valMsgSize{{.Name}});
+                _kv{{.Name}}.Value.ToProtobuf(ref buf);
 {{- else if eq .MapVal "string"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireTypeLenDelim);
-                WriteString(ref _entry{{.Name}}, _kv{{.Name}}.Value);
+                WriteTag(ref buf, 2, WireTypeLenDelim);
+                WriteString(ref buf, _kv{{.Name}}.Value);
 {{- else if eq .MapVal "bytes"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireTypeLenDelim);
-                WriteBytes(ref _entry{{.Name}}, _kv{{.Name}}.Value);
+                WriteTag(ref buf, 2, WireTypeLenDelim);
+                WriteBytes(ref buf, _kv{{.Name}}.Value);
 {{- else if eq .MapVal "double"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireType64Bit);
-                WriteFixed64(ref _entry{{.Name}}, BitConverter.DoubleToUInt64Bits(_kv{{.Name}}.Value));
+                WriteTag(ref buf, 2, WireType64Bit);
+                WriteFixed64(ref buf, BitConverter.DoubleToUInt64Bits(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "float"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireType32Bit);
-                WriteFixed32(ref _entry{{.Name}}, BitConverter.SingleToUInt32Bits(_kv{{.Name}}.Value));
+                WriteTag(ref buf, 2, WireType32Bit);
+                WriteFixed32(ref buf, BitConverter.SingleToUInt32Bits(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "fixed32"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireType32Bit);
-                WriteFixed32(ref _entry{{.Name}}, _kv{{.Name}}.Value);
+                WriteTag(ref buf, 2, WireType32Bit);
+                WriteFixed32(ref buf, _kv{{.Name}}.Value);
 {{- else if eq .MapVal "sfixed32"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireType32Bit);
-                WriteFixed32(ref _entry{{.Name}}, (uint)_kv{{.Name}}.Value);
+                WriteTag(ref buf, 2, WireType32Bit);
+                WriteFixed32(ref buf, (uint)_kv{{.Name}}.Value);
 {{- else if eq .MapVal "fixed64"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireType64Bit);
-                WriteFixed64(ref _entry{{.Name}}, _kv{{.Name}}.Value);
+                WriteTag(ref buf, 2, WireType64Bit);
+                WriteFixed64(ref buf, _kv{{.Name}}.Value);
 {{- else if eq .MapVal "sfixed64"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireType64Bit);
-                WriteFixed64(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Value);
+                WriteTag(ref buf, 2, WireType64Bit);
+                WriteFixed64(ref buf, (ulong)_kv{{.Name}}.Value);
 {{- else if eq .MapVal "sint32"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireTypeVarint);
-                WriteVarint(ref _entry{{.Name}}, ZigZagEncode32(_kv{{.Name}}.Value));
+                WriteTag(ref buf, 2, WireTypeVarint);
+                WriteVarint(ref buf, ZigZagEncode32(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "sint64"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireTypeVarint);
-                WriteVarint(ref _entry{{.Name}}, ZigZagEncode64(_kv{{.Name}}.Value));
+                WriteTag(ref buf, 2, WireTypeVarint);
+                WriteVarint(ref buf, ZigZagEncode64(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "bool"}}
-                WriteTag(ref _entry{{.Name}}, 2, WireTypeVarint);
-                WriteVarint(ref _entry{{.Name}}, _kv{{.Name}}.Value ? 1UL : 0UL);
+                WriteTag(ref buf, 2, WireTypeVarint);
+                WriteVarint(ref buf, _kv{{.Name}}.Value ? 1UL : 0UL);
 {{- else}}
-                WriteTag(ref _entry{{.Name}}, 2, WireTypeVarint);
-                WriteVarint(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Value);
+                WriteTag(ref buf, 2, WireTypeVarint);
+                WriteVarint(ref buf, (ulong)_kv{{.Name}}.Value);
 {{- end}}
-                // outer tag + length-delim
-                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
-                WriteBytes(ref buf, _entry{{.Name}}.AsSpan());
-                _entry{{.Name}}.Dispose();
             }
         }
 {{- else if .IsRepeated}}

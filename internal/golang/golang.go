@@ -470,7 +470,408 @@ func (g *Generator) Render(out *os.File) error {
 	return tmpl.Execute(out, data)
 }
 
+// ─── test template helpers ───────────────────────────────────────────────────
+
+// SampleScalarLiteral returns a Go source literal for a representative
+// non-zero sample value of the given protobuf scalar type.
+// goType is used only for enum fallback (e.g. "Status").
+func SampleScalarLiteral(protoType, goType string) string {
+	switch protoType {
+	case "double":
+		return "1.5"
+	case "float":
+		return "float32(1.5)"
+	case "int32":
+		return "int32(1)"
+	case "int64":
+		return "int64(2)"
+	case "uint32":
+		return "uint32(3)"
+	case "uint64":
+		return "uint64(4)"
+	case "sint32":
+		return "int32(-1)"
+	case "sint64":
+		return "int64(-2)"
+	case "fixed32":
+		return "uint32(5)"
+	case "fixed64":
+		return "uint64(6)"
+	case "sfixed32":
+		return "int32(-3)"
+	case "sfixed64":
+		return "int64(-4)"
+	case "bool":
+		return "true"
+	case "string":
+		return `"hello"`
+	case "bytes":
+		return `[]byte("data")`
+	default:
+		// enum or unknown – cast integer 1 to the Go type
+		if goType != "" {
+			return fmt.Sprintf("%s(1)", goType)
+		}
+		return "1"
+	}
+}
+
+// SampleFieldLiteral returns a Go source expression that produces a
+// representative non-zero value for field ft, suitable for use inside a
+// makeSampleXxx() struct literal.
+func SampleFieldLiteral(ft FieldTpl) string {
+	if ft.Map {
+		// Single-entry map to avoid non-deterministic serialisation order.
+		var keyLit string
+		switch ft.MapKey {
+		case "string":
+			keyLit = `"k"`
+		case "bool":
+			keyLit = "true"
+		default:
+			keyLit = SampleScalarLiteral(ft.MapKey, "")
+		}
+		var valLit string
+		if ft.MapVal == "bool" {
+			valLit = "true"
+		} else {
+			valLit = SampleScalarLiteral(ft.MapVal, "int32")
+		}
+		return fmt.Sprintf("%s{%s: %s}", ft.GoType, keyLit, valLit)
+	}
+	if ft.Repeated {
+		elemLit := SampleScalarLiteral(ft.Type, strings.TrimPrefix(ft.GoType, "[]"))
+		return fmt.Sprintf("%s{%s}", ft.GoType, elemLit)
+	}
+	if ft.IsMsg {
+		return fmt.Sprintf("makeSample%s()", ft.GoType)
+	}
+	return SampleScalarLiteral(ft.Type, ft.GoType)
+}
+
+// isLargeIntType returns true for proto scalar types whose JSON serialisation
+// must use quoted strings when the value exceeds JavaScript's MAX_SAFE_INTEGER
+// (2^53 – 1 = 9007199254740991).
+func isLargeIntType(protoType string) bool {
+	switch protoType {
+	case "int64", "uint64", "sint64", "fixed64", "sfixed64":
+		return true
+	}
+	return false
+}
+
+// SkipEncodingJSON returns true when the standard encoding/json package cannot
+// faithfully round-trip this message's JSON output. This happens when:
+//   - any field is a map with a bool key (encoding/json cannot decode them), OR
+//   - any field is an embedded message (which might itself contain bool-keyed
+//     maps at any depth — conservative but correct).
+func SkipEncodingJSON(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if f.Map && f.MapKey == "bool" {
+			return true
+		}
+		if f.IsMsg {
+			return true
+		}
+	}
+	return false
+}
+
+// HasLargeIntFields returns true if any field in the list is a direct scalar
+// 64-bit integer (not inside a map or repeated slice).
+func HasLargeIntFields(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if !f.Map && !f.Repeated && !f.IsRawBuf && isLargeIntType(f.Type) {
+			return true
+		}
+	}
+	return false
+}
+
+// LargeIntFields returns only the direct scalar 64-bit integer fields.
+func LargeIntFields(fields []FieldTpl) []FieldTpl {
+	var out []FieldTpl
+	for _, f := range fields {
+		if !f.Map && !f.Repeated && !f.IsRawBuf && isLargeIntType(f.Type) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// LargeIntLit returns a Go literal whose magnitude exceeds MAX_SAFE_INTEGER,
+// exercising the quoted-string serialisation path in ToJSON.
+// Signed types use a negative value to also cover the < -MAX_SAFE_INT branch.
+func LargeIntLit(ft FieldTpl) string {
+	switch ft.Type {
+	case "int64":
+		return "int64(9007199254740993)"   // 2^53 + 1
+	case "uint64", "fixed64":
+		return "uint64(9007199254740993)"
+	case "sint64", "sfixed64":
+		return "int64(-9007199254740993)"  // tests the < -MAX_SAFE_INT branch
+	}
+	return "0"
+}
+
+// FirstScalarField returns the first plain (non-map, non-repeated, non-msg,
+// non-rawBuffer) field, or nil when no such field exists. The returned field
+// is used by the test template to generate JSON-type-error tests.
+func FirstScalarField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		f := &fields[i]
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf {
+			return f
+		}
+	}
+	return nil
+}
+
+// HasMapsOrSlices returns true if any field is a map, repeated slice, or
+// embedded message (all of which have container-specific Clone branches that
+// benefit from a double-cycle clone test).
+func HasMapsOrSlices(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if f.Map || f.Repeated || f.IsMsg {
+			return true
+		}
+	}
+	return false
+}
+
+// FirstMsgField returns the first embedded-message field, or nil.
+func FirstMsgField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		if fields[i].IsMsg && !fields[i].Map && !fields[i].Repeated {
+			return &fields[i]
+		}
+	}
+	return nil
+}
+
+// FirstMapField returns the first map field, or nil.
+func FirstMapField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		if fields[i].Map {
+			return &fields[i]
+		}
+	}
+	return nil
+}
+
+// FirstRepeatedField returns the first repeated (slice, non-map) field, or nil.
+func FirstRepeatedField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		if fields[i].Repeated && !fields[i].Map {
+			return &fields[i]
+		}
+	}
+	return nil
+}
+
+// FirstBytesField returns the first plain bytes field (non-map, non-repeated), or nil.
+func FirstBytesField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		f := &fields[i]
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf && f.Type == "bytes" {
+			return f
+		}
+	}
+	return nil
+}
+
+// isNumericProtoType returns true for proto types whose keys are encoded as
+// numeric strings in JSON map keys (int32, int64, uint32, uint64, sint32,
+// sint64, fixed32, fixed64, sfixed32, sfixed64).
+func isNumericProtoType(pt string) bool {
+	switch pt {
+	case "int32", "int64", "uint32", "uint64",
+		"sint32", "sint64", "fixed32", "fixed64",
+		"sfixed32", "sfixed64":
+		return true
+	}
+	return false
+}
+
+// FirstStringKeyMapField returns the first map whose key type is string, or nil.
+// Used to generate a test that passes null as a map value, exercising the inner
+// value-parse error branch.
+func FirstStringKeyMapField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		f := &fields[i]
+		if f.Map && f.MapKey == "string" {
+			return f
+		}
+	}
+	return nil
+}
+
+// FirstNumericKeyMapField returns the first map whose key type is numeric, or nil.
+// Used to generate a test that passes a non-numeric map key string, exercising
+// the strconv.ParseInt / ParseUint error branch.
+func FirstNumericKeyMapField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		f := &fields[i]
+		if f.Map && isNumericProtoType(f.MapKey) {
+			return f
+		}
+	}
+	return nil
+}
+
+// ExcludeFromCompare returns true for fields that must be skipped during the
+// encoding/json vs custom-decoder field-level comparison:
+//   - map[bool]T: encoding/json cannot unmarshal bool map keys
+//   - plain []byte (proto bytes): comparison requires bytes.Equal; easier to
+//     verify correctness via the ToJSON round-trip rather than direct field compare
+//   - rawBuffer synthetic field
+func ExcludeFromCompare(ft FieldTpl) bool {
+	if ft.IsRawBuf {
+		return true
+	}
+	if ft.Map && ft.MapKey == "bool" {
+		return true
+	}
+	if !ft.Map && !ft.Repeated && ft.Type == "bytes" {
+		return true
+	}
+	return false
+}
+
+// NeedsDeepEqual returns true when the == operator cannot be used for the
+// field type and reflect.DeepEqual must be used instead (maps, slices, embedded
+// messages).
+func NeedsDeepEqual(ft FieldTpl) bool {
+	return ft.Map || ft.Repeated || ft.IsMsg
+}
+
+// AnyMsgNeedsReflect returns true when at least one message in the file would
+// emit a reflect.DeepEqual call in its JSON roundtrip test. Used to decide
+// whether to import "reflect" in the generated test file.
+func AnyMsgNeedsReflect(msgs []MsgTpl) bool {
+	for _, msg := range msgs {
+		if SkipEncodingJSON(msg.Fields) {
+			continue
+		}
+		for _, f := range msg.Fields {
+			if !ExcludeFromCompare(f) && NeedsDeepEqual(f) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// RenderTest renders the test-file template to out.
+func (g *Generator) RenderTest(out *os.File) error {
+	var enums []EnumTpl
+	for _, name := range g.EnumOrder() {
+		ed := g.Enums[name]
+		enums = append(enums, EnumTpl{Name: ed.Name, Values: ed.Values})
+	}
+
+	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
+	readerLayouts := make(map[string]protofile.MsgLayoutInfo)
+
+	var msgs []MsgTpl
+	for _, name := range g.Order {
+		md := g.Messages[name]
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
+
+		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Size
+				}
+			}
+			return protofile.FieldGoSize(fd)
+		}
+		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Ptrdata
+				}
+			}
+			return protofile.FieldPtrdata(fd)
+		}
+		sortedWriterDefs := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
+		writerLayouts[name] = protofile.ComputeStructLayout(sortedWriterDefs, writerSizeOf, writerPtrdataOf)
+
+		for _, fd := range sortedWriterDefs {
+			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd))
+		}
+
+		rawBufDef := protofile.FieldDef{Name: "rawBuffer", Type: "bytes", GoType: "[]byte"}
+		readerDefs := make([]protofile.FieldDef, 0, len(md.Fields)+1)
+		readerDefs = append(readerDefs, rawBufDef)
+		readerDefs = append(readerDefs, md.Fields...)
+
+		readerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg {
+				if li, ok := readerLayouts[fd.Type]; ok {
+					return li.Size
+				}
+			}
+			return protofile.FieldGoSize(fd)
+		}
+		readerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg {
+				if li, ok := readerLayouts[fd.Type]; ok {
+					return li.Ptrdata
+				}
+			}
+			return protofile.FieldPtrdata(fd)
+		}
+		sortedReaderDefs := protofile.SortFieldsWithCallbacks(readerDefs, readerSizeOf, readerPtrdataOf)
+		readerLayouts[name] = protofile.ComputeStructLayout(sortedReaderDefs, readerSizeOf, readerPtrdataOf)
+
+		for _, fd := range sortedReaderDefs {
+			if fd.Name == rawBufDef.Name && fd.Number == 0 {
+				mt.ReaderFields = append(mt.ReaderFields, FieldTpl{
+					FieldDef:   fd,
+					ReaderType: "[]byte",
+					IsRawBuf:   true,
+				})
+			} else {
+				mt.ReaderFields = append(mt.ReaderFields, g.makeFieldTpl(fd))
+			}
+		}
+
+		msgs = append(msgs, mt)
+	}
+
+	data := RenderData{
+		Package:  g.Pkg,
+		Enums:    enums,
+		Messages: msgs,
+	}
+
+	fnMap := template.FuncMap{
+		"sampleLit":                SampleFieldLiteral,
+		"hasLargeIntFields":        HasLargeIntFields,
+		"largeIntFields":           LargeIntFields,
+		"largeIntLit":              LargeIntLit,
+		"skipEncodingJSON":         SkipEncodingJSON,
+		"firstScalarField":         FirstScalarField,
+		"hasMapsOrSlices":          HasMapsOrSlices,
+		"firstMsgField":            FirstMsgField,
+		"firstMapField":            FirstMapField,
+		"firstRepeatedField":       FirstRepeatedField,
+		"firstBytesField":          FirstBytesField,
+		"firstStringKeyMapField":   FirstStringKeyMapField,
+		"firstNumericKeyMapField":  FirstNumericKeyMapField,
+	}
+	tmpl, err := template.New("pb_test").Funcs(fnMap).Parse(testTemplate)
+	if err != nil {
+		return fmt.Errorf("parse test template: %w", err)
+	}
+	return tmpl.Execute(out, data)
+}
+
 // ─── code template ────────────────────────────────────────────────────────────
 
 //go:embed go.tpl
 var codeTemplate string
+
+//go:embed go_test.tpl
+var testTemplate string

@@ -51,12 +51,13 @@ type MessageDef struct {
 // ─── generator ────────────────────────────────────────────────────────────────
 
 type Generator struct {
-	Pkg         string // effective Go package name used in the template
-	PackageName string // proto "package" statement value
-	GoPackage   string // proto "option go_package" value (full import path)
-	Enums       map[string]*EnumDef
-	Messages    map[string]*MessageDef
-	Order       []string
+	Pkg              string // effective Go package name used in the template
+	PackageName      string // proto "package" statement value
+	GoPackage        string // proto "option go_package" value (full import path)
+	CsharpNamespace  string // proto "option csharp_namespace" value
+	Enums            map[string]*EnumDef
+	Messages         map[string]*MessageDef
+	Order            []string
 }
 
 func NewGenerator(pkg string) *Generator {
@@ -95,6 +96,9 @@ func (g *Generator) Collect(def *proto.Proto) {
 			if o.Name == "go_package" {
 				// Literal.Source carries the raw text including surrounding quotes.
 				g.GoPackage = strings.Trim(o.Constant.Source, `"`)
+			}
+			if o.Name == "csharp_namespace" {
+				g.CsharpNamespace = strings.Trim(o.Constant.Source, `"`)
 			}
 		}),
 		proto.WithEnum(func(e *proto.Enum) {

@@ -155,11 +155,26 @@ func runTu(args []string) {
 		}
 		defer outF.Close()
 
-		if err := gogen.NewGenerator(pg).Render(outF); err != nil {
+		gen := gogen.NewGenerator(pg)
+		if err := gen.Render(outF); err != nil {
 			fmt.Fprintf(os.Stderr, "render: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Printf("generated %s\n", outPath)
+
+		testPath := filepath.Join(*goOut, goBase+"_test.go")
+		testF, err := os.Create(testPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "create %s: %v\n", testPath, err)
+			os.Exit(1)
+		}
+		defer testF.Close()
+
+		if err := gen.RenderTest(testF); err != nil {
+			fmt.Fprintf(os.Stderr, "render test: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("generated %s\n", testPath)
 
 		modPath := filepath.Join(*goOut, "go.mod")
 		if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName); err != nil {
@@ -182,7 +197,13 @@ func runTu(args []string) {
 		}
 		defer csF.Close()
 
-		ns := protofile.UpperFirst(base)
+		ns := pg.CsharpNamespace
+		if ns == "" {
+			ns = pg.PackageName
+		}
+		if ns == "" {
+			ns = protofile.UpperFirst(base)
+		}
 		if err := csharp.NewGenerator(pg).RenderCS(csF, ns); err != nil {
 			fmt.Fprintf(os.Stderr, "renderCS: %v\n", err)
 			os.Exit(1)

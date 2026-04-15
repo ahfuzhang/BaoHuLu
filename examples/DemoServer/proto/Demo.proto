@@ -5,8 +5,8 @@ package demo;
 //import "google/api/annotations.proto";
 //import "google/api/client.proto";
 
-option csharp_namespace = "Demo.Protos";
-option go_package = "github.com/ahfuzhang/BaoHuLu/examples/DemoServer";
+option csharp_namespace = "Generated.Demo";
+option go_package = "github.com/ahfuzhang/BaoHuLu/examples/Demo";
 
 enum Status {
   STATUS_UNSPECIFIED = 0;
@@ -86,7 +86,7 @@ message HelloResponse {
   AllTypes Data = 3;
 }
 
-service DemoService {
+service Demo {
   //option (google.api.api_version) = "v1";
   rpc Hello(HelloRequest) returns (HelloResponse) {
     // todo: 未来可以定义很多自己的 option，然后把这个作为元数据，去做代码生成

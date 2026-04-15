@@ -9,10 +9,10 @@ test: run
 
 check:
 	./build/hulu xi \
-	  -src=./examples/DemoServer/proto/DemoServer.proto
+	  -src=./examples/DemoServer/proto/Demo.proto
 
 gen:
 	./build/hulu tu \
-	  -src=./examples/DemoServer/proto/DemoServer.proto \
+	  -src=./examples/DemoServer/proto/Demo.proto \
 	  -go_out=./build/golang/DemoServer/ \
 	  -csharp_out=./build/csharp/DemoServer/ \

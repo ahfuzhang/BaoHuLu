@@ -14,13 +14,25 @@ enum Status {
   STATUS_DISABLED = 2;
 }
 
-message ChildMessage {
+// @deprecated
+message NotUse {
+  int64 a = 1;
+}
+
+message Child {
+  // @varName=ChildID
+  // @jsonName=childid
+  // @yamlName=child_id_
+  // @tag=gorm:"column:child_id;type:int;not null"
   int32 child_id = 1;
   string ChildName = 2;
+
+  // @deprecated
+  string not_use_3 = 6;
 }
 
 // 这个类型尝试所有的 protobuf 类型，以便测试时可以充分覆盖。
-message AllTypesMessage {
+message AllTypes {
   double DoubleValue = 1;
   float FloatValue = 2;
   int32 Int32Value = 3;
@@ -38,7 +50,7 @@ message AllTypesMessage {
   bytes BytesValue = 15;
 
   Status Status = 16;
-  ChildMessage Child = 17;
+  Child Child = 17;
 
   repeated int32 Numbers = 18;
   repeated string Tags = 19;
@@ -65,13 +77,13 @@ message AllTypesMessage {
 }
 
 message HelloRequest {
-  AllTypesMessage Data = 1;
+  AllTypes Data = 1;
 }
 
 message HelloResponse {
   int32 Code = 1;
   string Message = 2;
-  AllTypesMessage Data = 3;
+  AllTypes Data = 3;
 }
 
 service DemoService {

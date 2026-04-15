@@ -87,6 +87,27 @@ require (
 	return os.WriteFile(modPath, []byte(content), 0644)
 }
 
+// writeCsProj creates a .csproj file for the generated C# project.
+func writeCsProj(projPath, assemblyName string) error {
+	content := fmt.Sprintf(`<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>%s</AssemblyName>
+    <RootNamespace>%s</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QiWa.Common" Version="*" />
+  </ItemGroup>
+
+</Project>
+`, assemblyName, assemblyName)
+	return os.WriteFile(projPath, []byte(content), 0644)
+}
+
 // runTu generates Go and/or C# code from a .proto file.
 func runTu(args []string) {
 	fs := flag.NewFlagSet("tu", flag.ExitOnError)
@@ -167,5 +188,12 @@ func runTu(args []string) {
 			os.Exit(1)
 		}
 		fmt.Printf("generated %s\n", csPath)
+
+		projPath := filepath.Join(*csOut, csBase+".csproj")
+		if err := writeCsProj(projPath, csBase); err != nil {
+			fmt.Fprintf(os.Stderr, "write csproj: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("generated %s\n", projPath)
 	}
 }

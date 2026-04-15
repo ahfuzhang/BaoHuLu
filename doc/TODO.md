@@ -7,17 +7,33 @@
   - 与各种现有工具的对比测试
   - protobuf 对比
   - csharp 对比
-* Clone 方法中:
-  - 整数的数组类型，是否按照字节对齐了?
 * 是否要支持批量输入多个 proto 文件?
   - 是否要支持按照文件夹输入?
 * 各个语言的 namespace 如何处理？
+  - golang 的 package 名字； golang 的 go.mod ✅
 * 扩展语法
-  - 提供文档
-  - 进行支持
+  - 提供文档   ✅
+  - 进行支持   ✅
+  - rpc 部分的扩展语法
 * 性能测试报告
 * 安装文档
   - 打上合适的版本
 * C# 如何拉取依赖的库?
   - 使用 git clone 的办法解决
+  - NuGet 的模式解决   50%
+* golang
+  - `var jsonParserPool fastjson.ParserPool`: 同个目录多个 proto 文件时，这里会出问题 ✅
+    - 让用户传入 Parser 对象
+  - 不符合 golang 命名规范   ✅
 
+    ```go
+    type Status int32
+
+    const (
+      STATUS_UNSPECIFIED Status = 0
+      STATUS_ACTIVE Status = 1
+      STATUS_DISABLED Status = 2
+    )
+    ```
+  - ToJSON() 只序列化有效字段 ✅
+  - Clone 方法中: 整数的数组类型，是否按照字节对齐了? ✅

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ahfuzhang/BaoHuLu/internal/protoextensions"
 	"github.com/emicklei/proto"
 )
 
@@ -34,13 +35,17 @@ type FieldDef struct {
 	MapVal   string // proto val type
 	IsMsg    bool   // is embedded message
 	IsEnum   bool
-	Comment  []string // proto comment lines (without leading //)
+	Comment  []string // proto comment lines (without leading //), extension lines stripped
+
+	// Extension annotations (@keyword=value in proto comments).
+	YamlName  string                      // @yamlName override; non-empty adds yaml struct tag + constant
+	ExtraTags []protoextensions.TagExt    // @tag=Name:Value extra struct tags
 }
 
 type MessageDef struct {
 	Name    string
 	Fields  []FieldDef
-	Comment []string // proto comment lines (without leading //)
+	Comment []string // proto comment lines (without leading //), extension lines stripped
 }
 
 // ─── generator ────────────────────────────────────────────────────────────────
@@ -134,33 +139,69 @@ func ExtractCommentLines(c *proto.Comment) []string {
 }
 
 func (g *Generator) CollectMessage(m *proto.Message) {
-	md := &MessageDef{Name: m.Name, Comment: ExtractCommentLines(m.Comment)}
+	rawMsgComments := ExtractCommentLines(m.Comment)
+	msgExt, cleanMsgComments := protoextensions.ParseAndStripMessage(rawMsgComments)
+	if msgExt.Deprecated {
+		return // skip deprecated messages entirely
+	}
+
+	md := &MessageDef{Name: m.Name, Comment: cleanMsgComments}
 	for _, el := range m.Elements {
 		switch v := el.(type) {
 		case *proto.NormalField:
+			rawComments := ExtractCommentLines(v.Comment)
+			fieldExt, cleanComments := protoextensions.ParseAndStripField(rawComments)
+			if fieldExt.Deprecated {
+				continue // skip deprecated fields entirely
+			}
+			name := SnakeToCamel(v.Name)
+			if fieldExt.VarName != "" {
+				name = fieldExt.VarName
+			}
+			jsonName := v.Name
+			if fieldExt.JsonName != "" {
+				jsonName = fieldExt.JsonName
+			}
 			fd := FieldDef{
-				Name:     SnakeToCamel(v.Name),
-				JsonName: v.Name,
-				Number:   v.Sequence,
-				Type:     v.Type,
-				Repeated: v.Repeated,
-				Comment:  ExtractCommentLines(v.Comment),
+				Name:      name,
+				JsonName:  jsonName,
+				Number:    v.Sequence,
+				Type:      v.Type,
+				Repeated:  v.Repeated,
+				Comment:   cleanComments,
+				YamlName:  fieldExt.YamlName,
+				ExtraTags: fieldExt.Tags,
 			}
 			fd.GoType, fd.IsMsg, fd.IsEnum = g.ProtoTypeToGo(v.Type, v.Repeated)
 			md.Fields = append(md.Fields, fd)
 		case *proto.MapField:
+			rawComments := ExtractCommentLines(v.Comment)
+			fieldExt, cleanComments := protoextensions.ParseAndStripField(rawComments)
+			if fieldExt.Deprecated {
+				continue
+			}
+			name := SnakeToCamel(v.Name)
+			if fieldExt.VarName != "" {
+				name = fieldExt.VarName
+			}
+			jsonName := v.Name
+			if fieldExt.JsonName != "" {
+				jsonName = fieldExt.JsonName
+			}
 			keyGo, _, _ := g.ProtoTypeToGo(v.KeyType, false)
 			valGo, _, _ := g.ProtoTypeToGo(v.Type, false)
 			fd := FieldDef{
-				Name:     SnakeToCamel(v.Name),
-				JsonName: v.Name,
-				Number:   v.Sequence,
-				Type:     "map",
-				GoType:   fmt.Sprintf("map[%s]%s", keyGo, valGo),
-				Map:      true,
-				MapKey:   v.KeyType,
-				MapVal:   v.Type,
-				Comment:  ExtractCommentLines(v.Comment),
+				Name:      name,
+				JsonName:  jsonName,
+				Number:    v.Sequence,
+				Type:      "map",
+				GoType:    fmt.Sprintf("map[%s]%s", keyGo, valGo),
+				Map:       true,
+				MapKey:    v.KeyType,
+				MapVal:    v.Type,
+				Comment:   cleanComments,
+				YamlName:  fieldExt.YamlName,
+				ExtraTags: fieldExt.Tags,
 			}
 			md.Fields = append(md.Fields, fd)
 		}
@@ -200,7 +241,7 @@ func (g *Generator) ProtoTypeToGo(pt string, repeated bool) (goType string, isMs
 		}
 		return pt, false, true
 	}
-	// Message type: strip "Message" suffix for a concise Go name.
+	// Message type: use proto name as Go name.
 	goName := GoTypeName(pt)
 	if repeated {
 		return "[]" + goName, true, false
@@ -244,10 +285,9 @@ func CamelToSnake(s string) string {
 	return b.String()
 }
 
-// GoTypeName strips the conventional "Message" suffix from a proto message name
-// to produce a concise Go type name.
+// GoTypeName returns the Go type name for a proto message, using the proto name as-is.
 func GoTypeName(protoName string) string {
-	return strings.TrimSuffix(protoName, "Message")
+	return protoName
 }
 
 func ReadonlyGoTypeName(protoName string) string {

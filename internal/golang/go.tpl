@@ -12,15 +12,11 @@ import (
 	"github.com/valyala/fastjson"
 )
 
+// for build time check
 var _ = unsafe.Pointer(nil)
-
 var _ = math.Float32bits
-
 var _ = strconv.IntSize
-
 var _ = base64.StdEncoding
-
-var jsonParserPool fastjson.ParserPool
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 {{range .Enums}}
@@ -28,7 +24,7 @@ type {{.Name}} int32
 {{$enumName := .Name}}
 const (
 {{- range .Values}}
-	{{.Name}} {{$enumName}} = {{.Number}}
+	{{enumValueGoName .Name}} {{$enumName}} = {{.Number}}
 {{- end}}
 )
 {{end}}
@@ -38,27 +34,37 @@ const (
 // {{$goName}} field tag IDs.
 const (
 {{- range .Fields}}
-	{{$goName}}_{{.Name}}_Tag = {{.Number}}
+	{{$goName}}{{.Name}}Tag = {{.Number}}
 {{- end}}
 )
 
 // {{$goName}} JSON field name string constants.
 const (
 {{- range .Fields}}
-	nameOf{{$goName}}{{.Name}} = "{{.JsonName}}"
+	NameOf{{$goName}}{{.Name}} = "{{.JsonName}}"
 {{- end}}
 )
-
+{{if hasYamlFields .Fields}}
+// {{$goName}} YAML field name string constants.
+const (
+{{- range .Fields}}
+{{- if .YamlName}}
+	NameOfYamlField{{$goName}}{{.Name}} = "{{.YamlName}}"
+{{- end}}
+{{- end}}
+)
+{{end}}
 {{msgCommentBlock .Comment}}// {{$goName}} writer struct.
 // Fields are ordered by alignment (desc) then size (desc) for minimal memory padding.
 type {{$goName}} struct {
 {{- range .Fields}}
-{{fieldCommentBlock .Comment}}	{{.Name}} {{.GoType}} `json:"{{.JsonName}},omitempty"`
+{{fieldCommentBlock .Comment}}	{{.Name}} {{.GoType}} {{.StructTag}}
 {{- end}}
 	arena []byte
 }
 
 func (m *{{$goName}}) Reset() {
+	m.arena = m.arena[:0]
 {{- range .Fields}}
 {{- if .Map}}
 	clear(m.{{.Name}})
@@ -120,7 +126,7 @@ func (m *{{$goName}}) ProtobufSize() int {
 		{{- else}}
 		entrySize += utils.TagSize(2, utils.WireTypeVarint) + utils.VarintSize(uint64(v))
 		{{- end}}
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(entrySize)) + entrySize
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(entrySize)) + entrySize
 	}
 {{- else if .Repeated}}
 {{- if isPackable .Type}}
@@ -149,23 +155,23 @@ func (m *{{$goName}}) ProtobufSize() int {
 			packed += utils.VarintSize(uint64(v))
 			{{- end}}
 		}
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(packed)) + packed
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(packed)) + packed
 	}
 {{- else if eq .Type "string"}}
 	for _, v := range m.{{.Name}} {
 		n := len(v)
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
 	}
 {{- else if eq .Type "bytes"}}
 	for _, v := range m.{{.Name}} {
 		n := len(v)
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
 	}
 {{- else}}
 	for i := range m.{{.Name}} {
 		sub := m.{{.Name}}[i].ProtobufSize()
 		if sub > 0 {
-			size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
+			size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
 		}
 	}
 {{- end}}
@@ -173,58 +179,58 @@ func (m *{{$goName}}) ProtobufSize() int {
 	{
 		sub := m.{{.Name}}.ProtobufSize()
 		if sub > 0 {
-			size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
+			size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
 		}
 	}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireType64bit) + 8
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType64bit) + 8
 	}
 {{- else if eq .Type "float"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireType32bit) + 4
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType32bit) + 4
 	}
 {{- else if eq .Type "fixed32"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireType32bit) + 4
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType32bit) + 4
 	}
 {{- else if eq .Type "fixed64"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireType64bit) + 8
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType64bit) + 8
 	}
 {{- else if eq .Type "sfixed32"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireType32bit) + 4
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType32bit) + 4
 	}
 {{- else if eq .Type "sfixed64"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireType64bit) + 8
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType64bit) + 8
 	}
 {{- else if eq .Type "sint32"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeVarint) + utils.VarintSize(uint64((uint32(m.{{.Name}}) << 1) ^ uint32(m.{{.Name}}>>31)))
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeVarint) + utils.VarintSize(uint64((uint32(m.{{.Name}}) << 1) ^ uint32(m.{{.Name}}>>31)))
 	}
 {{- else if eq .Type "sint64"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeVarint) + utils.VarintSize((uint64(m.{{.Name}}) << 1) ^ uint64(m.{{.Name}}>>63))
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeVarint) + utils.VarintSize((uint64(m.{{.Name}}) << 1) ^ uint64(m.{{.Name}}>>63))
 	}
 {{- else if eq .Type "bool"}}
 	if m.{{.Name}} {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeVarint) + 1
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeVarint) + 1
 	}
 {{- else if eq .Type "string"}}
 	if m.{{.Name}} != "" {
 		n := len(m.{{.Name}})
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
 	}
 {{- else if eq .Type "bytes"}}
 	if len(m.{{.Name}}) > 0 {
 		n := len(m.{{.Name}})
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
 	}
 {{- else}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}_{{.Name}}_Tag, utils.WireTypeVarint) + utils.VarintSize(uint64(m.{{.Name}}))
+		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeVarint) + utils.VarintSize(uint64(m.{{.Name}}))
 	}
 {{- end}}
 {{- end}}
@@ -277,7 +283,7 @@ func (m *{{$goName}}) ToProtobuf(in []byte) []byte {
 		{{- else}}
 		entrySize += utils.TagSize(2, utils.WireTypeVarint) + utils.VarintSize(uint64(v))
 		{{- end}}
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 		in = utils.AppendVarint(in, uint64(entrySize))
 		in = utils.AppendTag(in, 1, {{protoWireType .MapKey}})
 		{{- if eq .MapKey "string"}}
@@ -352,7 +358,7 @@ func (m *{{$goName}}) ToProtobuf(in []byte) []byte {
 			packedSize += utils.VarintSize(uint64(v))
 			{{- end}}
 		}
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 		in = utils.AppendVarint(in, uint64(packedSize))
 		for _, v := range m.{{.Name}} {
 			{{- if eq .Type "sint32"}}
@@ -380,19 +386,19 @@ func (m *{{$goName}}) ToProtobuf(in []byte) []byte {
 	}
 {{- else if eq .Type "string"}}
 	for _, v := range m.{{.Name}} {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 		in = utils.AppendLenDelim(in, unsafe.Slice(unsafe.StringData(v), len(v)))
 	}
 {{- else if eq .Type "bytes"}}
 	for _, v := range m.{{.Name}} {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 		in = utils.AppendLenDelim(in, v)
 	}
 {{- else}}
 	for i := range m.{{.Name}} {
 		sub := m.{{.Name}}[i].ProtobufSize()
 		if sub > 0 {
-			in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim)
+			in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 			in = utils.AppendVarint(in, uint64(sub))
 			in = m.{{.Name}}[i].ToProtobuf(in)
 		}
@@ -402,69 +408,69 @@ func (m *{{$goName}}) ToProtobuf(in []byte) []byte {
 	{
 		sub := m.{{.Name}}.ProtobufSize()
 		if sub > 0 {
-			in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim)
+			in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 			in = utils.AppendVarint(in, uint64(sub))
 			in = m.{{.Name}}.ToProtobuf(in)
 		}
 	}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireType64bit)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType64bit)
 		in = utils.AppendFixed64(in, math.Float64bits(m.{{.Name}}))
 	}
 {{- else if eq .Type "float"}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireType32bit)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType32bit)
 		in = utils.AppendFixed32(in, math.Float32bits(m.{{.Name}}))
 	}
 {{- else if eq .Type "fixed32"}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireType32bit)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType32bit)
 		in = utils.AppendFixed32(in, m.{{.Name}})
 	}
 {{- else if eq .Type "fixed64"}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireType64bit)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType64bit)
 		in = utils.AppendFixed64(in, m.{{.Name}})
 	}
 {{- else if eq .Type "sfixed32"}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireType32bit)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType32bit)
 		in = utils.AppendFixed32(in, uint32(m.{{.Name}}))
 	}
 {{- else if eq .Type "sfixed64"}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireType64bit)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType64bit)
 		in = utils.AppendFixed64(in, uint64(m.{{.Name}}))
 	}
 {{- else if eq .Type "sint32"}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeVarint)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeVarint)
 		in = utils.AppendSint32(in, m.{{.Name}})
 	}
 {{- else if eq .Type "sint64"}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeVarint)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeVarint)
 		in = utils.AppendSint64(in, m.{{.Name}})
 	}
 {{- else if eq .Type "bool"}}
 	if m.{{.Name}} {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeVarint)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeVarint)
 		in = append(in, 1)
 	}
 {{- else if eq .Type "string"}}
 	if m.{{.Name}} != "" {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 		in = utils.AppendLenDelim(in, unsafe.Slice(unsafe.StringData(m.{{.Name}}), len(m.{{.Name}})))
 	}
 {{- else if eq .Type "bytes"}}
 	if len(m.{{.Name}}) > 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeLenDelim)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 		in = utils.AppendLenDelim(in, m.{{.Name}})
 	}
 {{- else}}
 	if m.{{.Name}} != 0 {
-		in = utils.AppendTag(in, {{$goName}}_{{.Name}}_Tag, utils.WireTypeVarint)
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeVarint)
 		in = utils.AppendVarint(in, uint64(m.{{.Name}}))
 	}
 {{- end}}
@@ -474,220 +480,319 @@ func (m *{{$goName}}) ToProtobuf(in []byte) []byte {
 
 func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 	dst = append(dst, '{')
+{{- if .Fields}}
+	_jsonFirstField := true
 {{- range $i, $f := .Fields}}
-{{- if gt $i 0}}
-	dst = append(dst, ',')
-{{- end}}
-	dst = append(dst, '"')
-	dst = append(dst, nameOf{{$goName}}{{$f.Name}}...)
-	dst = append(dst, '"', ':')
 {{- if $f.Map}}
-	{
-		dst = append(dst, '{')
-		_jsonFirst := true
-		for _k, _v := range m.{{$f.Name}} {
-			if !_jsonFirst {
-				dst = append(dst, ',')
-			}
-			_jsonFirst = false
-			dst = append(dst, '"')
-{{- if eq $f.MapKey "string"}}
-			dst = utils.EncodeJSONString(_k, dst)
-{{- else if eq $f.MapKey "bool"}}
-			if _k {
-				dst = append(dst, "true"...)
-			} else {
-				dst = append(dst, "false"...)
-			}
-{{- else if or (eq $f.MapKey "uint32") (eq $f.MapKey "uint64") (eq $f.MapKey "fixed32") (eq $f.MapKey "fixed64")}}
-			dst = strconv.AppendUint(dst, uint64(_k), 10)
-{{- else}}
-			dst = strconv.AppendInt(dst, int64(_k), 10)
-{{- end}}
-			dst = append(dst, '"', ':')
-{{- if eq $f.MapVal "string"}}
-			dst = append(dst, '"')
-			dst = utils.EncodeJSONString(_v, dst)
-			dst = append(dst, '"')
-{{- else if eq $f.MapVal "bool"}}
-			if _v {
-				dst = append(dst, "true"...)
-			} else {
-				dst = append(dst, "false"...)
-			}
-{{- else if eq $f.MapVal "double"}}
-			{
-				_fv := _v
-				_iv := int64(_fv)
-				if math.Round(_fv) == _fv && float64(_iv) == _fv {
-					dst = strconv.AppendInt(dst, _iv, 10)
-				} else {
-					dst = strconv.AppendFloat(dst, _fv, 'f', -1, 64)
-				}
-			}
-{{- else if eq $f.MapVal "float"}}
-			{
-				_fv := float64(_v)
-				_iv := int64(_fv)
-				if math.Round(_fv) == _fv && float64(_iv) == _fv {
-					dst = strconv.AppendInt(dst, _iv, 10)
-				} else {
-					dst = strconv.AppendFloat(dst, _fv, 'f', -1, 32)
-				}
-			}
-{{- else if or (eq $f.MapVal "uint32") (eq $f.MapVal "fixed32")}}
-			dst = strconv.AppendUint(dst, uint64(_v), 10)
-{{- else if or (eq $f.MapVal "uint64") (eq $f.MapVal "fixed64")}}
-			if uint64(_v) > 9007199254740991 {
-				dst = append(dst, '"')
-				dst = strconv.AppendUint(dst, uint64(_v), 10)
-				dst = append(dst, '"')
-			} else {
-				dst = strconv.AppendUint(dst, uint64(_v), 10)
-			}
-{{- else if eq $f.MapVal "bytes"}}
-			dst = append(dst, '"')
-			dst = base64.StdEncoding.AppendEncode(dst, _v)
-			dst = append(dst, '"')
-{{- else if mapValIsMsg $f.MapVal}}
-			dst = _v.ToJSON(dst)
-{{- else if or (eq $f.MapVal "int64") (eq $f.MapVal "sint64") (eq $f.MapVal "sfixed64")}}
-			if int64(_v) > 9007199254740991 || int64(_v) < -9007199254740991 {
-				dst = append(dst, '"')
-				dst = strconv.AppendInt(dst, int64(_v), 10)
-				dst = append(dst, '"')
-			} else {
-				dst = strconv.AppendInt(dst, int64(_v), 10)
-			}
-{{- else}}
-			dst = strconv.AppendInt(dst, int64(_v), 10)
-{{- end}}
+	if len(m.{{$f.Name}}) > 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
 		}
-		dst = append(dst, '}')
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		{
+			dst = append(dst, '{')
+			_jsonFirst := true
+			for _k, _v := range m.{{$f.Name}} {
+				if !_jsonFirst {
+					dst = append(dst, ',')
+				}
+				_jsonFirst = false
+				dst = append(dst, '"')
+{{- if eq $f.MapKey "string"}}
+				dst = utils.EncodeJSONString(_k, dst)
+{{- else if eq $f.MapKey "bool"}}
+				if _k {
+					dst = append(dst, "true"...)
+				} else {
+					dst = append(dst, "false"...)
+				}
+{{- else if or (eq $f.MapKey "uint32") (eq $f.MapKey "uint64") (eq $f.MapKey "fixed32") (eq $f.MapKey "fixed64")}}
+				dst = strconv.AppendUint(dst, uint64(_k), 10)
+{{- else}}
+				dst = strconv.AppendInt(dst, int64(_k), 10)
+{{- end}}
+				dst = append(dst, '"', ':')
+{{- if eq $f.MapVal "string"}}
+				dst = append(dst, '"')
+				dst = utils.EncodeJSONString(_v, dst)
+				dst = append(dst, '"')
+{{- else if eq $f.MapVal "bool"}}
+				if _v {
+					dst = append(dst, "true"...)
+				} else {
+					dst = append(dst, "false"...)
+				}
+{{- else if eq $f.MapVal "double"}}
+				{
+					_fv := _v
+					_iv := int64(_fv)
+					if math.Round(_fv) == _fv && float64(_iv) == _fv {
+						dst = strconv.AppendInt(dst, _iv, 10)
+					} else {
+						dst = strconv.AppendFloat(dst, _fv, 'f', -1, 64)
+					}
+				}
+{{- else if eq $f.MapVal "float"}}
+				{
+					_fv := float64(_v)
+					_iv := int64(_fv)
+					if math.Round(_fv) == _fv && float64(_iv) == _fv {
+						dst = strconv.AppendInt(dst, _iv, 10)
+					} else {
+						dst = strconv.AppendFloat(dst, _fv, 'f', -1, 32)
+					}
+				}
+{{- else if or (eq $f.MapVal "uint32") (eq $f.MapVal "fixed32")}}
+				dst = strconv.AppendUint(dst, uint64(_v), 10)
+{{- else if or (eq $f.MapVal "uint64") (eq $f.MapVal "fixed64")}}
+				if uint64(_v) > 9007199254740991 {
+					dst = append(dst, '"')
+					dst = strconv.AppendUint(dst, uint64(_v), 10)
+					dst = append(dst, '"')
+				} else {
+					dst = strconv.AppendUint(dst, uint64(_v), 10)
+				}
+{{- else if eq $f.MapVal "bytes"}}
+				dst = append(dst, '"')
+				dst = base64.StdEncoding.AppendEncode(dst, _v)
+				dst = append(dst, '"')
+{{- else if mapValIsMsg $f.MapVal}}
+				dst = _v.ToJSON(dst)
+{{- else if or (eq $f.MapVal "int64") (eq $f.MapVal "sint64") (eq $f.MapVal "sfixed64")}}
+				if int64(_v) > 9007199254740991 || int64(_v) < -9007199254740991 {
+					dst = append(dst, '"')
+					dst = strconv.AppendInt(dst, int64(_v), 10)
+					dst = append(dst, '"')
+				} else {
+					dst = strconv.AppendInt(dst, int64(_v), 10)
+				}
+{{- else}}
+				dst = strconv.AppendInt(dst, int64(_v), 10)
+{{- end}}
+			}
+			dst = append(dst, '}')
+		}
 	}
 {{- else if $f.Repeated}}
-	{
-		dst = append(dst, '[')
-		for _i, _v := range m.{{$f.Name}} {
-			if _i > 0 {
-				dst = append(dst, ',')
-			}
-{{- if $f.IsMsg}}
-			dst = _v.ToJSON(dst)
-{{- else if eq $f.Type "string"}}
-			dst = append(dst, '"')
-			dst = utils.EncodeJSONString(_v, dst)
-			dst = append(dst, '"')
-{{- else if eq $f.Type "bool"}}
-			if _v {
-				dst = append(dst, "true"...)
-			} else {
-				dst = append(dst, "false"...)
-			}
-{{- else if eq $f.Type "double"}}
-			{
-				_fv := _v
-				_iv := int64(_fv)
-				if math.Round(_fv) == _fv && float64(_iv) == _fv {
-					dst = strconv.AppendInt(dst, _iv, 10)
-				} else {
-					dst = strconv.AppendFloat(dst, _fv, 'f', -1, 64)
-				}
-			}
-{{- else if eq $f.Type "float"}}
-			{
-				_fv := float64(_v)
-				_iv := int64(_fv)
-				if math.Round(_fv) == _fv && float64(_iv) == _fv {
-					dst = strconv.AppendInt(dst, _iv, 10)
-				} else {
-					dst = strconv.AppendFloat(dst, _fv, 'f', -1, 32)
-				}
-			}
-{{- else if or (eq $f.Type "uint32") (eq $f.Type "fixed32")}}
-			dst = strconv.AppendUint(dst, uint64(_v), 10)
-{{- else if or (eq $f.Type "uint64") (eq $f.Type "fixed64")}}
-			if uint64(_v) > 9007199254740991 {
-				dst = append(dst, '"')
-				dst = strconv.AppendUint(dst, uint64(_v), 10)
-				dst = append(dst, '"')
-			} else {
-				dst = strconv.AppendUint(dst, uint64(_v), 10)
-			}
-{{- else if eq $f.Type "bytes"}}
-			dst = append(dst, '"')
-			dst = base64.StdEncoding.AppendEncode(dst, _v)
-			dst = append(dst, '"')
-{{- else if or (eq $f.Type "int64") (eq $f.Type "sint64") (eq $f.Type "sfixed64")}}
-			if int64(_v) > 9007199254740991 || int64(_v) < -9007199254740991 {
-				dst = append(dst, '"')
-				dst = strconv.AppendInt(dst, int64(_v), 10)
-				dst = append(dst, '"')
-			} else {
-				dst = strconv.AppendInt(dst, int64(_v), 10)
-			}
-{{- else}}
-			dst = strconv.AppendInt(dst, int64(_v), 10)
-{{- end}}
+	if len(m.{{$f.Name}}) > 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
 		}
-		dst = append(dst, ']')
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		{
+			dst = append(dst, '[')
+			for _i, _v := range m.{{$f.Name}} {
+				if _i > 0 {
+					dst = append(dst, ',')
+				}
+{{- if $f.IsMsg}}
+				dst = _v.ToJSON(dst)
+{{- else if eq $f.Type "string"}}
+				dst = append(dst, '"')
+				dst = utils.EncodeJSONString(_v, dst)
+				dst = append(dst, '"')
+{{- else if eq $f.Type "bool"}}
+				if _v {
+					dst = append(dst, "true"...)
+				} else {
+					dst = append(dst, "false"...)
+				}
+{{- else if eq $f.Type "double"}}
+				{
+					_fv := _v
+					_iv := int64(_fv)
+					if math.Round(_fv) == _fv && float64(_iv) == _fv {
+						dst = strconv.AppendInt(dst, _iv, 10)
+					} else {
+						dst = strconv.AppendFloat(dst, _fv, 'f', -1, 64)
+					}
+				}
+{{- else if eq $f.Type "float"}}
+				{
+					_fv := float64(_v)
+					_iv := int64(_fv)
+					if math.Round(_fv) == _fv && float64(_iv) == _fv {
+						dst = strconv.AppendInt(dst, _iv, 10)
+					} else {
+						dst = strconv.AppendFloat(dst, _fv, 'f', -1, 32)
+					}
+				}
+{{- else if or (eq $f.Type "uint32") (eq $f.Type "fixed32")}}
+				dst = strconv.AppendUint(dst, uint64(_v), 10)
+{{- else if or (eq $f.Type "uint64") (eq $f.Type "fixed64")}}
+				if uint64(_v) > 9007199254740991 {
+					dst = append(dst, '"')
+					dst = strconv.AppendUint(dst, uint64(_v), 10)
+					dst = append(dst, '"')
+				} else {
+					dst = strconv.AppendUint(dst, uint64(_v), 10)
+				}
+{{- else if eq $f.Type "bytes"}}
+				dst = append(dst, '"')
+				dst = base64.StdEncoding.AppendEncode(dst, _v)
+				dst = append(dst, '"')
+{{- else if or (eq $f.Type "int64") (eq $f.Type "sint64") (eq $f.Type "sfixed64")}}
+				if int64(_v) > 9007199254740991 || int64(_v) < -9007199254740991 {
+					dst = append(dst, '"')
+					dst = strconv.AppendInt(dst, int64(_v), 10)
+					dst = append(dst, '"')
+				} else {
+					dst = strconv.AppendInt(dst, int64(_v), 10)
+				}
+{{- else}}
+				dst = strconv.AppendInt(dst, int64(_v), 10)
+{{- end}}
+			}
+			dst = append(dst, ']')
+		}
 	}
 {{- else if $f.IsMsg}}
+	if !_jsonFirstField {
+		dst = append(dst, ',')
+	}
+	_jsonFirstField = false
+	dst = append(dst, '"')
+	dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+	dst = append(dst, '"', ':')
 	dst = m.{{$f.Name}}.ToJSON(dst)
 {{- else if eq $f.Type "string"}}
-	dst = append(dst, '"')
-	dst = utils.EncodeJSONString(m.{{$f.Name}}, dst)
-	dst = append(dst, '"')
+	if len(m.{{$f.Name}}) > 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		dst = append(dst, '"')
+		dst = utils.EncodeJSONString(m.{{$f.Name}}, dst)
+		dst = append(dst, '"')
+	}
 {{- else if eq $f.Type "bool"}}
 	if m.{{$f.Name}} {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		dst = append(dst, "true"...)
-	} else {
-		dst = append(dst, "false"...)
 	}
 {{- else if eq $f.Type "double"}}
-	{
-		_fv := m.{{$f.Name}}
-		_iv := int64(_fv)
-		if math.Round(_fv) == _fv && float64(_iv) == _fv {
-			dst = strconv.AppendInt(dst, _iv, 10)
-		} else {
-			dst = strconv.AppendFloat(dst, _fv, 'f', -1, 64)
+	if m.{{$f.Name}} != 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		{
+			_fv := m.{{$f.Name}}
+			_iv := int64(_fv)
+			if math.Round(_fv) == _fv && float64(_iv) == _fv {
+				dst = strconv.AppendInt(dst, _iv, 10)
+			} else {
+				dst = strconv.AppendFloat(dst, _fv, 'f', -1, 64)
+			}
 		}
 	}
 {{- else if eq $f.Type "float"}}
-	{
-		_fv := float64(m.{{$f.Name}})
-		_iv := int64(_fv)
-		if math.Round(_fv) == _fv && float64(_iv) == _fv {
-			dst = strconv.AppendInt(dst, _iv, 10)
-		} else {
-			dst = strconv.AppendFloat(dst, _fv, 'f', -1, 32)
+	if m.{{$f.Name}} != 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		{
+			_fv := float64(m.{{$f.Name}})
+			_iv := int64(_fv)
+			if math.Round(_fv) == _fv && float64(_iv) == _fv {
+				dst = strconv.AppendInt(dst, _iv, 10)
+			} else {
+				dst = strconv.AppendFloat(dst, _fv, 'f', -1, 32)
+			}
 		}
 	}
 {{- else if or (eq $f.Type "uint32") (eq $f.Type "fixed32")}}
-	dst = strconv.AppendUint(dst, uint64(m.{{$f.Name}}), 10)
+	if m.{{$f.Name}} != 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		dst = strconv.AppendUint(dst, uint64(m.{{$f.Name}}), 10)
+	}
 {{- else if or (eq $f.Type "uint64") (eq $f.Type "fixed64")}}
-	if uint64(m.{{$f.Name}}) > 9007199254740991 {
+	if m.{{$f.Name}} != 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
 		dst = append(dst, '"')
-		dst = strconv.AppendUint(dst, uint64(m.{{$f.Name}}), 10)
-		dst = append(dst, '"')
-	} else {
-		dst = strconv.AppendUint(dst, uint64(m.{{$f.Name}}), 10)
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		if uint64(m.{{$f.Name}}) > 9007199254740991 {
+			dst = append(dst, '"')
+			dst = strconv.AppendUint(dst, uint64(m.{{$f.Name}}), 10)
+			dst = append(dst, '"')
+		} else {
+			dst = strconv.AppendUint(dst, uint64(m.{{$f.Name}}), 10)
+		}
 	}
 {{- else if eq $f.Type "bytes"}}
-	dst = append(dst, '"')
-	dst = base64.StdEncoding.AppendEncode(dst, m.{{$f.Name}})
-	dst = append(dst, '"')
+	if len(m.{{$f.Name}}) > 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		dst = append(dst, '"')
+		dst = base64.StdEncoding.AppendEncode(dst, m.{{$f.Name}})
+		dst = append(dst, '"')
+	}
 {{- else if or (eq $f.Type "int64") (eq $f.Type "sint64") (eq $f.Type "sfixed64")}}
-	if int64(m.{{$f.Name}}) > 9007199254740991 || int64(m.{{$f.Name}}) < -9007199254740991 {
+	if m.{{$f.Name}} != 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
 		dst = append(dst, '"')
-		dst = strconv.AppendInt(dst, int64(m.{{$f.Name}}), 10)
-		dst = append(dst, '"')
-	} else {
-		dst = strconv.AppendInt(dst, int64(m.{{$f.Name}}), 10)
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		if int64(m.{{$f.Name}}) > 9007199254740991 || int64(m.{{$f.Name}}) < -9007199254740991 {
+			dst = append(dst, '"')
+			dst = strconv.AppendInt(dst, int64(m.{{$f.Name}}), 10)
+			dst = append(dst, '"')
+		} else {
+			dst = strconv.AppendInt(dst, int64(m.{{$f.Name}}), 10)
+		}
 	}
 {{- else}}
-	dst = strconv.AppendInt(dst, int64(m.{{$f.Name}}), 10)
+	if m.{{$f.Name}} != 0 {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		dst = strconv.AppendInt(dst, int64(m.{{$f.Name}}), 10)
+	}
+{{- end}}
 {{- end}}
 {{- end}}
 	dst = append(dst, '}')
@@ -708,6 +813,9 @@ type Readonly{{$goName}} struct {
 }
 
 func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
+	// _alignZeroPad provides zero bytes for alignment padding without heap allocation.
+	// append(slice, _alignZeroPad[:n]...) appends a string — no temporary []byte is allocated.
+	const _alignZeroPad = "\x00\x00\x00\x00\x00\x00\x00" // 7 bytes covers up to 8-byte alignment
 	if dst == nil {
 		dst = &{{$goName}}{}
 	}
@@ -722,7 +830,7 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 		if dst.{{.Name}} == nil {
 			dst.{{.Name}} = make({{.GoType}}, len(r.{{.Name}}))
 		} else {
-			for _k := range dst.{{.Name}} { delete(dst.{{.Name}}, _k) }
+			clear(dst.{{.Name}})
 		}
 		for _rk, _rv := range r.{{.Name}} {
 			{{- if eq .MapKey "string"}}
@@ -790,14 +898,14 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 	if len(r.{{.Name}}) > 0 {
 		{{- if is8ByteNumeric .Type}}
 		if _rem := len(dst.arena) & 7; _rem != 0 {
-			dst.arena = append(dst.arena, make([]byte, 8-_rem)...)
+			dst.arena = append(dst.arena, _alignZeroPad[:8-_rem]...)
 		}
 		_nb := len(r.{{.Name}}) * 8
 		{{- else if eq .Type "bool"}}
 		_nb := len(r.{{.Name}}) * 1
 		{{- else}}
 		if _rem := len(dst.arena) & 3; _rem != 0 {
-			dst.arena = append(dst.arena, make([]byte, 4-_rem)...)
+			dst.arena = append(dst.arena, _alignZeroPad[:4-_rem]...)
 		}
 		_nb := len(r.{{.Name}}) * 4
 		{{- end}}
@@ -916,7 +1024,7 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 }
 
 func (r *Readonly{{$goName}}) Reset() {
-	r.rawBuffer = r.rawBuffer[:0]
+	r.rawBuffer = nil
 {{- range .Fields}}
 {{- if .Map}}
 	clear(r.{{.Name}})
@@ -944,7 +1052,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 		}
 		switch fieldNum {
 {{- range .Fields}}
-		case {{$goName}}_{{.Name}}_Tag: // {{.Name}}
+		case {{$goName}}{{.Name}}Tag: // {{.Name}}
 {{- if .Map}}
 			var entryData []byte
 			entryData, in, err = utils.ConsumeBytes(in)
@@ -1073,7 +1181,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 		}
 		switch string(k) {
 {{- range .Fields}}
-		case nameOf{{$goName}}{{.Name}}:
+		case NameOf{{$goName}}{{.Name}}:
 {{- if .Map}}
 			_mapObj, _e := v.Object()
 			if _e != nil { visitErr = _e; return }
@@ -1322,14 +1430,12 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 	return visitErr
 }
 
-func (r *Readonly{{$goName}}) FromJSON(src []byte) error {
+func (r *Readonly{{$goName}}) FromJSON(src []byte, parser *fastjson.Parser) error {
 	r.rawBuffer = src
-	p := jsonParserPool.Get()
-	defer func(){
-		p.Reset()
-		jsonParserPool.Put(p)
-	}()
-	v, err := p.Parse(unsafe.String(&src[0], len(src)))
+	if parser == nil {
+		parser = &fastjson.Parser{}
+	}
+	v, err := parser.Parse(unsafe.String(&src[0], len(src)))
 	if err != nil {
 		return err
 	}

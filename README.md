@@ -72,6 +72,9 @@
       * Csharp: 基于库 `System.Text.Json.Utf8JsonReader` 来做流式解析
 * 其他:
   * 优化 struct 中的成员布局，GC 扫描友好，且节约内存
+  * csharp:
+    - 尽可能减少 utf-8 到 utf-16 的转换
+    - 尽可能减少发生 throw exception, 例如使用 TryParse() 代替 Parse()
 
 
 

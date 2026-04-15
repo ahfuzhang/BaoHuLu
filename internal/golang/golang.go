@@ -155,6 +155,21 @@ func ProtoWireType(pt string) WireTypeVal {
 	return WireTypeVarint
 }
 
+// EnumValueGoName converts a protobuf SCREAMING_SNAKE_CASE enum value name to
+// Go-style PascalCase. e.g. "STATUS_ACTIVE" → "StatusActive".
+func EnumValueGoName(s string) string {
+	parts := strings.Split(s, "_")
+	var sb strings.Builder
+	for _, p := range parts {
+		if len(p) == 0 {
+			continue
+		}
+		sb.WriteString(strings.ToUpper(p[:1]))
+		sb.WriteString(strings.ToLower(p[1:]))
+	}
+	return sb.String()
+}
+
 // ─── JSON decode helpers ──────────────────────────────────────────────────────
 
 // JsonMapKeyClass classifies a proto map-key type for JSON decoding.
@@ -207,12 +222,13 @@ type FieldTpl struct {
 	protofile.FieldDef
 	WireType   WireTypeVal
 	ReaderType string
-	IsRawBuf   bool // synthetic rawBuffer []byte field for readonly structs
+	IsRawBuf   bool   // synthetic rawBuffer []byte field for readonly structs
+	StructTag  string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
 }
 
 type MsgTpl struct {
 	Name         string     // proto message name (used as map/lookup key)
-	GoName       string     // Go type name: proto name with "Message" suffix stripped
+	GoName       string     // Go type name: same as proto message name
 	Comment      []string   // proto comment lines (without leading //)
 	Fields       []FieldTpl // writer fields, sorted for optimal layout
 	ReaderFields []FieldTpl // readonly fields = Fields + rawBuffer, all sorted
@@ -261,6 +277,28 @@ func (g *Generator) readerGoType(fd protofile.FieldDef) string {
 	return fd.GoType
 }
 
+// buildStructTag constructs the full Go struct tag string for a field,
+// incorporating json, yaml (@yamlName), and arbitrary extra tags (@tag).
+func buildStructTag(fd protofile.FieldDef) string {
+	var sb strings.Builder
+	sb.WriteByte('`')
+	fmt.Fprintf(&sb, `json:"%s,omitempty"`, fd.JsonName)
+	if fd.YamlName != "" {
+		fmt.Fprintf(&sb, ` yaml:"%s"`, fd.YamlName)
+	}
+	for _, t := range fd.ExtraTags {
+		val := t.Value
+		// Strip surrounding double quotes if the user included them as part of
+		// the tag value (e.g. @tag=gorm:"col:id" → gorm:"col:id" not gorm:""col:id"").
+		if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
+			val = val[1 : len(val)-1]
+		}
+		fmt.Fprintf(&sb, ` %s:"%s"`, t.Name, val)
+	}
+	sb.WriteByte('`')
+	return sb.String()
+}
+
 func (g *Generator) makeFieldTpl(fd protofile.FieldDef) FieldTpl {
 	var wt WireTypeVal
 	if fd.Map || fd.Repeated {
@@ -272,6 +310,7 @@ func (g *Generator) makeFieldTpl(fd protofile.FieldDef) FieldTpl {
 		FieldDef:   fd,
 		WireType:   wt,
 		ReaderType: g.readerGoType(fd),
+		StructTag:  buildStructTag(fd),
 	}
 }
 
@@ -403,7 +442,8 @@ func (g *Generator) Render(out *os.File) error {
 		"mapKeyGoType":   func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
 		"mapValGoType":   func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
 		"mapValIsMsg":    func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
-		"upperFirst":     protofile.UpperFirst,
+		"upperFirst":       protofile.UpperFirst,
+		"enumValueGoName": EnumValueGoName,
 		"readerElemType": func(fd protofile.FieldDef) string {
 			return protofile.ReadonlyGoTypeName(fd.Type)
 		},
@@ -412,6 +452,15 @@ func (g *Generator) Render(out *os.File) error {
 		"jsonMapKeyClass": JsonMapKeyClass,
 		"jsonScalarClass": JsonScalarClass,
 		"elemType":        func(s string) string { return strings.TrimPrefix(s, "[]") },
+		// Extension helpers.
+		"hasYamlFields": func(fields []FieldTpl) bool {
+			for _, f := range fields {
+				if f.YamlName != "" {
+					return true
+				}
+			}
+			return false
+		},
 	}
 
 	tmpl, err := template.New("pb").Funcs(fnMap).Parse(codeTemplate)

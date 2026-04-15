@@ -4,10 +4,13 @@
 #pragma warning disable CS8600, CS8601, CS8602, CS8618, CS8625
 
 using System;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
+using QiWa.Common;
+using static QiWa.Common.ProtobufUtils;
 
 namespace {{.Namespace}};
 
@@ -47,7 +50,7 @@ public struct Readonly{{$goName}}
 
     // ── FromProtobuf ─────────────────────────────────────────────────────────
 
-    public Common.Error FromProtobuf(ReadOnlySpan<byte> binary)
+    public Error FromProtobuf(ReadOnlySpan<byte> binary)
     {
         // local decode variables
 {{- range .Fields}}
@@ -73,8 +76,8 @@ public struct Readonly{{$goName}}
         int _pos = 0;
         while (_pos < binary.Length)
         {
-            if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _tagRaw, out int _tagBytes))
-                return Common.Error.WithLoc(1, "failed to read tag");
+            if (!TryReadVarint(binary, _pos, out ulong _tagRaw, out int _tagBytes))
+                return Error.WithLoc(1, "failed to read tag");
             _pos += _tagBytes;
             int _fieldNum = (int)(_tagRaw >> 3);
             int _wireType = (int)(_tagRaw & 7);
@@ -84,8 +87,8 @@ public struct Readonly{{$goName}}
                 case {{$goName}}Tags.Tag{{.Name}}: // {{.Name}}
 {{- if .IsMap}}
                 {
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _elen{{.Name}}, out int _elb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad map {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _elen{{.Name}}, out int _elb{{.Name}}))
+                        return Error.WithLoc(1, "bad map {{.Name}}");
                     _pos += _elb{{.Name}};
                     var _entBin{{.Name}} = binary.Slice(_pos, (int)_elen{{.Name}});
                     {{.MapKeyCS}} _entKey{{.Name}} = default;
@@ -93,97 +96,97 @@ public struct Readonly{{$goName}}
                     int _ep{{.Name}} = 0;
                     while (_ep{{.Name}} < _entBin{{.Name}}.Length)
                     {
-                        if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _etag{{.Name}}, out int _etb{{.Name}})) break;
+                        if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _etag{{.Name}}, out int _etb{{.Name}})) break;
                         _ep{{.Name}} += _etb{{.Name}};
                         int _ef{{.Name}} = (int)(_etag{{.Name}} >> 3);
                         int _ew{{.Name}} = (int)(_etag{{.Name}} & 7);
                         if (_ef{{.Name}} == 1) // map key
                         {
 {{- if eq .MapKey "string"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _ksl{{.Name}}, out int _ksb{{.Name}})) break;
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _ksl{{.Name}}, out int _ksb{{.Name}})) break;
                             _ep{{.Name}} += _ksb{{.Name}};
                             _entKey{{.Name}} = Encoding.UTF8.GetString(_entBin{{.Name}}.Slice(_ep{{.Name}}, (int)_ksl{{.Name}}));
                             _ep{{.Name}} += (int)_ksl{{.Name}};
 {{- else if eq .MapKey "bool"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _kbv{{.Name}}, out int _kbb{{.Name}})) break;
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _kbv{{.Name}}, out int _kbb{{.Name}})) break;
                             _entKey{{.Name}} = _kbv{{.Name}} != 0;
                             _ep{{.Name}} += _kbb{{.Name}};
 {{- else if eq .MapKey "fixed32"}}
-                            Common.ProtoUtils.TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _kf32{{.Name}});
+                            TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _kf32{{.Name}});
                             _entKey{{.Name}} = _kf32{{.Name}}; _ep{{.Name}} += 4;
 {{- else if eq .MapKey "sfixed32"}}
-                            Common.ProtoUtils.TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _ksf32{{.Name}});
+                            TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _ksf32{{.Name}});
                             _entKey{{.Name}} = (int)_ksf32{{.Name}}; _ep{{.Name}} += 4;
 {{- else if eq .MapKey "fixed64"}}
-                            Common.ProtoUtils.TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _kf64{{.Name}});
+                            TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _kf64{{.Name}});
                             _entKey{{.Name}} = _kf64{{.Name}}; _ep{{.Name}} += 8;
 {{- else if eq .MapKey "sfixed64"}}
-                            Common.ProtoUtils.TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _ksf64{{.Name}});
+                            TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _ksf64{{.Name}});
                             _entKey{{.Name}} = (long)_ksf64{{.Name}}; _ep{{.Name}} += 8;
 {{- else if eq .MapKey "sint32"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _ks32{{.Name}}, out int _kb32{{.Name}})) break;
-                            _entKey{{.Name}} = Common.ProtoUtils.ZigZagDecode32(_ks32{{.Name}}); _ep{{.Name}} += _kb32{{.Name}};
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _ks32{{.Name}}, out int _kb32{{.Name}})) break;
+                            _entKey{{.Name}} = ZigZagDecode32(_ks32{{.Name}}); _ep{{.Name}} += _kb32{{.Name}};
 {{- else if eq .MapKey "sint64"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _ks64{{.Name}}, out int _kb64{{.Name}})) break;
-                            _entKey{{.Name}} = Common.ProtoUtils.ZigZagDecode64(_ks64{{.Name}}); _ep{{.Name}} += _kb64{{.Name}};
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _ks64{{.Name}}, out int _kb64{{.Name}})) break;
+                            _entKey{{.Name}} = ZigZagDecode64(_ks64{{.Name}}); _ep{{.Name}} += _kb64{{.Name}};
 {{- else}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _kv{{.Name}}, out int _kvb{{.Name}})) break;
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _kv{{.Name}}, out int _kvb{{.Name}})) break;
                             _entKey{{.Name}} = ({{.MapKeyCS}})_kv{{.Name}}; _ep{{.Name}} += _kvb{{.Name}};
 {{- end}}
                         }
                         else if (_ef{{.Name}} == 2) // map value
                         {
 {{- if .MapValIsMsg}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vmlen{{.Name}}, out int _vmlb{{.Name}})) break;
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vmlen{{.Name}}, out int _vmlb{{.Name}})) break;
                             _ep{{.Name}} += _vmlb{{.Name}};
                             {{.ReadonlyMapValCS}} _vsubMsg{{.Name}} = default;
                             var _vsubErr{{.Name}} = _vsubMsg{{.Name}}.FromProtobuf(_entBin{{.Name}}.Slice(_ep{{.Name}}, (int)_vmlen{{.Name}}));
                             if (_vsubErr{{.Name}}.Err()) return _vsubErr{{.Name}};
                             _entVal{{.Name}} = _vsubMsg{{.Name}}; _ep{{.Name}} += (int)_vmlen{{.Name}};
 {{- else if eq .MapVal "string"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vsl{{.Name}}, out int _vsb{{.Name}})) break;
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vsl{{.Name}}, out int _vsb{{.Name}})) break;
                             _ep{{.Name}} += _vsb{{.Name}};
                             _entVal{{.Name}} = Encoding.UTF8.GetString(_entBin{{.Name}}.Slice(_ep{{.Name}}, (int)_vsl{{.Name}}));
                             _ep{{.Name}} += (int)_vsl{{.Name}};
 {{- else if eq .MapVal "bytes"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vbl{{.Name}}, out int _vbb{{.Name}})) break;
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vbl{{.Name}}, out int _vbb{{.Name}})) break;
                             _ep{{.Name}} += _vbb{{.Name}};
                             _entVal{{.Name}} = _entBin{{.Name}}.Slice(_ep{{.Name}}, (int)_vbl{{.Name}}).ToArray(); _ep{{.Name}} += (int)_vbl{{.Name}};
 {{- else if eq .MapVal "double"}}
-                            Common.ProtoUtils.TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vd64{{.Name}});
+                            TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vd64{{.Name}});
                             _entVal{{.Name}} = BitConverter.UInt64BitsToDouble(_vd64{{.Name}}); _ep{{.Name}} += 8;
 {{- else if eq .MapVal "float"}}
-                            Common.ProtoUtils.TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _vf32{{.Name}});
+                            TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _vf32{{.Name}});
                             _entVal{{.Name}} = BitConverter.UInt32BitsToSingle(_vf32{{.Name}}); _ep{{.Name}} += 4;
 {{- else if eq .MapVal "fixed32"}}
-                            Common.ProtoUtils.TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _vfx32{{.Name}});
+                            TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _vfx32{{.Name}});
                             _entVal{{.Name}} = _vfx32{{.Name}}; _ep{{.Name}} += 4;
 {{- else if eq .MapVal "sfixed32"}}
-                            Common.ProtoUtils.TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _vsfx32{{.Name}});
+                            TryReadFixed32(_entBin{{.Name}}, _ep{{.Name}}, out uint _vsfx32{{.Name}});
                             _entVal{{.Name}} = (int)_vsfx32{{.Name}}; _ep{{.Name}} += 4;
 {{- else if eq .MapVal "fixed64"}}
-                            Common.ProtoUtils.TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vfx64{{.Name}});
+                            TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vfx64{{.Name}});
                             _entVal{{.Name}} = _vfx64{{.Name}}; _ep{{.Name}} += 8;
 {{- else if eq .MapVal "sfixed64"}}
-                            Common.ProtoUtils.TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vsfx64{{.Name}});
+                            TryReadFixed64(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vsfx64{{.Name}});
                             _entVal{{.Name}} = (long)_vsfx64{{.Name}}; _ep{{.Name}} += 8;
 {{- else if eq .MapVal "sint32"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vs32{{.Name}}, out int _vsb32{{.Name}})) break;
-                            _entVal{{.Name}} = Common.ProtoUtils.ZigZagDecode32(_vs32{{.Name}}); _ep{{.Name}} += _vsb32{{.Name}};
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vs32{{.Name}}, out int _vsb32{{.Name}})) break;
+                            _entVal{{.Name}} = ZigZagDecode32(_vs32{{.Name}}); _ep{{.Name}} += _vsb32{{.Name}};
 {{- else if eq .MapVal "sint64"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vs64{{.Name}}, out int _vsb64{{.Name}})) break;
-                            _entVal{{.Name}} = Common.ProtoUtils.ZigZagDecode64(_vs64{{.Name}}); _ep{{.Name}} += _vsb64{{.Name}};
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vs64{{.Name}}, out int _vsb64{{.Name}})) break;
+                            _entVal{{.Name}} = ZigZagDecode64(_vs64{{.Name}}); _ep{{.Name}} += _vsb64{{.Name}};
 {{- else if eq .MapVal "bool"}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vbool{{.Name}}, out int _vboolb{{.Name}})) break;
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vbool{{.Name}}, out int _vboolb{{.Name}})) break;
                             _entVal{{.Name}} = _vbool{{.Name}} != 0; _ep{{.Name}} += _vboolb{{.Name}};
 {{- else}}
-                            if (!Common.ProtoUtils.TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vvar{{.Name}}, out int _vvarb{{.Name}})) break;
+                            if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vvar{{.Name}}, out int _vvarb{{.Name}})) break;
                             _entVal{{.Name}} = ({{.MapValCS}})_vvar{{.Name}}; _ep{{.Name}} += _vvarb{{.Name}};
 {{- end}}
                         }
                         else
                         {
-                            if (!Common.ProtoUtils.SkipField(_entBin{{.Name}}, _ep{{.Name}}, _ew{{.Name}}, out int _eskip{{.Name}})) break;
+                            if (!SkipField(_entBin{{.Name}}, _ep{{.Name}}, _ew{{.Name}}, out int _eskip{{.Name}})) break;
                             _ep{{.Name}} += _eskip{{.Name}};
                         }
                     }
@@ -195,16 +198,16 @@ public struct Readonly{{$goName}}
                 {
 {{- if .IsPackable}}
                     _{{.Name}}List ??= new {{.LocalType}}();
-                    if (_wireType == Common.ProtoUtils.WireTypeLenDelim)
+                    if (_wireType == WireTypeLenDelim)
                     { // packed
-                        if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _plen{{.Name}}, out int _plb{{.Name}}))
-                            return Common.Error.WithLoc(1, "bad packed {{.Name}}");
+                        if (!TryReadVarint(binary, _pos, out ulong _plen{{.Name}}, out int _plb{{.Name}}))
+                            return Error.WithLoc(1, "bad packed {{.Name}}");
                         _pos += _plb{{.Name}};
                         int _packEnd{{.Name}} = _pos + (int)_plen{{.Name}};
                         while (_pos < _packEnd{{.Name}})
                         {
 {{- if .IsFixed32}}
-                            if (!Common.ProtoUtils.TryReadFixed32(binary, _pos, out uint _pf32{{.Name}})) break;
+                            if (!TryReadFixed32(binary, _pos, out uint _pf32{{.Name}})) break;
 {{- if eq .Type "float"}}
                             _{{.Name}}List.Add(BitConverter.UInt32BitsToSingle(_pf32{{.Name}}));
 {{- else if eq .Type "sfixed32"}}
@@ -214,7 +217,7 @@ public struct Readonly{{$goName}}
 {{- end}}
                             _pos += 4;
 {{- else if .IsFixed64}}
-                            if (!Common.ProtoUtils.TryReadFixed64(binary, _pos, out ulong _pf64{{.Name}})) break;
+                            if (!TryReadFixed64(binary, _pos, out ulong _pf64{{.Name}})) break;
 {{- if eq .Type "double"}}
                             _{{.Name}}List.Add(BitConverter.UInt64BitsToDouble(_pf64{{.Name}}));
 {{- else if eq .Type "sfixed64"}}
@@ -224,16 +227,16 @@ public struct Readonly{{$goName}}
 {{- end}}
                             _pos += 8;
 {{- else if .IsBool}}
-                            if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _pbool{{.Name}}, out int _pboolb{{.Name}})) break;
+                            if (!TryReadVarint(binary, _pos, out ulong _pbool{{.Name}}, out int _pboolb{{.Name}})) break;
                             _{{.Name}}List.Add(_pbool{{.Name}} != 0); _pos += _pboolb{{.Name}};
 {{- else if .IsSint32}}
-                            if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _psz{{.Name}}, out int _pszb{{.Name}})) break;
-                            _{{.Name}}List.Add(Common.ProtoUtils.ZigZagDecode32(_psz{{.Name}})); _pos += _pszb{{.Name}};
+                            if (!TryReadVarint(binary, _pos, out ulong _psz{{.Name}}, out int _pszb{{.Name}})) break;
+                            _{{.Name}}List.Add(ZigZagDecode32(_psz{{.Name}})); _pos += _pszb{{.Name}};
 {{- else if .IsSint64}}
-                            if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _psz64{{.Name}}, out int _psz64b{{.Name}})) break;
-                            _{{.Name}}List.Add(Common.ProtoUtils.ZigZagDecode64(_psz64{{.Name}})); _pos += _psz64b{{.Name}};
+                            if (!TryReadVarint(binary, _pos, out ulong _psz64{{.Name}}, out int _psz64b{{.Name}})) break;
+                            _{{.Name}}List.Add(ZigZagDecode64(_psz64{{.Name}})); _pos += _psz64b{{.Name}};
 {{- else}}
-                            if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _pv{{.Name}}, out int _pvb{{.Name}})) break;
+                            if (!TryReadVarint(binary, _pos, out ulong _pv{{.Name}}, out int _pvb{{.Name}})) break;
                             _{{.Name}}List.Add(({{.ElemTypeCS}})_pv{{.Name}}); _pos += _pvb{{.Name}};
 {{- end}}
                         }
@@ -241,8 +244,8 @@ public struct Readonly{{$goName}}
                     else
                     { // non-packed single element
 {{- if .IsFixed32}}
-                        if (!Common.ProtoUtils.TryReadFixed32(binary, _pos, out uint _npf32{{.Name}}))
-                            return Common.Error.WithLoc(1, "bad fixed32 {{.Name}}");
+                        if (!TryReadFixed32(binary, _pos, out uint _npf32{{.Name}}))
+                            return Error.WithLoc(1, "bad fixed32 {{.Name}}");
 {{- if eq .Type "float"}}
                         _{{.Name}}List.Add(BitConverter.UInt32BitsToSingle(_npf32{{.Name}})); _pos += 4;
 {{- else if eq .Type "sfixed32"}}
@@ -251,8 +254,8 @@ public struct Readonly{{$goName}}
                         _{{.Name}}List.Add(_npf32{{.Name}}); _pos += 4;
 {{- end}}
 {{- else if .IsFixed64}}
-                        if (!Common.ProtoUtils.TryReadFixed64(binary, _pos, out ulong _npf64{{.Name}}))
-                            return Common.Error.WithLoc(1, "bad fixed64 {{.Name}}");
+                        if (!TryReadFixed64(binary, _pos, out ulong _npf64{{.Name}}))
+                            return Error.WithLoc(1, "bad fixed64 {{.Name}}");
 {{- if eq .Type "double"}}
                         _{{.Name}}List.Add(BitConverter.UInt64BitsToDouble(_npf64{{.Name}})); _pos += 8;
 {{- else if eq .Type "sfixed64"}}
@@ -261,20 +264,20 @@ public struct Readonly{{$goName}}
                         _{{.Name}}List.Add(_npf64{{.Name}}); _pos += 8;
 {{- end}}
 {{- else if .IsBool}}
-                        if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _npbool{{.Name}}, out int _npboolb{{.Name}}))
-                            return Common.Error.WithLoc(1, "bad bool {{.Name}}");
+                        if (!TryReadVarint(binary, _pos, out ulong _npbool{{.Name}}, out int _npboolb{{.Name}}))
+                            return Error.WithLoc(1, "bad bool {{.Name}}");
                         _{{.Name}}List.Add(_npbool{{.Name}} != 0); _pos += _npboolb{{.Name}};
 {{- else if .IsSint32}}
-                        if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _npsz{{.Name}}, out int _npszb{{.Name}}))
-                            return Common.Error.WithLoc(1, "bad sint32 {{.Name}}");
-                        _{{.Name}}List.Add(Common.ProtoUtils.ZigZagDecode32(_npsz{{.Name}})); _pos += _npszb{{.Name}};
+                        if (!TryReadVarint(binary, _pos, out ulong _npsz{{.Name}}, out int _npszb{{.Name}}))
+                            return Error.WithLoc(1, "bad sint32 {{.Name}}");
+                        _{{.Name}}List.Add(ZigZagDecode32(_npsz{{.Name}})); _pos += _npszb{{.Name}};
 {{- else if .IsSint64}}
-                        if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _npsz64{{.Name}}, out int _npsz64b{{.Name}}))
-                            return Common.Error.WithLoc(1, "bad sint64 {{.Name}}");
-                        _{{.Name}}List.Add(Common.ProtoUtils.ZigZagDecode64(_npsz64{{.Name}})); _pos += _npsz64b{{.Name}};
+                        if (!TryReadVarint(binary, _pos, out ulong _npsz64{{.Name}}, out int _npsz64b{{.Name}}))
+                            return Error.WithLoc(1, "bad sint64 {{.Name}}");
+                        _{{.Name}}List.Add(ZigZagDecode64(_npsz64{{.Name}})); _pos += _npsz64b{{.Name}};
 {{- else}}
-                        if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _npv{{.Name}}, out int _npvb{{.Name}}))
-                            return Common.Error.WithLoc(1, "bad varint {{.Name}}");
+                        if (!TryReadVarint(binary, _pos, out ulong _npv{{.Name}}, out int _npvb{{.Name}}))
+                            return Error.WithLoc(1, "bad varint {{.Name}}");
                         _{{.Name}}List.Add(({{.ElemTypeCS}})_npv{{.Name}}); _pos += _npvb{{.Name}};
 {{- end}}
                     }
@@ -282,34 +285,34 @@ public struct Readonly{{$goName}}
                     // repeated non-packable
                     _{{.Name}}List ??= new {{.LocalType}}();
 {{- if .IsString}}
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _rslen{{.Name}}, out int _rslb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad string {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _rslen{{.Name}}, out int _rslb{{.Name}}))
+                        return Error.WithLoc(1, "bad string {{.Name}}");
                     _pos += _rslb{{.Name}};
                     _{{.Name}}List.Add(Encoding.UTF8.GetString(binary.Slice(_pos, (int)_rslen{{.Name}}))); _pos += (int)_rslen{{.Name}};
 {{- else if .IsBytes}}
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _rblen{{.Name}}, out int _rblb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad bytes {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _rblen{{.Name}}, out int _rblb{{.Name}}))
+                        return Error.WithLoc(1, "bad bytes {{.Name}}");
                     _pos += _rblb{{.Name}};
                     _{{.Name}}List.Add(binary.Slice(_pos, (int)_rblen{{.Name}}).ToArray()); _pos += (int)_rblen{{.Name}};
 {{- else if .ElemIsMsg}}
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _rmlen{{.Name}}, out int _rmlb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad msg {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _rmlen{{.Name}}, out int _rmlb{{.Name}}))
+                        return Error.WithLoc(1, "bad msg {{.Name}}");
                     _pos += _rmlb{{.Name}};
                     {{.ReadonlyElemTypeCS}} _rsub{{.Name}} = default;
                     var _rsuberr{{.Name}} = _rsub{{.Name}}.FromProtobuf(binary.Slice(_pos, (int)_rmlen{{.Name}}));
                     if (_rsuberr{{.Name}}.Err()) return _rsuberr{{.Name}};
                     _{{.Name}}List.Add(_rsub{{.Name}}); _pos += (int)_rmlen{{.Name}};
 {{- else}}
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _rvar{{.Name}}, out int _rvarb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad elem {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _rvar{{.Name}}, out int _rvarb{{.Name}}))
+                        return Error.WithLoc(1, "bad elem {{.Name}}");
                     _{{.Name}}List.Add(({{.ElemTypeCS}})_rvar{{.Name}}); _pos += _rvarb{{.Name}};
 {{- end}}
 {{- end}}
                 }
 {{- else if .IsMsg}}
                 {
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _mlen{{.Name}}, out int _mlb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad msg {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _mlen{{.Name}}, out int _mlb{{.Name}}))
+                        return Error.WithLoc(1, "bad msg {{.Name}}");
                     _pos += _mlb{{.Name}};
                     var _subErr{{.Name}} = _{{.Name}}.FromProtobuf(binary.Slice(_pos, (int)_mlen{{.Name}}));
                     if (_subErr{{.Name}}.Err()) return _subErr{{.Name}};
@@ -317,24 +320,24 @@ public struct Readonly{{$goName}}
                 }
 {{- else if .IsString}}
                 {
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _slen{{.Name}}, out int _slb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad string {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _slen{{.Name}}, out int _slb{{.Name}}))
+                        return Error.WithLoc(1, "bad string {{.Name}}");
                     _pos += _slb{{.Name}};
                     _{{.Name}} = Encoding.UTF8.GetString(binary.Slice(_pos, (int)_slen{{.Name}}));
                     _pos += (int)_slen{{.Name}};
                 }
 {{- else if .IsBytes}}
                 {
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _blen{{.Name}}, out int _blb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad bytes {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _blen{{.Name}}, out int _blb{{.Name}}))
+                        return Error.WithLoc(1, "bad bytes {{.Name}}");
                     _pos += _blb{{.Name}};
                     _{{.Name}} = binary.Slice(_pos, (int)_blen{{.Name}}).ToArray();
                     _pos += (int)_blen{{.Name}};
                 }
 {{- else if .IsFixed32}}
                 {
-                    if (!Common.ProtoUtils.TryReadFixed32(binary, _pos, out uint _f32v{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad fixed32 {{.Name}}");
+                    if (!TryReadFixed32(binary, _pos, out uint _f32v{{.Name}}))
+                        return Error.WithLoc(1, "bad fixed32 {{.Name}}");
 {{- if eq .Type "float"}}
                     _{{.Name}} = BitConverter.UInt32BitsToSingle(_f32v{{.Name}});
 {{- else if eq .Type "sfixed32"}}
@@ -346,8 +349,8 @@ public struct Readonly{{$goName}}
                 }
 {{- else if .IsFixed64}}
                 {
-                    if (!Common.ProtoUtils.TryReadFixed64(binary, _pos, out ulong _f64v{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad fixed64 {{.Name}}");
+                    if (!TryReadFixed64(binary, _pos, out ulong _f64v{{.Name}}))
+                        return Error.WithLoc(1, "bad fixed64 {{.Name}}");
 {{- if eq .Type "double"}}
                     _{{.Name}} = BitConverter.UInt64BitsToDouble(_f64v{{.Name}});
 {{- else if eq .Type "sfixed64"}}
@@ -359,30 +362,30 @@ public struct Readonly{{$goName}}
                 }
 {{- else if .IsBool}}
                 {
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _boolv{{.Name}}, out int _boolb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad bool {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _boolv{{.Name}}, out int _boolb{{.Name}}))
+                        return Error.WithLoc(1, "bad bool {{.Name}}");
                     _{{.Name}} = _boolv{{.Name}} != 0;
                     _pos += _boolb{{.Name}};
                 }
 {{- else if .IsSint32}}
                 {
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _sz32v{{.Name}}, out int _sz32b{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad sint32 {{.Name}}");
-                    _{{.Name}} = Common.ProtoUtils.ZigZagDecode32(_sz32v{{.Name}});
+                    if (!TryReadVarint(binary, _pos, out ulong _sz32v{{.Name}}, out int _sz32b{{.Name}}))
+                        return Error.WithLoc(1, "bad sint32 {{.Name}}");
+                    _{{.Name}} = ZigZagDecode32(_sz32v{{.Name}});
                     _pos += _sz32b{{.Name}};
                 }
 {{- else if .IsSint64}}
                 {
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _sz64v{{.Name}}, out int _sz64b{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad sint64 {{.Name}}");
-                    _{{.Name}} = Common.ProtoUtils.ZigZagDecode64(_sz64v{{.Name}});
+                    if (!TryReadVarint(binary, _pos, out ulong _sz64v{{.Name}}, out int _sz64b{{.Name}}))
+                        return Error.WithLoc(1, "bad sint64 {{.Name}}");
+                    _{{.Name}} = ZigZagDecode64(_sz64v{{.Name}});
                     _pos += _sz64b{{.Name}};
                 }
 {{- else}}
                 {
                     // varint / enum
-                    if (!Common.ProtoUtils.TryReadVarint(binary, _pos, out ulong _varv{{.Name}}, out int _varb{{.Name}}))
-                        return Common.Error.WithLoc(1, "bad varint {{.Name}}");
+                    if (!TryReadVarint(binary, _pos, out ulong _varv{{.Name}}, out int _varb{{.Name}}))
+                        return Error.WithLoc(1, "bad varint {{.Name}}");
                     _{{.Name}} = ({{.WriterType}})_varv{{.Name}};
                     _pos += _varb{{.Name}};
                 }
@@ -390,8 +393,8 @@ public struct Readonly{{$goName}}
                     break;
 {{- end}}
                 default:
-                    if (!Common.ProtoUtils.SkipField(binary, _pos, _wireType, out int _skip))
-                        return Common.Error.WithLoc(1, "truncated binary data");
+                    if (!SkipField(binary, _pos, _wireType, out int _skip))
+                        return Error.WithLoc(1, "truncated binary data");
                     _pos += _skip;
                     break;
             }
@@ -414,7 +417,7 @@ public struct Readonly{{$goName}}
 
     // ── FromJSON ─────────────────────────────────────────────────────────────
 
-    public Common.Error FromJSON(ReadOnlySpan<byte> text)
+    public Error FromJSON(ReadOnlySpan<byte> text)
     {
         var _reader = new Utf8JsonReader(text, new JsonReaderOptions
         {
@@ -424,14 +427,14 @@ public struct Readonly{{$goName}}
         return FromJSONReader(ref _reader);
     }
 
-    internal Common.Error FromJSONReader(ref Utf8JsonReader reader)
+    internal Error FromJSONReader(ref Utf8JsonReader reader)
     {
         // If the reader is freshly created (None) or not yet at StartObject, advance.
         // When called from a nested context, caller already advanced to StartObject.
         if (reader.TokenType != JsonTokenType.StartObject)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return Common.Error.WithLoc(1, "expected {");
+                return Error.WithLoc(1, "expected {");
         }
 
         // local decode variables
@@ -458,9 +461,9 @@ public struct Readonly{{$goName}}
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             if (reader.TokenType != JsonTokenType.PropertyName)
-                return Common.Error.WithLoc(1, "expected property name");
+                return Error.WithLoc(1, "expected property name");
             var _propSpan = reader.ValueSpan;
-            if (!reader.Read()) return Common.Error.WithLoc(1, "unexpected end");
+            if (!reader.Read()) return Error.WithLoc(1, "unexpected end");
 {{- range $i, $f := .Fields}}
             {{if $i}}else {{end}}if (_propSpan.SequenceEqual({{$goName}}Tags.JsonKey{{.Name}}))
 {{- if .IsMap}}
@@ -470,13 +473,13 @@ public struct Readonly{{$goName}}
                     {
                         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                         {
-                            string _mk{{.Name}} = reader.GetString()!;
 {{- if eq .MapKeyCS "string"}}
-                            {{.MapKeyCS}} _mke{{.Name}} = _mk{{.Name}};
+                            string _mke{{.Name}} = reader.GetString()!;
 {{- else if eq .MapKeyCS "bool"}}
-                            {{.MapKeyCS}} _mke{{.Name}} = bool.Parse(_mk{{.Name}});
+                            bool _mke{{.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else}}
-                            {{.MapKeyCS}} _mke{{.Name}} = {{.MapKeyCS}}.Parse(_mk{{.Name}});
+                            if (!Utf8Parser.TryParse(reader.ValueSpan, out {{.MapKeyCS}} _mke{{.Name}}, out _))
+                                return Error.WithLoc(1, "bad map key {{.Name}}");
 {{- end}}
                             reader.Read();
 {{- if .MapValIsMsg}}
@@ -489,23 +492,23 @@ public struct Readonly{{$goName}}
 {{- else if eq .MapVal "bytes"}}
                             _{{.Name}}Dict[_mke{{.Name}}] = reader.GetBytesFromBase64();
 {{- else if eq .MapVal "bool"}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = reader.GetBoolean();
+                            _{{.Name}}Dict[_mke{{.Name}}] = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else if eq .MapVal "double"}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = reader.GetDouble();
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _mvdv{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvdv{{.Name}}; }
 {{- else if eq .MapVal "float"}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = reader.GetSingle();
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _mvfv{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvfv{{.Name}}; }
 {{- else if eq .MapVal "int64"}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = reader.TokenType == JsonTokenType.String ? long.Parse(reader.GetString()!) : reader.GetInt64();
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
 {{- else if eq .MapVal "uint64"}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = reader.TokenType == JsonTokenType.String ? ulong.Parse(reader.GetString()!) : reader.GetUInt64();
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvul{{.Name}}; }
 {{- else if eq .MapVal "sint64"}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = reader.TokenType == JsonTokenType.String ? long.Parse(reader.GetString()!) : reader.GetInt64();
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
 {{- else if eq .MapVal "sfixed64"}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = reader.TokenType == JsonTokenType.String ? long.Parse(reader.GetString()!) : reader.GetInt64();
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
 {{- else if eq .MapVal "fixed64"}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = reader.TokenType == JsonTokenType.String ? ulong.Parse(reader.GetString()!) : reader.GetUInt64();
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvul{{.Name}}; }
 {{- else}}
-                            _{{.Name}}Dict[_mke{{.Name}}] = ({{.MapValCS}})reader.GetInt32();
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _mviv{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = ({{.MapValCS}})_mviv{{.Name}}; }
 {{- end}}
                         }
                     }
@@ -527,19 +530,19 @@ public struct Readonly{{$goName}}
 {{- else if .IsBytes}}
                             _{{.Name}}List.Add(reader.GetBytesFromBase64());
 {{- else if .IsBool}}
-                            _{{.Name}}List.Add(reader.GetBoolean());
+                            _{{.Name}}List.Add(reader.ValueSpan.SequenceEqual("true"u8));
 {{- else if eq .ElemTypeCS "double"}}
-                            _{{.Name}}List.Add(reader.GetDouble());
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _arrdv{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrdv{{.Name}}); }
 {{- else if eq .ElemTypeCS "float"}}
-                            _{{.Name}}List.Add(reader.GetSingle());
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _arrfv{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrfv{{.Name}}); }
 {{- else if .IsFixed64}}
-                            _{{.Name}}List.Add(({{.ElemTypeCS}})(reader.TokenType == JsonTokenType.String ? long.Parse(reader.GetString()!) : reader.GetInt64()));
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrfl{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(({{.ElemTypeCS}})_arrfl{{.Name}}); }
 {{- else if eq .ElemTypeCS "long"}}
-                            _{{.Name}}List.Add(reader.TokenType == JsonTokenType.String ? long.Parse(reader.GetString()!) : reader.GetInt64());
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrl{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrl{{.Name}}); }
 {{- else if eq .ElemTypeCS "ulong"}}
-                            _{{.Name}}List.Add(reader.TokenType == JsonTokenType.String ? ulong.Parse(reader.GetString()!) : reader.GetUInt64());
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _arrul{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrul{{.Name}}); }
 {{- else}}
-                            _{{.Name}}List.Add(({{.ElemTypeCS}})reader.GetInt32());
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _arriv{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(({{.ElemTypeCS}})_arriv{{.Name}}); }
 {{- end}}
                         }
                     }
@@ -554,21 +557,21 @@ public struct Readonly{{$goName}}
 {{- else if .IsBytes}}
                     _{{.Name}} = reader.GetBytesFromBase64();
 {{- else if .IsBool}}
-                    _{{.Name}} = reader.GetBoolean();
+                    _{{.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else if .IsEnum}}
-                    _{{.Name}} = ({{.WriterType}})reader.GetInt32();
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _ev{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = ({{.WriterType}})_ev{{.Name}}; }
 {{- else if eq .WriterType "double"}}
-                    _{{.Name}} = reader.GetDouble();
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = _dv{{.Name}}; }
 {{- else if eq .WriterType "float"}}
-                    _{{.Name}} = reader.GetSingle();
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _fv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = _fv{{.Name}}; }
 {{- else if .IsFixed64}}
-                    _{{.Name}} = ({{.WriterType}})(reader.TokenType == JsonTokenType.String ? long.Parse(reader.GetString()!) : reader.GetInt64());
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = ({{.WriterType}})_fl{{.Name}}; }
 {{- else if eq .WriterType "long"}}
-                    _{{.Name}} = reader.TokenType == JsonTokenType.String ? long.Parse(reader.GetString()!) : reader.GetInt64();
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = _fl{{.Name}}; }
 {{- else if eq .WriterType "ulong"}}
-                    _{{.Name}} = reader.TokenType == JsonTokenType.String ? ulong.Parse(reader.GetString()!) : reader.GetUInt64();
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _ful{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = _ful{{.Name}}; }
 {{- else}}
-                    _{{.Name}} = ({{.WriterType}})reader.GetInt32();
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _iv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = ({{.WriterType}})_iv{{.Name}}; }
 {{- end}}
 {{- end}}
             else { reader.Skip(); }
@@ -647,7 +650,7 @@ public struct {{$goName}}
 
     // ── ToProtobuf ───────────────────────────────────────────────────────────
 
-    public Common.Error ToProtobuf(ref Common.RentedBuffer buf)
+    public Error ToProtobuf(ref RentedBuffer buf)
     {
 {{- range .Fields}}
 {{- if .IsMap}}
@@ -655,85 +658,83 @@ public struct {{$goName}}
         {
             foreach (var _kv{{.Name}} in {{.Name}})
             {
-                var _entry{{.Name}} = new Common.RentedBuffer(64);
-                _entry{{.Name}}.Rent(64);
+                var _entry{{.Name}} = new RentedBuffer(64);
                 // key (field 1)
 {{- if eq .MapKey "string"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteString(ref _entry{{.Name}}, _kv{{.Name}}.Key);
+                WriteTag(ref _entry{{.Name}}, 1, WireTypeLenDelim);
+                WriteString(ref _entry{{.Name}}, _kv{{.Name}}.Key);
 {{- else if eq .MapKey "bool"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref _entry{{.Name}}, _kv{{.Name}}.Key ? 1UL : 0UL);
+                WriteTag(ref _entry{{.Name}}, 1, WireTypeVarint);
+                WriteVarint(ref _entry{{.Name}}, _kv{{.Name}}.Key ? 1UL : 0UL);
 {{- else if eq .MapKey "fixed32"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireType32Bit);
-                Common.ProtoUtils.WriteFixed32(ref _entry{{.Name}}, _kv{{.Name}}.Key);
+                WriteTag(ref _entry{{.Name}}, 1, WireType32Bit);
+                WriteFixed32(ref _entry{{.Name}}, _kv{{.Name}}.Key);
 {{- else if eq .MapKey "sfixed32"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireType32Bit);
-                Common.ProtoUtils.WriteFixed32(ref _entry{{.Name}}, (uint)_kv{{.Name}}.Key);
+                WriteTag(ref _entry{{.Name}}, 1, WireType32Bit);
+                WriteFixed32(ref _entry{{.Name}}, (uint)_kv{{.Name}}.Key);
 {{- else if eq .MapKey "fixed64"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireType64Bit);
-                Common.ProtoUtils.WriteFixed64(ref _entry{{.Name}}, _kv{{.Name}}.Key);
+                WriteTag(ref _entry{{.Name}}, 1, WireType64Bit);
+                WriteFixed64(ref _entry{{.Name}}, _kv{{.Name}}.Key);
 {{- else if eq .MapKey "sfixed64"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireType64Bit);
-                Common.ProtoUtils.WriteFixed64(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Key);
+                WriteTag(ref _entry{{.Name}}, 1, WireType64Bit);
+                WriteFixed64(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Key);
 {{- else if eq .MapKey "sint32"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref _entry{{.Name}}, Common.ProtoUtils.ZigZagEncode32(_kv{{.Name}}.Key));
+                WriteTag(ref _entry{{.Name}}, 1, WireTypeVarint);
+                WriteVarint(ref _entry{{.Name}}, ZigZagEncode32(_kv{{.Name}}.Key));
 {{- else if eq .MapKey "sint64"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref _entry{{.Name}}, Common.ProtoUtils.ZigZagEncode64(_kv{{.Name}}.Key));
+                WriteTag(ref _entry{{.Name}}, 1, WireTypeVarint);
+                WriteVarint(ref _entry{{.Name}}, ZigZagEncode64(_kv{{.Name}}.Key));
 {{- else}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 1, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Key);
+                WriteTag(ref _entry{{.Name}}, 1, WireTypeVarint);
+                WriteVarint(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Key);
 {{- end}}
                 // value (field 2)
 {{- if .MapValIsMsg}}
-                var _vbuf{{.Name}} = new Common.RentedBuffer(64);
-                _vbuf{{.Name}}.Rent(64);
+                var _vbuf{{.Name}} = new RentedBuffer(64);
                 _kv{{.Name}}.Value.ToProtobuf(ref _vbuf{{.Name}});
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteBytes(ref _entry{{.Name}}, _vbuf{{.Name}}.Bytes());
+                WriteTag(ref _entry{{.Name}}, 2, WireTypeLenDelim);
+                WriteBytes(ref _entry{{.Name}}, _vbuf{{.Name}}.AsSpan());
                 _vbuf{{.Name}}.Dispose();
 {{- else if eq .MapVal "string"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteString(ref _entry{{.Name}}, _kv{{.Name}}.Value);
+                WriteTag(ref _entry{{.Name}}, 2, WireTypeLenDelim);
+                WriteString(ref _entry{{.Name}}, _kv{{.Name}}.Value);
 {{- else if eq .MapVal "bytes"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteBytes(ref _entry{{.Name}}, _kv{{.Name}}.Value);
+                WriteTag(ref _entry{{.Name}}, 2, WireTypeLenDelim);
+                WriteBytes(ref _entry{{.Name}}, _kv{{.Name}}.Value);
 {{- else if eq .MapVal "double"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireType64Bit);
-                Common.ProtoUtils.WriteFixed64(ref _entry{{.Name}}, BitConverter.DoubleToUInt64Bits(_kv{{.Name}}.Value));
+                WriteTag(ref _entry{{.Name}}, 2, WireType64Bit);
+                WriteFixed64(ref _entry{{.Name}}, BitConverter.DoubleToUInt64Bits(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "float"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireType32Bit);
-                Common.ProtoUtils.WriteFixed32(ref _entry{{.Name}}, BitConverter.SingleToUInt32Bits(_kv{{.Name}}.Value));
+                WriteTag(ref _entry{{.Name}}, 2, WireType32Bit);
+                WriteFixed32(ref _entry{{.Name}}, BitConverter.SingleToUInt32Bits(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "fixed32"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireType32Bit);
-                Common.ProtoUtils.WriteFixed32(ref _entry{{.Name}}, _kv{{.Name}}.Value);
+                WriteTag(ref _entry{{.Name}}, 2, WireType32Bit);
+                WriteFixed32(ref _entry{{.Name}}, _kv{{.Name}}.Value);
 {{- else if eq .MapVal "sfixed32"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireType32Bit);
-                Common.ProtoUtils.WriteFixed32(ref _entry{{.Name}}, (uint)_kv{{.Name}}.Value);
+                WriteTag(ref _entry{{.Name}}, 2, WireType32Bit);
+                WriteFixed32(ref _entry{{.Name}}, (uint)_kv{{.Name}}.Value);
 {{- else if eq .MapVal "fixed64"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireType64Bit);
-                Common.ProtoUtils.WriteFixed64(ref _entry{{.Name}}, _kv{{.Name}}.Value);
+                WriteTag(ref _entry{{.Name}}, 2, WireType64Bit);
+                WriteFixed64(ref _entry{{.Name}}, _kv{{.Name}}.Value);
 {{- else if eq .MapVal "sfixed64"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireType64Bit);
-                Common.ProtoUtils.WriteFixed64(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Value);
+                WriteTag(ref _entry{{.Name}}, 2, WireType64Bit);
+                WriteFixed64(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Value);
 {{- else if eq .MapVal "sint32"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref _entry{{.Name}}, Common.ProtoUtils.ZigZagEncode32(_kv{{.Name}}.Value));
+                WriteTag(ref _entry{{.Name}}, 2, WireTypeVarint);
+                WriteVarint(ref _entry{{.Name}}, ZigZagEncode32(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "sint64"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref _entry{{.Name}}, Common.ProtoUtils.ZigZagEncode64(_kv{{.Name}}.Value));
+                WriteTag(ref _entry{{.Name}}, 2, WireTypeVarint);
+                WriteVarint(ref _entry{{.Name}}, ZigZagEncode64(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "bool"}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref _entry{{.Name}}, _kv{{.Name}}.Value ? 1UL : 0UL);
+                WriteTag(ref _entry{{.Name}}, 2, WireTypeVarint);
+                WriteVarint(ref _entry{{.Name}}, _kv{{.Name}}.Value ? 1UL : 0UL);
 {{- else}}
-                Common.ProtoUtils.WriteTag(ref _entry{{.Name}}, 2, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Value);
+                WriteTag(ref _entry{{.Name}}, 2, WireTypeVarint);
+                WriteVarint(ref _entry{{.Name}}, (ulong)_kv{{.Name}}.Value);
 {{- end}}
                 // outer tag + length-delim
-                Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteBytes(ref buf, _entry{{.Name}}.Bytes());
+                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+                WriteBytes(ref buf, _entry{{.Name}}.AsSpan());
                 _entry{{.Name}}.Dispose();
             }
         }
@@ -741,134 +742,151 @@ public struct {{$goName}}
         if ({{.Name}} != null && {{.Name}}.Length > 0)
         {
 {{- if .IsPackable}}
-            var _packed{{.Name}} = new Common.RentedBuffer({{.Name}}.Length * 8 + 4);
-            _packed{{.Name}}.Rent({{.Name}}.Length * 8 + 4);
-            foreach (var _pv{{.Name}} in {{.Name}})
-            {
 {{- if .IsFixed32}}
-                Common.ProtoUtils.WriteFixed32(ref _packed{{.Name}}, {{if eq .Type "float"}}BitConverter.SingleToUInt32Bits(_pv{{.Name}}){{else if eq .Type "sfixed32"}}(uint)_pv{{.Name}}{{else}}_pv{{.Name}}{{end}});
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+            WriteVarint(ref buf, (ulong)({{.Name}}.Length * 4));
+            foreach (var _pv{{.Name}} in {{.Name}})
+                WriteFixed32(ref buf, {{if eq .Type "float"}}BitConverter.SingleToUInt32Bits(_pv{{.Name}}){{else if eq .Type "sfixed32"}}(uint)_pv{{.Name}}{{else}}_pv{{.Name}}{{end}});
 {{- else if .IsFixed64}}
-                Common.ProtoUtils.WriteFixed64(ref _packed{{.Name}}, {{if eq .Type "double"}}BitConverter.DoubleToUInt64Bits(_pv{{.Name}}){{else if eq .Type "sfixed64"}}(ulong)_pv{{.Name}}{{else}}_pv{{.Name}}{{end}});
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+            WriteVarint(ref buf, (ulong)({{.Name}}.Length * 8));
+            foreach (var _pv{{.Name}} in {{.Name}})
+                WriteFixed64(ref buf, {{if eq .Type "double"}}BitConverter.DoubleToUInt64Bits(_pv{{.Name}}){{else if eq .Type "sfixed64"}}(ulong)_pv{{.Name}}{{else}}_pv{{.Name}}{{end}});
 {{- else if .IsBool}}
-                Common.ProtoUtils.WriteVarint(ref _packed{{.Name}}, _pv{{.Name}} ? 1UL : 0UL);
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+            WriteVarint(ref buf, (ulong){{.Name}}.Length);
+            foreach (var _pv{{.Name}} in {{.Name}})
+                WriteVarint(ref buf, _pv{{.Name}} ? 1UL : 0UL);
 {{- else if .IsSint32}}
-                Common.ProtoUtils.WriteVarint(ref _packed{{.Name}}, Common.ProtoUtils.ZigZagEncode32(_pv{{.Name}}));
+            int _len{{.Name}} = 0;
+            foreach (var _pv{{.Name}} in {{.Name}})
+            { ulong _zv{{.Name}} = ZigZagEncode32(_pv{{.Name}}); do { _len{{.Name}}++; _zv{{.Name}} >>= 7; } while (_zv{{.Name}} != 0); }
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+            WriteVarint(ref buf, (ulong)_len{{.Name}});
+            foreach (var _pv{{.Name}} in {{.Name}})
+                WriteVarint(ref buf, ZigZagEncode32(_pv{{.Name}}));
 {{- else if .IsSint64}}
-                Common.ProtoUtils.WriteVarint(ref _packed{{.Name}}, Common.ProtoUtils.ZigZagEncode64(_pv{{.Name}}));
+            int _len{{.Name}} = 0;
+            foreach (var _pv{{.Name}} in {{.Name}})
+            { ulong _zv{{.Name}} = ZigZagEncode64(_pv{{.Name}}); do { _len{{.Name}}++; _zv{{.Name}} >>= 7; } while (_zv{{.Name}} != 0); }
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+            WriteVarint(ref buf, (ulong)_len{{.Name}});
+            foreach (var _pv{{.Name}} in {{.Name}})
+                WriteVarint(ref buf, ZigZagEncode64(_pv{{.Name}}));
 {{- else}}
-                Common.ProtoUtils.WriteVarint(ref _packed{{.Name}}, (ulong)_pv{{.Name}});
+            int _len{{.Name}} = 0;
+            foreach (var _pv{{.Name}} in {{.Name}})
+            { ulong _vv{{.Name}} = (ulong)_pv{{.Name}}; do { _len{{.Name}}++; _vv{{.Name}} >>= 7; } while (_vv{{.Name}} != 0); }
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+            WriteVarint(ref buf, (ulong)_len{{.Name}});
+            foreach (var _pv{{.Name}} in {{.Name}})
+                WriteVarint(ref buf, (ulong)_pv{{.Name}});
 {{- end}}
-            }
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeLenDelim);
-            Common.ProtoUtils.WriteBytes(ref buf, _packed{{.Name}}.Bytes());
-            _packed{{.Name}}.Dispose();
 {{- else if .IsString}}
             foreach (var _sv{{.Name}} in {{.Name}})
             {
-                Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteString(ref buf, _sv{{.Name}} ?? string.Empty);
+                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+                WriteString(ref buf, _sv{{.Name}} ?? string.Empty);
             }
 {{- else if .IsBytes}}
             foreach (var _bv{{.Name}} in {{.Name}})
             {
-                Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteBytes(ref buf, _bv{{.Name}});
+                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+                WriteBytes(ref buf, _bv{{.Name}});
             }
 {{- else if .ElemIsMsg}}
             foreach (var _mv{{.Name}} in {{.Name}})
             {
-                var _msub{{.Name}} = new Common.RentedBuffer(64);
-                _msub{{.Name}}.Rent(64);
+                var _msub{{.Name}} = new RentedBuffer(64);
                 _mv{{.Name}}.ToProtobuf(ref _msub{{.Name}});
-                Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteBytes(ref buf, _msub{{.Name}}.Bytes());
+                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+                WriteBytes(ref buf, _msub{{.Name}}.AsSpan());
                 _msub{{.Name}}.Dispose();
             }
 {{- else}}
             foreach (var _ev{{.Name}} in {{.Name}})
             {
-                Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeVarint);
-                Common.ProtoUtils.WriteVarint(ref buf, (ulong)_ev{{.Name}});
+                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeVarint);
+                WriteVarint(ref buf, (ulong)_ev{{.Name}});
             }
 {{- end}}
         }
 {{- else if .IsMsg}}
         {
-            var _msub{{.Name}} = new Common.RentedBuffer(64);
-            _msub{{.Name}}.Rent(64);
+            var _msub{{.Name}} = new RentedBuffer(64);
             {{.Name}}.ToProtobuf(ref _msub{{.Name}});
             if (_msub{{.Name}}.Length > 0)
             {
-                Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeLenDelim);
-                Common.ProtoUtils.WriteBytes(ref buf, _msub{{.Name}}.Bytes());
+                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+                WriteBytes(ref buf, _msub{{.Name}}.AsSpan());
             }
             _msub{{.Name}}.Dispose();
         }
 {{- else if .IsString}}
         if (!string.IsNullOrEmpty({{.Name}}))
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeLenDelim);
-            Common.ProtoUtils.WriteString(ref buf, {{.Name}});
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+            WriteString(ref buf, {{.Name}});
         }
 {{- else if .IsBytes}}
         if ({{.Name}} != null && {{.Name}}.Length > 0)
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeLenDelim);
-            Common.ProtoUtils.WriteBytes(ref buf, {{.Name}});
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+            WriteBytes(ref buf, {{.Name}});
         }
 {{- else if .IsBool}}
         if ({{.Name}})
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeVarint);
-            Common.ProtoUtils.WriteVarint(ref buf, 1UL);
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeVarint);
+            WriteVarint(ref buf, 1UL);
         }
 {{- else if .IsFixed32}}
         if ({{.Name}} != {{csDefault .WriterType}})
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireType32Bit);
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireType32Bit);
 {{- if eq .Type "float"}}
-            Common.ProtoUtils.WriteFixed32(ref buf, BitConverter.SingleToUInt32Bits({{.Name}}));
+            WriteFixed32(ref buf, BitConverter.SingleToUInt32Bits({{.Name}}));
 {{- else if eq .Type "sfixed32"}}
-            Common.ProtoUtils.WriteFixed32(ref buf, (uint){{.Name}});
+            WriteFixed32(ref buf, (uint){{.Name}});
 {{- else}}
-            Common.ProtoUtils.WriteFixed32(ref buf, {{.Name}});
+            WriteFixed32(ref buf, {{.Name}});
 {{- end}}
         }
 {{- else if .IsFixed64}}
         if ({{.Name}} != {{csDefault .WriterType}})
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireType64Bit);
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireType64Bit);
 {{- if eq .Type "double"}}
-            Common.ProtoUtils.WriteFixed64(ref buf, BitConverter.DoubleToUInt64Bits({{.Name}}));
+            WriteFixed64(ref buf, BitConverter.DoubleToUInt64Bits({{.Name}}));
 {{- else if eq .Type "sfixed64"}}
-            Common.ProtoUtils.WriteFixed64(ref buf, (ulong){{.Name}});
+            WriteFixed64(ref buf, (ulong){{.Name}});
 {{- else}}
-            Common.ProtoUtils.WriteFixed64(ref buf, {{.Name}});
+            WriteFixed64(ref buf, {{.Name}});
 {{- end}}
         }
 {{- else if .IsSint32}}
         if ({{.Name}} != 0)
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeVarint);
-            Common.ProtoUtils.WriteVarint(ref buf, Common.ProtoUtils.ZigZagEncode32({{.Name}}));
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeVarint);
+            WriteVarint(ref buf, ZigZagEncode32({{.Name}}));
         }
 {{- else if .IsSint64}}
         if ({{.Name}} != 0)
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeVarint);
-            Common.ProtoUtils.WriteVarint(ref buf, Common.ProtoUtils.ZigZagEncode64({{.Name}}));
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeVarint);
+            WriteVarint(ref buf, ZigZagEncode64({{.Name}}));
         }
 {{- else if .IsEnum}}
         if ((int){{.Name}} != 0)
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeVarint);
-            Common.ProtoUtils.WriteVarint(ref buf, (ulong)(int){{.Name}});
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeVarint);
+            WriteVarint(ref buf, (ulong)(int){{.Name}});
         }
 {{- else}}
         if ({{.Name}} != {{csDefault .WriterType}})
         {
-            Common.ProtoUtils.WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, Common.ProtoUtils.WireTypeVarint);
-            Common.ProtoUtils.WriteVarint(ref buf, (ulong){{.Name}});
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeVarint);
+            WriteVarint(ref buf, (ulong){{.Name}});
         }
 {{- end}}
 {{- end}}
@@ -877,7 +895,7 @@ public struct {{$goName}}
 
     // ── ToJSON ───────────────────────────────────────────────────────────────
 
-    public void ToJSON(ref Common.RentedBuffer buf)
+    public void ToJSON(ref RentedBuffer buf)
     {
         buf.Append((byte)'{');
         bool _first = true;

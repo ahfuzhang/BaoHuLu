@@ -3,7 +3,9 @@ package csharp
 import (
 	_ "embed"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -153,6 +155,13 @@ type CsRenderData struct {
 	Messages  []CsMsgTpl
 }
 
+// CsOneTypeData is passed to the per-type named templates (CsTagsWriterFile,
+// CsReadonlyFile) so they can render a single message into its own file.
+type CsOneTypeData struct {
+	Namespace string
+	Msg       CsMsgTpl
+}
+
 // CsFieldTpl carries all info needed by the C# template for one field.
 type CsFieldTpl struct {
 	// identity
@@ -243,20 +252,46 @@ func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 	return f
 }
 
-func (g *Generator) RenderCS(out *os.File, namespace string) error {
-	var enums []protofile.EnumDef
-	for _, name := range g.EnumOrder() {
-		ed := g.Enums[name]
-		enums = append(enums, *ed)
+// buildCSTmpl compiles the C# code template with standard FuncMap.
+func buildCSTmpl() (*template.Template, error) {
+	fnMap := template.FuncMap{
+		"csDefault":  csDefaultValue,
+		"upperFirst": protofile.UpperFirst,
+		"goTypeName": protofile.GoTypeName,
 	}
+	tmpl, err := template.New("cs").Funcs(fnMap).Parse(csCodeTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse cs template: %w", err)
+	}
+	return tmpl, nil
+}
 
-	// Keep C# field order aligned with the Go writer struct layout.
+// renderCSData executes the C# template with the given data into w.
+func renderCSData(w io.Writer, data CsRenderData) error {
+	tmpl, err := buildCSTmpl()
+	if err != nil {
+		return err
+	}
+	return tmpl.Execute(w, data)
+}
+
+// renderCSNamedTmpl executes the named sub-template (e.g. "CsTagsWriterFile"
+// or "CsReadonlyFile") with data into w.
+func renderCSNamedTmpl(w io.Writer, name string, data CsOneTypeData) error {
+	tmpl, err := buildCSTmpl()
+	if err != nil {
+		return err
+	}
+	return tmpl.ExecuteTemplate(w, name, data)
+}
+
+// buildMsgTpls returns the per-message template data in proto order,
+// honouring struct-layout constraints for field ordering.
+func (g *Generator) buildMsgTpls() ([]CsMsgTpl, map[string]protofile.MsgLayoutInfo) {
 	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
-
 	var msgs []CsMsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-
 		writerSizeOf := func(fd protofile.FieldDef) int {
 			if fd.IsMsg {
 				if li, ok := writerLayouts[fd.Type]; ok {
@@ -273,34 +308,89 @@ func (g *Generator) RenderCS(out *os.File, namespace string) error {
 			}
 			return protofile.FieldPtrdata(fd)
 		}
-
 		sortedFields := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedFields, writerSizeOf, writerPtrdataOf)
-
 		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name)}
 		for _, fd := range sortedFields {
 			mt.Fields = append(mt.Fields, g.buildCSField(fd))
 		}
 		msgs = append(msgs, mt)
 	}
+	return msgs, writerLayouts
+}
 
-	data := CsRenderData{
+// buildEnumTpls returns all enum definitions in declaration order.
+func (g *Generator) buildEnumTpls() []protofile.EnumDef {
+	var enums []protofile.EnumDef
+	for _, name := range g.EnumOrder() {
+		enums = append(enums, *g.Enums[name])
+	}
+	return enums
+}
+
+// RenderCS renders all enums and messages into the single file out.
+func (g *Generator) RenderCS(out *os.File, namespace string) error {
+	msgs, _ := g.buildMsgTpls()
+	return renderCSData(out, CsRenderData{
 		Namespace: namespace,
-		Enums:     enums,
+		Enums:     g.buildEnumTpls(),
 		Messages:  msgs,
+	})
+}
+
+// RenderCSFiles generates per-type .cs files into outDir:
+//   - "{base}.Enums.cs"          — shared enums (when present)
+//   - "{base}.{GoName}.cs"       — XxTags + Xx (mutable writer)
+//   - "{base}.Readonly{GoName}.cs" — ReadonlyXx (immutable reader)
+//
+// Each file contains exactly one logical type group, so ReportGenerator shows
+// focused, per-type coverage pages.
+func (g *Generator) RenderCSFiles(outDir, baseFileName, namespace string) error {
+	enums := g.buildEnumTpls()
+	msgs, _ := g.buildMsgTpls()
+
+	// Enums file — only when the proto defines enums.
+	if len(enums) > 0 {
+		p := filepath.Join(outDir, baseFileName+".Enums.cs")
+		f, err := os.Create(p)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", p, err)
+		}
+		err = renderCSData(f, CsRenderData{Namespace: namespace, Enums: enums})
+		f.Close()
+		if err != nil {
+			return fmt.Errorf("render %s: %w", p, err)
+		}
 	}
 
-	fnMap := template.FuncMap{
-		"csDefault":  csDefaultValue,
-		"upperFirst": protofile.UpperFirst,
-		"goTypeName": protofile.GoTypeName,
-	}
+	for _, mt := range msgs {
+		data := CsOneTypeData{Namespace: namespace, Msg: mt}
 
-	tmpl, err := template.New("cs").Funcs(fnMap).Parse(csCodeTemplate)
-	if err != nil {
-		return fmt.Errorf("parse cs template: %w", err)
+		// XxTags + Xx (mutable writer)
+		writerPath := filepath.Join(outDir, baseFileName+"."+mt.GoName+".cs")
+		wf, err := os.Create(writerPath)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", writerPath, err)
+		}
+		err = renderCSNamedTmpl(wf, "CsTagsWriterFile", data)
+		wf.Close()
+		if err != nil {
+			return fmt.Errorf("render %s: %w", writerPath, err)
+		}
+
+		// ReadonlyXx
+		readonlyPath := filepath.Join(outDir, baseFileName+".Readonly"+mt.GoName+".cs")
+		rf, err := os.Create(readonlyPath)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", readonlyPath, err)
+		}
+		err = renderCSNamedTmpl(rf, "CsReadonlyFile", data)
+		rf.Close()
+		if err != nil {
+			return fmt.Errorf("render %s: %w", readonlyPath, err)
+		}
 	}
-	return tmpl.Execute(out, data)
+	return nil
 }
 
 // ─── C# test helpers ──────────────────────────────────────────────────────────

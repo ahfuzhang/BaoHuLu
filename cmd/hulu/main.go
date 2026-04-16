@@ -109,6 +109,10 @@ func writeCsTestProj(projPath, assemblyName, namespace, mainProjFile string) err
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="QiWa.Common" Version="*" />
+    <PackageReference Include="coverlet.collector" Version="6.*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -247,14 +251,6 @@ func runTu(args []string) {
 			fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", *csOut, err)
 			os.Exit(1)
 		}
-		csPath := filepath.Join(*csOut, csBase+".cs")
-		csF, err := os.Create(csPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "create %s: %v\n", csPath, err)
-			os.Exit(1)
-		}
-		defer csF.Close()
-
 		ns := pg.CsharpNamespace
 		if ns == "" {
 			ns = pg.PackageName
@@ -262,11 +258,12 @@ func runTu(args []string) {
 		if ns == "" {
 			ns = protofile.UpperFirst(base)
 		}
-		if err := csharp.NewGenerator(pg).RenderCS(csF, ns); err != nil {
+		csGen := csharp.NewGenerator(pg)
+		if err := csGen.RenderCSFiles(*csOut, csBase, ns); err != nil {
 			fmt.Fprintf(os.Stderr, "renderCS: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("generated %s\n", csPath)
+		fmt.Printf("generated %s/*.cs\n", *csOut)
 
 		projPath := filepath.Join(*csOut, csBase+".csproj")
 		if err := writeCsProj(projPath, csBase); err != nil {

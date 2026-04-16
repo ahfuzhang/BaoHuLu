@@ -39,7 +39,7 @@ func (g *Generator) csWriterType(fd protofile.FieldDef) string {
 	}
 	if fd.Repeated {
 		elem := g.csValType(fd.Type)
-		return elem + "[]"
+		return fmt.Sprintf("List<%s>", elem)
 	}
 	return g.csValType(fd.Type)
 }
@@ -53,7 +53,7 @@ func (g *Generator) csReadonlyType(fd protofile.FieldDef) string {
 	}
 	if fd.Repeated {
 		elem := g.csReadonlyValType(fd.Type)
-		return elem + "[]"
+		return fmt.Sprintf("List<%s>", elem)
 	}
 	return g.csReadonlyValType(fd.Type)
 }

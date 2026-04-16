@@ -39,8 +39,14 @@
     ```
   - ToJSON() 只序列化有效字段 ✅
   - Clone 方法中: 整数的数组类型，是否按照字节对齐了? ✅
+* CSharp
+  - 成员上加上 attribute，支持原生的 json 编解码
+  - 生成 test
+  - 生成 benchmark
 * JSON
   - 数值类型，长度超过 53 bit 的问题
+    - golang ✅
 * 写文档说明特殊的处理逻辑:
   - bool 类型的 key
   - bytes 类型的支持
+* linux + amd64 下的 benchmark

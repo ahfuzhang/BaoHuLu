@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using QiWa.Common;
 using static QiWa.Common.ProtobufUtils;
 
@@ -42,9 +43,10 @@ internal struct {{$goName}}Tags
 // Readonly{{$goName}} — immutable view over decoded protobuf bytes
 // ============================================================================
 
-public struct Readonly{{$goName}}
+public struct Readonly{{$goName}} : IResettable
 {
 {{- range .Fields}}
+    [JsonPropertyName("{{.JsonName}}")]
     public {{.ReadonlyType}} {{.Name}};
 {{- end}}
 
@@ -57,7 +59,8 @@ public struct Readonly{{$goName}}
 {{- if .IsMap}}
         {{.LocalType}}? _{{.Name}}Dict = null;
 {{- else if .IsRepeated}}
-        {{.LocalType}}? _{{.Name}}List = null;
+        var _{{.Name}}List = this.{{.Name}} ?? new {{.LocalType}}();
+        _{{.Name}}List.Clear();
 {{- else if .IsString}}
         string? _{{.Name}} = null;
 {{- else if .IsBytes}}
@@ -91,8 +94,16 @@ public struct Readonly{{$goName}}
                         return Error.WithLoc(1, "bad map {{.Name}}");
                     _pos += _elb{{.Name}};
                     var _entBin{{.Name}} = binary.Slice(_pos, (int)_elen{{.Name}});
+{{- if eq .MapKeyCS "string"}}
+                    {{.MapKeyCS}} _entKey{{.Name}} = string.Empty;
+{{- else}}
                     {{.MapKeyCS}} _entKey{{.Name}} = default;
+{{- end}}
+{{- if eq .ReadonlyMapValCS "string"}}
+                    {{.ReadonlyMapValCS}} _entVal{{.Name}} = string.Empty;
+{{- else}}
                     {{.ReadonlyMapValCS}} _entVal{{.Name}} = default;
+{{- end}}
                     int _ep{{.Name}} = 0;
                     while (_ep{{.Name}} < _entBin{{.Name}}.Length)
                     {
@@ -403,7 +414,7 @@ public struct Readonly{{$goName}}
 {{- if .IsMap}}
         this.{{.Name}} = _{{.Name}}Dict != null ? _{{.Name}}Dict.ToImmutableDictionary() : ImmutableDictionary<{{.MapKeyCS}}, {{.ReadonlyMapValCS}}>.Empty;
 {{- else if .IsRepeated}}
-        this.{{.Name}} = _{{.Name}}List != null ? _{{.Name}}List.ToArray() : Array.Empty<{{.ReadonlyElemTypeCS}}>();
+        this.{{.Name}} = _{{.Name}}List;
 {{- else if .IsString}}
         this.{{.Name}} = _{{.Name}} ?? string.Empty;
 {{- else if .IsBytes}}
@@ -442,7 +453,8 @@ public struct Readonly{{$goName}}
 {{- if .IsMap}}
         {{.LocalType}}? _{{.Name}}Dict = null;
 {{- else if .IsRepeated}}
-        {{.LocalType}}? _{{.Name}}List = null;
+        var _{{.Name}}List = this.{{.Name}} ?? new {{.LocalType}}();
+        _{{.Name}}List.Clear();
 {{- else if .IsString}}
         string? _{{.Name}} = null;
 {{- else if .IsBytes}}
@@ -580,7 +592,7 @@ public struct Readonly{{$goName}}
 {{- if .IsMap}}
         this.{{.Name}} = _{{.Name}}Dict != null ? _{{.Name}}Dict.ToImmutableDictionary() : ImmutableDictionary<{{.MapKeyCS}}, {{.ReadonlyMapValCS}}>.Empty;
 {{- else if .IsRepeated}}
-        this.{{.Name}} = _{{.Name}}List != null ? _{{.Name}}List.ToArray() : Array.Empty<{{.ReadonlyElemTypeCS}}>();
+        this.{{.Name}} = _{{.Name}}List;
 {{- else if .IsString}}
         this.{{.Name}} = _{{.Name}} ?? string.Empty;
 {{- else if .IsBytes}}
@@ -617,16 +629,17 @@ public struct Readonly{{$goName}}
 {{- if .ElemIsMsg}}
         if ({{.Name}} != null)
         {
-            _clone.{{.Name}} = new {{.ElemTypeCS}}[{{.Name}}.Length];
-            for (int _i{{.Name}} = 0; _i{{.Name}} < {{.Name}}.Length; _i{{.Name}}++)
-                _clone.{{.Name}}[_i{{.Name}}] = {{.Name}}[_i{{.Name}}].Clone();
+            var _lst{{.Name}} = new List<{{.ElemTypeCS}}>({{.Name}}.Count);
+            foreach (var _item{{.Name}} in {{.Name}})
+                _lst{{.Name}}.Add(_item{{.Name}}.Clone());
+            _clone.{{.Name}} = _lst{{.Name}};
         }
         else
         {
-            _clone.{{.Name}} = Array.Empty<{{.ElemTypeCS}}>();
+            _clone.{{.Name}} = new List<{{.ElemTypeCS}}>();
         }
 {{- else}}
-        _clone.{{.Name}} = {{.Name}} != null ? ({{.WriterType}}){{.Name}}.Clone() : Array.Empty<{{.ElemTypeCS}}>();
+        _clone.{{.Name}} = {{.Name}} != null ? new List<{{.ElemTypeCS}}>({{.Name}}) : new List<{{.ElemTypeCS}}>();
 {{- end}}
 {{- else if .IsMsg}}
         _clone.{{.Name}} = {{.Name}}.Clone();
@@ -636,15 +649,39 @@ public struct Readonly{{$goName}}
 {{- end}}
         return _clone;
     }
+
+    // ── Reset ─────────────────────────────────────────────────────────────────
+
+    public void Reset()
+    {
+{{- range .Fields}}
+{{- if .IsMap}}
+        {{.Name}} = ImmutableDictionary<{{.MapKeyCS}}, {{.ReadonlyMapValCS}}>.Empty;
+{{- else if .IsRepeated}}
+        {{.Name}}?.Clear();
+{{- else if .IsMsg}}
+        {{.Name}}.Reset();
+{{- else if .IsString}}
+        {{.Name}} = string.Empty;
+{{- else if .IsBytes}}
+        {{.Name}} = Array.Empty<byte>();
+{{- else if .IsBool}}
+        {{.Name}} = false;
+{{- else}}
+        {{.Name}} = {{csDefault .ReadonlyType}};
+{{- end}}
+{{- end}}
+    }
 }
 
 // ============================================================================
 // {{$goName}} — mutable struct for building / serialising
 // ============================================================================
 
-public struct {{$goName}}
+public struct {{$goName}} : IResettable
 {
 {{- range .Fields}}
+    [JsonPropertyName("{{.JsonName}}")]
     public {{.WriterType}} {{.Name}};
 {{- end}}
 
@@ -714,15 +751,15 @@ public struct {{$goName}}
             }
         }
 {{- else if .IsRepeated}}
-        if ({{.Name}} != null && {{.Name}}.Length > 0)
+        if ({{.Name}} != null && {{.Name}}.Count > 0)
         {
 {{- if .IsPackable}}
 {{- if .IsFixed32}}
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Length * 4);
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Count * 4);
 {{- else if .IsFixed64}}
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Length * 8);
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Count * 8);
 {{- else if .IsBool}}
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Length);
+            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Count);
 {{- else if .IsSint32}}
             int _packed{{.Name}} = 0;
             foreach (var _pv{{.Name}} in {{.Name}})
@@ -941,22 +978,22 @@ public struct {{$goName}}
             }
         }
 {{- else if .IsRepeated}}
-        if ({{.Name}} != null && {{.Name}}.Length > 0)
+        if ({{.Name}} != null && {{.Name}}.Count > 0)
         {
 {{- if .IsPackable}}
 {{- if .IsFixed32}}
             WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
-            WriteVarint(ref buf, (ulong)({{.Name}}.Length * 4));
+            WriteVarint(ref buf, (ulong)({{.Name}}.Count * 4));
             foreach (var _pv{{.Name}} in {{.Name}})
                 WriteFixed32(ref buf, {{if eq .Type "float"}}BitConverter.SingleToUInt32Bits(_pv{{.Name}}){{else if eq .Type "sfixed32"}}(uint)_pv{{.Name}}{{else}}_pv{{.Name}}{{end}});
 {{- else if .IsFixed64}}
             WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
-            WriteVarint(ref buf, (ulong)({{.Name}}.Length * 8));
+            WriteVarint(ref buf, (ulong)({{.Name}}.Count * 8));
             foreach (var _pv{{.Name}} in {{.Name}})
                 WriteFixed64(ref buf, {{if eq .Type "double"}}BitConverter.DoubleToUInt64Bits(_pv{{.Name}}){{else if eq .Type "sfixed64"}}(ulong)_pv{{.Name}}{{else}}_pv{{.Name}}{{end}});
 {{- else if .IsBool}}
             WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
-            WriteVarint(ref buf, (ulong){{.Name}}.Length);
+            WriteVarint(ref buf, (ulong){{.Name}}.Count);
             foreach (var _pv{{.Name}} in {{.Name}})
                 WriteVarint(ref buf, _pv{{.Name}} ? 1UL : 0UL);
 {{- else if .IsSint32}}
@@ -1149,11 +1186,11 @@ public struct {{$goName}}
             buf.Append((byte)'}');
         }
 {{- else if .IsRepeated}}
-        if ({{.Name}} != null && {{.Name}}.Length > 0)
+        if ({{.Name}} != null && {{.Name}}.Count > 0)
         {
             if (!_first) buf.Append((byte)','); _first = false;
             buf.Append((byte)'"'); buf.Append({{$goName}}Tags.JsonKey{{.Name}}); buf.Append("\":["u8);
-            for (int _i{{.Name}} = 0; _i{{.Name}} < {{.Name}}.Length; _i{{.Name}}++)
+            for (int _i{{.Name}} = 0; _i{{.Name}} < {{.Name}}.Count; _i{{.Name}}++)
             {
                 if (_i{{.Name}} > 0) buf.Append((byte)',');
                 var _re{{.Name}} = {{.Name}}[_i{{.Name}}];
@@ -1264,6 +1301,25 @@ public struct {{$goName}}
 {{- end}}
 {{- end}}
         buf.Append((byte)'}');
+    }
+
+    // ── Reset ─────────────────────────────────────────────────────────────────
+
+    public void Reset()
+    {
+{{- range .Fields}}
+{{- if .IsMap}}
+        {{.Name}}?.Clear();
+{{- else if .IsRepeated}}
+        {{.Name}}?.Clear();
+{{- else if .IsMsg}}
+        {{.Name}}.Reset();
+{{- else if .IsString}}
+        {{.Name}} = string.Empty;
+{{- else}}
+        {{.Name}} = {{csDefault .WriterType}};
+{{- end}}
+{{- end}}
     }
 }
 {{end}}

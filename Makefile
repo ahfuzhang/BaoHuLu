@@ -15,4 +15,6 @@ gen:
 	./build/hulu tu \
 	  -src=./examples/DemoServer/proto/Demo.proto \
 	  -go_out=./build/golang/DemoServer/ \
-	  -csharp_out=./build/csharp/DemoServer/ \
+	  -go_out.with.test \
+	  -go_out.with.bench \
+	  -csharp_out=./build/csharp/DemoServer/

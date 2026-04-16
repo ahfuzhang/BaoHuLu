@@ -719,6 +719,250 @@ func FirstNumericKeyMapField(fields []FieldTpl) *FieldTpl {
 	return nil
 }
 
+// ─── boundary and string-escape test helpers ─────────────────────────────────
+
+// BoundaryCase represents a single boundary-value test case for a numeric field.
+type BoundaryCase struct {
+	Label     string // human-readable label, e.g. "MyField_max"
+	FieldName string // Go field name
+	Lit       string // Go literal, e.g. "int32(math.MaxInt32)"
+}
+
+type typeBoundary struct {
+	label string
+	lit   string
+}
+
+func boundaryLitsForType(protoType string) []typeBoundary {
+	switch protoType {
+	case "int32", "sint32", "sfixed32":
+		return []typeBoundary{
+			{"max", "int32(math.MaxInt32)"},
+			{"min", "int32(math.MinInt32)"},
+		}
+	case "uint32", "fixed32":
+		return []typeBoundary{
+			{"max", "uint32(math.MaxUint32)"},
+		}
+	case "int64", "sint64", "sfixed64":
+		return []typeBoundary{
+			{"max", "int64(math.MaxInt64)"},
+			{"min", "int64(math.MinInt64)"},
+		}
+	case "uint64", "fixed64":
+		return []typeBoundary{
+			{"max", "uint64(math.MaxUint64)"},
+		}
+	case "float":
+		return []typeBoundary{
+			{"max", "float32(math.MaxFloat32)"},
+			{"neg_max", "float32(-math.MaxFloat32)"},
+			{"smallest", "float32(math.SmallestNonzeroFloat32)"},
+		}
+	case "double":
+		return []typeBoundary{
+			{"max", "math.MaxFloat64"},
+			{"neg_max", "-math.MaxFloat64"},
+			{"smallest", "math.SmallestNonzeroFloat64"},
+		}
+	}
+	return nil
+}
+
+// NumericBoundaryCases returns one BoundaryCase per boundary value per direct
+// scalar numeric field in fields. Only plain (non-map, non-repeated, non-msg)
+// fields are considered.
+func NumericBoundaryCases(fields []FieldTpl) []BoundaryCase {
+	var out []BoundaryCase
+	for _, f := range fields {
+		if f.Map || f.Repeated || f.IsMsg || f.IsRawBuf {
+			continue
+		}
+		for _, b := range boundaryLitsForType(f.Type) {
+			out = append(out, BoundaryCase{
+				Label:     f.Name + "_" + b.label,
+				FieldName: f.Name,
+				Lit:       b.lit,
+			})
+		}
+	}
+	return out
+}
+
+// HasNumericBoundaryFields returns true if any direct scalar numeric field
+// (int32, uint32, int64, uint64, float, double and their aliases) exists.
+func HasNumericBoundaryFields(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if f.Map || f.Repeated || f.IsMsg || f.IsRawBuf {
+			continue
+		}
+		if len(boundaryLitsForType(f.Type)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// HasFloatFields returns true if any direct scalar float or double field exists.
+func HasFloatFields(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf {
+			if f.Type == "float" || f.Type == "double" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// FloatFields returns all direct scalar float and double fields.
+func FloatFields(fields []FieldTpl) []FieldTpl {
+	var out []FieldTpl
+	for _, f := range fields {
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf {
+			if f.Type == "float" || f.Type == "double" {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
+// FloatIntLit returns a Go literal whose value is exactly an integer
+// (e.g. 4.0 for float32, 10.0 for float64), exercising the code path where
+// a JSON serialiser may emit "4" instead of "4.0" and the parser must accept both.
+func FloatIntLit(ft FieldTpl) string {
+	switch ft.Type {
+	case "float":
+		return "float32(4.0)"
+	case "double":
+		return "10.0"
+	}
+	return "0"
+}
+
+// FirstStringScalarField returns the first plain string scalar field
+// (not map, not repeated, not msg, not rawBuffer), or nil.
+func FirstStringScalarField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		f := &fields[i]
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf && f.Type == "string" {
+			return f
+		}
+	}
+	return nil
+}
+
+// AnyMsgHasNumericBoundary returns true if any message in msgs has numeric
+// boundary fields. Used to decide whether to import "math" in the test file.
+func AnyMsgHasNumericBoundary(msgs []MsgTpl) bool {
+	for _, msg := range msgs {
+		if HasNumericBoundaryFields(msg.Fields) {
+			return true
+		}
+	}
+	return false
+}
+
+// ─── benchmark template helpers ──────────────────────────────────────────────
+
+// benchScalarMapValLit returns a Go literal for the given proto map-value type.
+// For message types (not matching any scalar), it returns a benchBuildXxx() call.
+func benchScalarMapValLit(mapVal string) string {
+	switch mapVal {
+	case "double":
+		return "1.5"
+	case "float":
+		return "float32(1.5)"
+	case "int32", "sint32", "sfixed32":
+		return "int32(1)"
+	case "uint32", "fixed32":
+		return "uint32(1)"
+	case "int64", "sint64", "sfixed64":
+		return "int64(1)"
+	case "uint64", "fixed64":
+		return "uint64(1)"
+	case "bool":
+		return "true"
+	case "string":
+		return `"v"`
+	case "bytes":
+		return `[]byte("v")`
+	default:
+		// Enum or message type – use the Go type name.
+		return fmt.Sprintf("benchBuild%s()", protofile.GoTypeName(mapVal))
+	}
+}
+
+// BenchMapFill generates a Go statement (or block of statements) that fills
+// the local variable `m` (already declared with the correct map type) with
+// 101 representative entries.  For bool keys only two entries are possible.
+func BenchMapFill(ft FieldTpl) string {
+	valLit := benchScalarMapValLit(ft.MapVal)
+	switch ft.MapKey {
+	case "string":
+		return fmt.Sprintf(`for i := 0; i < 101; i++ { m[strconv.Itoa(i)] = %s }`, valLit)
+	case "bool":
+		// Only two distinct bool keys exist.
+		return fmt.Sprintf("m[false] = %s\n\t\tm[true] = %s", valLit, valLit)
+	case "int32", "sint32", "sfixed32":
+		return fmt.Sprintf(`for i := int32(0); i < 101; i++ { m[i] = %s }`, valLit)
+	case "uint32", "fixed32":
+		return fmt.Sprintf(`for i := uint32(0); i < 101; i++ { m[i] = %s }`, valLit)
+	case "int64", "sint64", "sfixed64":
+		return fmt.Sprintf(`for i := int64(0); i < 101; i++ { m[i] = %s }`, valLit)
+	case "uint64", "fixed64":
+		return fmt.Sprintf(`for i := uint64(0); i < 101; i++ { m[i] = %s }`, valLit)
+	default:
+		return fmt.Sprintf(`for i := int32(0); i < 101; i++ { m[i] = %s }`, valLit)
+	}
+}
+
+// BenchSliceFill generates a Go statement that fills the local variable `s`
+// (already declared with the correct slice type and length 101) with
+// representative values.
+func BenchSliceFill(ft FieldTpl) string {
+	switch ft.Type {
+	case "double":
+		return `for i := 0; i < 101; i++ { s[i] = float64(i) + 0.5 }`
+	case "float":
+		return `for i := 0; i < 101; i++ { s[i] = float32(i) + 0.5 }`
+	case "int32", "sint32", "sfixed32":
+		return `for i := 0; i < 101; i++ { s[i] = int32(i) }`
+	case "uint32", "fixed32":
+		return `for i := 0; i < 101; i++ { s[i] = uint32(i) }`
+	case "int64", "sint64", "sfixed64":
+		return `for i := 0; i < 101; i++ { s[i] = int64(i) }`
+	case "uint64", "fixed64":
+		return `for i := 0; i < 101; i++ { s[i] = uint64(i) }`
+	case "bool":
+		return `for i := 0; i < 101; i++ { s[i] = i%2 == 0 }`
+	case "string":
+		return `for i := 0; i < 101; i++ { s[i] = "element with escape chars:\nnewline\ttab\"quote\\backslash:0123456789abcdef" }`
+	case "bytes":
+		return `for i := 0; i < 101; i++ { s[i] = []byte("bytes element 0123456789abcdef") }`
+	default:
+		if ft.IsMsg {
+			elemType := strings.TrimPrefix(ft.GoType, "[]")
+			return fmt.Sprintf(`for i := 0; i < 101; i++ { s[i] = benchBuild%s() }`, elemType)
+		}
+		return `for i := 0; i < 101; i++ { s[i] = 1 }`
+	}
+}
+
+// BenchNeedsStrconv returns true when any message in msgs contains a
+// string-keyed map field, which requires strconv.Itoa in the fill loop.
+func BenchNeedsStrconv(msgs []MsgTpl) bool {
+	for _, msg := range msgs {
+		for _, f := range msg.Fields {
+			if f.Map && f.MapKey == "string" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ExcludeFromCompare returns true for fields that must be skipped during the
 // encoding/json vs custom-decoder field-level comparison:
 //   - map[bool]T: encoding/json cannot unmarshal bool map keys
@@ -860,10 +1104,77 @@ func (g *Generator) RenderTest(out *os.File) error {
 		"firstBytesField":          FirstBytesField,
 		"firstStringKeyMapField":   FirstStringKeyMapField,
 		"firstNumericKeyMapField":  FirstNumericKeyMapField,
+		"hasNumericBoundaryFields": HasNumericBoundaryFields,
+		"numericBoundaryCases":     NumericBoundaryCases,
+		"firstStringScalarField":   FirstStringScalarField,
+		"anyMsgHasNumericBoundary": AnyMsgHasNumericBoundary,
+		"hasFloatFields":           HasFloatFields,
+		"floatFields":              FloatFields,
+		"floatIntLit":              FloatIntLit,
 	}
 	tmpl, err := template.New("pb_test").Funcs(fnMap).Parse(testTemplate)
 	if err != nil {
 		return fmt.Errorf("parse test template: %w", err)
+	}
+	return tmpl.Execute(out, data)
+}
+
+// RenderBench renders the timing-benchmark test file template to out.
+func (g *Generator) RenderBench(out *os.File) error {
+	var enums []EnumTpl
+	for _, name := range g.EnumOrder() {
+		ed := g.Enums[name]
+		enums = append(enums, EnumTpl{Name: ed.Name, Values: ed.Values})
+	}
+
+	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
+
+	var msgs []MsgTpl
+	for _, name := range g.Order {
+		md := g.Messages[name]
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
+
+		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Size
+				}
+			}
+			return protofile.FieldGoSize(fd)
+		}
+		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Ptrdata
+				}
+			}
+			return protofile.FieldPtrdata(fd)
+		}
+		sortedWriterDefs := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
+		writerLayouts[name] = protofile.ComputeStructLayout(sortedWriterDefs, writerSizeOf, writerPtrdataOf)
+
+		for _, fd := range sortedWriterDefs {
+			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd))
+		}
+
+		msgs = append(msgs, mt)
+	}
+
+	data := RenderData{
+		Package:  g.Pkg,
+		Enums:    enums,
+		Messages: msgs,
+	}
+
+	fnMap := template.FuncMap{
+		"sampleLit":         SampleFieldLiteral,
+		"benchMapFill":      BenchMapFill,
+		"benchSliceFill":    BenchSliceFill,
+		"benchNeedsStrconv": BenchNeedsStrconv,
+	}
+	tmpl, err := template.New("pb_timing_test").Funcs(fnMap).Parse(benchTemplate)
+	if err != nil {
+		return fmt.Errorf("parse bench template: %w", err)
 	}
 	return tmpl.Execute(out, data)
 }
@@ -875,3 +1186,6 @@ var codeTemplate string
 
 //go:embed go_test.tpl
 var testTemplate string
+
+//go:embed go_timing_test.tpl
+var benchTemplate string

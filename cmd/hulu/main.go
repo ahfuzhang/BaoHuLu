@@ -66,8 +66,8 @@ func runXi(args []string) {
 // writeGoMod creates a go.mod file at modPath for the generated Go package.
 // modulePath is derived from the proto file: the full "option go_package" value
 // is used when present; otherwise the "package" statement value is used.
-// The generated file declares the two runtime dependencies of the generated code.
-func writeGoMod(modPath, goPackage, packageName string) error {
+// The generated file declares the runtime dependencies of the generated code.
+func writeGoMod(modPath, goPackage, packageName string, withBench bool) error {
 	modulePath := goPackage
 	if modulePath == "" {
 		modulePath = packageName
@@ -113,6 +113,8 @@ func runTu(args []string) {
 	fs := flag.NewFlagSet("tu", flag.ExitOnError)
 	src := fs.String("src", "", "input .proto file")
 	goOut := fs.String("go_out", "", "output directory for Go code (optional)")
+	goOutWithTest := fs.Bool("go_out.with.test", false, "also generate _test.go alongside Go output")
+	goOutWithBench := fs.Bool("go_out.with.bench", false, "also generate _timing_test.go with benchmark code alongside Go output")
 	csOut := fs.String("csharp_out", "", "output directory for C# code (optional)")
 	fs.Parse(args)
 
@@ -162,22 +164,40 @@ func runTu(args []string) {
 		}
 		fmt.Printf("generated %s\n", outPath)
 
-		testPath := filepath.Join(*goOut, goBase+"_test.go")
-		testF, err := os.Create(testPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "create %s: %v\n", testPath, err)
-			os.Exit(1)
-		}
-		defer testF.Close()
+		if *goOutWithTest {
+			testPath := filepath.Join(*goOut, goBase+"_test.go")
+			testF, err := os.Create(testPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "create %s: %v\n", testPath, err)
+				os.Exit(1)
+			}
+			defer testF.Close()
 
-		if err := gen.RenderTest(testF); err != nil {
-			fmt.Fprintf(os.Stderr, "render test: %v\n", err)
-			os.Exit(1)
+			if err := gen.RenderTest(testF); err != nil {
+				fmt.Fprintf(os.Stderr, "render test: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", testPath)
 		}
-		fmt.Printf("generated %s\n", testPath)
+
+		if *goOutWithBench {
+			benchPath := filepath.Join(*goOut, goBase+"_timing_test.go")
+			benchF, err := os.Create(benchPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "create %s: %v\n", benchPath, err)
+				os.Exit(1)
+			}
+			defer benchF.Close()
+
+			if err := gen.RenderBench(benchF); err != nil {
+				fmt.Fprintf(os.Stderr, "render bench: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", benchPath)
+		}
 
 		modPath := filepath.Join(*goOut, "go.mod")
-		if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName); err != nil {
+		if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, *goOutWithBench); err != nil {
 			fmt.Fprintf(os.Stderr, "write go.mod: %v\n", err)
 			os.Exit(1)
 		}

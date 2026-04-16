@@ -1446,4 +1446,24 @@ func (r *Readonly{{$goName}}) FromJSON(src []byte, parser *fastjson.Parser) erro
 	return r.fromJSONValue(obj)
 }
 
+func (r *Readonly{{$goName}}) FromProtobufWithCopy(in []byte) error {
+	if cap(r.rawBuffer) < len(in) {
+		r.rawBuffer = make([]byte, len(in))
+	} else {
+		r.rawBuffer = r.rawBuffer[:len(in)]
+	}
+	copy(r.rawBuffer, in)
+	return r.FromProtobuf(r.rawBuffer)
+}
+
+func (r *Readonly{{$goName}}) FromJSONWithCopy(in []byte, parser *fastjson.Parser) error {
+	if cap(r.rawBuffer) < len(in) {
+		r.rawBuffer = make([]byte, len(in))
+	} else {
+		r.rawBuffer = r.rawBuffer[:len(in)]
+	}
+	copy(r.rawBuffer, in)
+	return r.FromJSON(r.rawBuffer, parser)
+}
+
 {{end}}

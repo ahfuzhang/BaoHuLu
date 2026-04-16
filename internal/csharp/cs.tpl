@@ -430,12 +430,19 @@ public struct Readonly{{$goName}} : IResettable
 
     public Error FromJSON(ReadOnlySpan<byte> text)
     {
-        var _reader = new Utf8JsonReader(text, new JsonReaderOptions
+        try
         {
-            AllowTrailingCommas = true,
-            CommentHandling     = JsonCommentHandling.Skip
-        });
-        return FromJSONReader(ref _reader);
+            var _reader = new Utf8JsonReader(text, new JsonReaderOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling     = JsonCommentHandling.Skip
+            });
+            return FromJSONReader(ref _reader);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            return Error.WithLoc(1, ex.Message);
+        }
     }
 
     internal Error FromJSONReader(ref Utf8JsonReader reader)

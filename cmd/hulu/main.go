@@ -87,17 +87,54 @@ require (
 	return os.WriteFile(modPath, []byte(content), 0644)
 }
 
+// writeCsTestProj creates a .csproj file for the generated C# test project.
+// mainProjFile is the filename (without path) of the main project file, e.g. "DemoServer.csproj".
+func writeCsTestProj(projPath, assemblyName, namespace, mainProjFile string) error {
+	content := fmt.Sprintf(`<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>%s</AssemblyName>
+    <RootNamespace>%s</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="QiWa.Common" Version="*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\%s" />
+  </ItemGroup>
+
+</Project>
+`, assemblyName, namespace, mainProjFile)
+	return os.WriteFile(projPath, []byte(content), 0644)
+}
+
 // writeCsProj creates a .csproj file for the generated C# project.
 func writeCsProj(projPath, assemblyName string) error {
 	content := fmt.Sprintf(`<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>%s</AssemblyName>
     <RootNamespace>%s</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="QiWa.Common" Version="*" />
@@ -116,6 +153,7 @@ func runTu(args []string) {
 	goOutWithTest := fs.Bool("go_out.with.test", false, "also generate _test.go alongside Go output")
 	goOutWithBench := fs.Bool("go_out.with.bench", false, "also generate _timing_test.go with benchmark code alongside Go output")
 	csOut := fs.String("csharp_out", "", "output directory for C# code (optional)")
+	csOutWithTest := fs.Bool("csharp_out.with.test", false, "also generate a Tests/ project with xunit tests alongside C# output")
 	fs.Parse(args)
 
 	if *src == "" {
@@ -236,5 +274,34 @@ func runTu(args []string) {
 			os.Exit(1)
 		}
 		fmt.Printf("generated %s\n", projPath)
+
+		if *csOutWithTest {
+			testsDir := filepath.Join(*csOut, "Tests")
+			if err := os.MkdirAll(testsDir, 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", testsDir, err)
+				os.Exit(1)
+			}
+
+			testCSPath := filepath.Join(testsDir, csBase+"Tests.cs")
+			testCSF, err := os.Create(testCSPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "create %s: %v\n", testCSPath, err)
+				os.Exit(1)
+			}
+			defer testCSF.Close()
+
+			if err := csharp.NewGenerator(pg).RenderCSTest(testCSF, ns); err != nil {
+				fmt.Fprintf(os.Stderr, "renderCSTest: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", testCSPath)
+
+			testProjPath := filepath.Join(testsDir, csBase+".Tests.csproj")
+			if err := writeCsTestProj(testProjPath, csBase+".Tests", ns+".Tests", csBase+".csproj"); err != nil {
+				fmt.Fprintf(os.Stderr, "write test csproj: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", testProjPath)
+		}
 	}
 }

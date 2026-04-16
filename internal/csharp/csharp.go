@@ -303,7 +303,159 @@ func (g *Generator) RenderCS(out *os.File, namespace string) error {
 	return tmpl.Execute(out, data)
 }
 
+// ─── C# test helpers ──────────────────────────────────────────────────────────
+
+// primitiveCSLit returns a non-zero C# literal for a primitive CS type,
+// or an empty string when the type is not a known primitive.
+func primitiveCSLit(csType string) string {
+	switch csType {
+	case "bool":
+		return "true"
+	case "string":
+		return `"hello"`
+	case "byte[]":
+		return "new byte[] { 0x01, 0x02, 0x03 }"
+	case "float":
+		return "1.5f"
+	case "double":
+		return "1.5"
+	case "long":
+		return "42L"
+	case "ulong":
+		return "42UL"
+	case "uint":
+		return "42U"
+	case "int":
+		return "42"
+	}
+	return ""
+}
+
+// csSampleLit returns a non-zero C# literal suitable for populating a field in
+// the MakeSample helper function of the test file.
+func csSampleLit(f CsFieldTpl) string {
+	if f.IsMap {
+		keySample := primitiveCSLit(f.MapKeyCS)
+		if keySample == "" {
+			keySample = "1"
+		}
+		var valSample string
+		if f.MapValIsMsg {
+			valSample = fmt.Sprintf("%sTests.MakeSample%s()", f.MapValCS, f.MapValCS)
+		} else {
+			valSample = primitiveCSLit(f.MapValCS)
+			if valSample == "" {
+				valSample = fmt.Sprintf("(%s)1", f.MapValCS)
+			}
+		}
+		return fmt.Sprintf("new %s { { %s, %s } }", f.WriterType, keySample, valSample)
+	}
+	if f.IsRepeated {
+		var elemSample string
+		if f.ElemIsMsg {
+			elemSample = fmt.Sprintf("%sTests.MakeSample%s()", f.ElemTypeCS, f.ElemTypeCS)
+		} else if f.IsEnum {
+			elemSample = fmt.Sprintf("(%s)1", f.ElemTypeCS)
+		} else {
+			elemSample = primitiveCSLit(f.ElemTypeCS)
+			if elemSample == "" {
+				elemSample = fmt.Sprintf("(%s)1", f.ElemTypeCS)
+			}
+		}
+		return fmt.Sprintf("new %s { %s }", f.WriterType, elemSample)
+	}
+	if f.IsMsg {
+		return fmt.Sprintf("%sTests.MakeSample%s()", f.WriterType, f.WriterType)
+	}
+	if f.IsEnum {
+		return fmt.Sprintf("(%s)1", f.WriterType)
+	}
+	sample := primitiveCSLit(f.WriterType)
+	if sample == "" {
+		return fmt.Sprintf("(%s)1", f.WriterType)
+	}
+	return sample
+}
+
+// firstCsStringField returns the first scalar (non-map, non-repeated) string
+// field, or nil when no such field exists.
+func firstCsStringField(fields []CsFieldTpl) *CsFieldTpl {
+	for i := range fields {
+		f := &fields[i]
+		if !f.IsMap && !f.IsRepeated && f.IsString {
+			return f
+		}
+	}
+	return nil
+}
+
+// RenderCSTest renders the unit-test source file for the parsed proto into out.
+// namespace is the proto namespace (same as used for the main C# file).
+func (g *Generator) RenderCSTest(out *os.File, namespace string) error {
+	var enums []protofile.EnumDef
+	for _, name := range g.EnumOrder() {
+		ed := g.Enums[name]
+		enums = append(enums, *ed)
+	}
+
+	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
+
+	var msgs []CsMsgTpl
+	for _, name := range g.Order {
+		md := g.Messages[name]
+
+		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Size
+				}
+			}
+			return protofile.FieldGoSize(fd)
+		}
+		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Ptrdata
+				}
+			}
+			return protofile.FieldPtrdata(fd)
+		}
+
+		sortedFields := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
+		writerLayouts[name] = protofile.ComputeStructLayout(sortedFields, writerSizeOf, writerPtrdataOf)
+
+		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name)}
+		for _, fd := range sortedFields {
+			mt.Fields = append(mt.Fields, g.buildCSField(fd))
+		}
+		msgs = append(msgs, mt)
+	}
+
+	data := CsRenderData{
+		Namespace: namespace,
+		Enums:     enums,
+		Messages:  msgs,
+	}
+
+	fnMap := template.FuncMap{
+		"csDefault":          csDefaultValue,
+		"upperFirst":         protofile.UpperFirst,
+		"goTypeName":         protofile.GoTypeName,
+		"csSampleLit":        csSampleLit,
+		"firstCsStringField": firstCsStringField,
+	}
+
+	tmpl, err := template.New("cs_test").Funcs(fnMap).Parse(csTestCodeTemplate)
+	if err != nil {
+		return fmt.Errorf("parse cs_test template: %w", err)
+	}
+	return tmpl.Execute(out, data)
+}
+
 // ─── C# code template ─────────────────────────────────────────────────────────
 
 //go:embed cs.tpl
 var csCodeTemplate string
+
+//go:embed cs_test.tpl
+var csTestCodeTemplate string

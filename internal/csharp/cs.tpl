@@ -6,7 +6,6 @@
 using System;
 using System.Buffers.Text;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -48,7 +47,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
         // local decode variables
 {{- range .Fields}}
 {{- if .IsMap}}
-        {{.LocalType}}? _{{.Name}}Dict = null;
+        var _{{.Name}}Dict = this.{{.Name}} ?? new {{.LocalType}}();
 {{- else if .IsRepeated}}
         var _{{.Name}}List = this.{{.Name}} ?? new {{.LocalType}}();
         _{{.Name}}List.Clear();
@@ -192,7 +191,6 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                             _ep{{.Name}} += _eskip{{.Name}};
                         }
                     }
-                    _{{.Name}}Dict ??= new {{.LocalType}}();
                     _{{.Name}}Dict[_entKey{{.Name}}] = _entVal{{.Name}};
                     _pos += (int)_elen{{.Name}};
                 }
@@ -403,7 +401,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
         }
 {{- range .Fields}}
 {{- if .IsMap}}
-        this.{{.Name}} = _{{.Name}}Dict != null ? _{{.Name}}Dict.ToImmutableDictionary() : ImmutableDictionary<{{.MapKeyCS}}, {{.ReadonlyMapValCS}}>.Empty;
+        this.{{.Name}} = _{{.Name}}Dict;
 {{- else if .IsRepeated}}
         this.{{.Name}} = _{{.Name}}List;
 {{- else if .IsString}}
@@ -449,7 +447,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
         // local decode variables
 {{- range .Fields}}
 {{- if .IsMap}}
-        {{.LocalType}}? _{{.Name}}Dict = null;
+        var _{{.Name}}Dict = this.{{.Name}} ?? new {{.LocalType}}();
 {{- else if .IsRepeated}}
         var _{{.Name}}List = this.{{.Name}} ?? new {{.LocalType}}();
         _{{.Name}}List.Clear();
@@ -478,7 +476,6 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
             {{if $i}}else {{end}}if (_propSpan.SequenceEqual({{$goName}}Tags.JsonKey{{.Name}}))
 {{- if .IsMap}}
                 {
-                    _{{.Name}}Dict ??= new {{.LocalType}}();
                     if (reader.TokenType == JsonTokenType.StartObject)
                     {
                         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -588,7 +585,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
         }
 {{- range .Fields}}
 {{- if .IsMap}}
-        this.{{.Name}} = _{{.Name}}Dict != null ? _{{.Name}}Dict.ToImmutableDictionary() : ImmutableDictionary<{{.MapKeyCS}}, {{.ReadonlyMapValCS}}>.Empty;
+        this.{{.Name}} = _{{.Name}}Dict;
 {{- else if .IsRepeated}}
         this.{{.Name}} = _{{.Name}}List;
 {{- else if .IsString}}
@@ -654,7 +651,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
     {
 {{- range .Fields}}
 {{- if .IsMap}}
-        {{.Name}} = ImmutableDictionary<{{.MapKeyCS}}, {{.ReadonlyMapValCS}}>.Empty;
+        {{.Name}}?.Clear();
 {{- else if .IsRepeated}}
         {{.Name}}?.Clear();
 {{- else if .IsMsg}}

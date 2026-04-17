@@ -6,8 +6,8 @@
   - 生成 golang 测试代码 ✅
 * benchmark 测试
   - 与各种现有工具的对比测试
-  - protobuf 对比
-  - csharp 对比
+  - protobuf 对比 ✅
+  - csharp 对比 ✅
 * 是否要支持批量输入多个 proto 文件?
   - 是否要支持按照文件夹输入?
 * 各个语言的 namespace 如何处理？
@@ -17,7 +17,7 @@
   - 提供文档   ✅
   - 进行支持   ✅
   - rpc 部分的扩展语法
-* 性能测试报告  10%
+* 性能测试报告  20%
 * 安装文档
   - 打上合适的版本
 * C# 如何拉取依赖的库?
@@ -42,7 +42,7 @@
 * CSharp
   - 成员上加上 attribute，支持原生的 json 编解码 ✅
   - 生成 test ✅
-  - 生成 benchmark
+  - 生成 benchmark ✅
 * JSON
   - 数值类型，长度超过 53 bit 的问题
     - golang ✅

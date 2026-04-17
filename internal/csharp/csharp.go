@@ -51,7 +51,7 @@ func (g *Generator) csReadonlyType(fd protofile.FieldDef) string {
 	if fd.Map {
 		keyCS := g.csScalarType(fd.MapKey)
 		valCS := g.csReadonlyValType(fd.MapVal)
-		return fmt.Sprintf("ImmutableDictionary<%s, %s>", keyCS, valCS)
+		return fmt.Sprintf("Dictionary<%s, %s>", keyCS, valCS)
 	}
 	if fd.Repeated {
 		elem := g.csReadonlyValType(fd.Type)
@@ -102,7 +102,7 @@ func csDefaultValue(csType string) string {
 	case "float":
 		return "0.0f"
 	}
-	if strings.HasSuffix(csType, "[]") || strings.HasPrefix(csType, "Dictionary<") || strings.HasPrefix(csType, "ImmutableDictionary<") {
+	if strings.HasSuffix(csType, "[]") || strings.HasPrefix(csType, "Dictionary<") {
 		return "null"
 	}
 	return "0"

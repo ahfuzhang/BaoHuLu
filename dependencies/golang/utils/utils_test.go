@@ -3,6 +3,7 @@ package utils
 import (
 	"math"
 	"testing"
+	"unsafe"
 )
 
 // ─── AppendVarint / VarintSize ────────────────────────────────────────────────
@@ -120,7 +121,7 @@ func TestAppendTagAndTagSize(t *testing.T) {
 		{1, WireType64bit},
 		{1, WireTypeLenDelim},
 		{1, WireType32bit},
-		{16, WireTypeVarint},  // field 16 pushes tag into 2-byte range
+		{16, WireTypeVarint},   // field 16 pushes tag into 2-byte range
 		{2048, WireTypeVarint}, // larger field number
 	}
 	for _, tc := range cases {
@@ -347,7 +348,7 @@ func TestReadBool(t *testing.T) {
 // ─── LenDelim / String / Bytes ────────────────────────────────────────────────
 
 func TestAppendLenDelim(t *testing.T) {
-	data := []byte("hello")
+	data := UnsafeBytesFromString("hello")
 	b := AppendLenDelim(nil, data)
 	// First byte should be the length (5)
 	l, rest, code := ConsumeVarint(b)
@@ -360,7 +361,7 @@ func TestAppendLenDelim(t *testing.T) {
 }
 
 func TestConsumeBytes(t *testing.T) {
-	data := []byte("world")
+	data := UnsafeBytesFromString("world")
 	b := AppendLenDelim(nil, data)
 	got, rest, err := ConsumeBytes(b)
 	if err != nil || string(got) != "world" || len(rest) != 0 {
@@ -387,10 +388,21 @@ func TestConsumeBytes_VarintError(t *testing.T) {
 
 func TestReadString(t *testing.T) {
 	s := "hello, protobuf"
-	b := AppendLenDelim(nil, []byte(s))
+	b := AppendLenDelim(nil, UnsafeBytesFromString(s))
 	got, rest, err := ReadString(b)
 	if err != nil || got != s || len(rest) != 0 {
 		t.Errorf("ReadString: got=%q rest=%v err=%v", got, rest, err)
+	}
+}
+
+func TestUnsafeBytesFromString(t *testing.T) {
+	s := "hello"
+	b := UnsafeBytesFromString(s)
+	if string(b) != s {
+		t.Fatalf("UnsafeBytesFromString: got=%q want %q", b, s)
+	}
+	if unsafe.SliceData(b) != unsafe.StringData(s) {
+		t.Fatal("UnsafeBytesFromString copied the input string")
 	}
 }
 
@@ -462,7 +474,7 @@ func TestSkipField_64bit_EOF(t *testing.T) {
 }
 
 func TestSkipField_LenDelim(t *testing.T) {
-	b := AppendLenDelim(nil, []byte("skip me"))
+	b := AppendLenDelim(nil, UnsafeBytesFromString("skip me"))
 	b = append(b, 0xbb)
 	rest, err := SkipField(WireTypeLenDelim, b)
 	if err != nil || len(rest) != 1 || rest[0] != 0xbb {

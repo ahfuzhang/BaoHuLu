@@ -34,7 +34,7 @@ internal struct {{$goName}}Tags
 // Readonly{{$goName}} — immutable view over decoded protobuf bytes
 // ============================================================================
 
-public struct Readonly{{$goName}} : IResettable
+public struct Readonly{{$goName}} : IResettable, IDecoder
 {
 {{- range .Fields}}
     [JsonPropertyName("{{.JsonName}}")]
@@ -678,7 +678,7 @@ public struct Readonly{{$goName}} : IResettable
 // {{$goName}} — mutable struct for building / serialising
 // ============================================================================
 
-public struct {{$goName}} : IResettable
+public struct {{$goName}} : IResettable, IEncoder
 {
 {{- range .Fields}}
     [JsonPropertyName("{{.JsonName}}")]

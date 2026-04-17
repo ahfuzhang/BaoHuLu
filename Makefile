@@ -18,4 +18,5 @@ gen:
 	  -go_out.with.test \
 	  -go_out.with.bench \
 	  -csharp_out=./build/csharp/DemoServer/ \
-	  -csharp_out.with.test
+	  -csharp_out.with.test \
+	  -csharp_out.with.bench

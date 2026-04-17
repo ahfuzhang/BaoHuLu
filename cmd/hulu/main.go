@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
 	"github.com/ahfuzhang/BaoHuLu/internal/csharp"
 	gogen "github.com/ahfuzhang/BaoHuLu/internal/golang"
 	"github.com/ahfuzhang/BaoHuLu/internal/protocheck"
@@ -67,7 +68,7 @@ func runXi(args []string) {
 // modulePath is derived from the proto file: the full "option go_package" value
 // is used when present; otherwise the "package" statement value is used.
 // The generated file declares the runtime dependencies of the generated code.
-func writeGoMod(modPath, goPackage, packageName string, withBench bool) error {
+func writeGoMod(modPath, goPackage, packageName string) error {
 	modulePath := goPackage
 	if modulePath == "" {
 		modulePath = packageName
@@ -75,78 +76,85 @@ func writeGoMod(modPath, goPackage, packageName string, withBench bool) error {
 	if modulePath == "" {
 		modulePath = "generated"
 	}
-	content := fmt.Sprintf(`module %s
-
-go 1.21
-
-require (
-	github.com/ahfuzhang/BaoHuLu v0.0.1
-	github.com/valyala/fastjson v1.6.4
-)
-`, modulePath)
-	return os.WriteFile(modPath, []byte(content), 0644)
+	content := gogen.GoModContent(modulePath)
+	return os.WriteFile(modPath, utils.UnsafeBytesFromString(content), 0644)
 }
 
 // writeCsTestProj creates a .csproj file for the generated C# test project.
 // mainProjFile is the filename (without path) of the main project file, e.g. "DemoServer.csproj".
 func writeCsTestProj(projPath, assemblyName, namespace, mainProjFile string) error {
-	content := fmt.Sprintf(`<Project Sdk="Microsoft.NET.Sdk">
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <IsPackable>false</IsPackable>
-    <AssemblyName>%s</AssemblyName>
-    <RootNamespace>%s</RootNamespace>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
-    <PackageReference Include="xunit" Version="2.*" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.*">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="QiWa.Common" Version="*" />
-    <PackageReference Include="coverlet.collector" Version="6.*">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\%s" />
-  </ItemGroup>
-
-</Project>
-`, assemblyName, namespace, mainProjFile)
-	return os.WriteFile(projPath, []byte(content), 0644)
+	content := csharp.TestProjectContent(assemblyName, namespace, mainProjFile)
+	return os.WriteFile(projPath, utils.UnsafeBytesFromString(content), 0644)
 }
 
-// writeCsProj creates a .csproj file for the generated C# project.
-func writeCsProj(projPath, assemblyName string) error {
-	content := fmt.Sprintf(`<Project Sdk="Microsoft.NET.Sdk">
+// modifyProtoNamespace returns a copy of the proto file content with the
+// csharp_namespace option changed from origNS to newNS.
+// If no csharp_namespace option exists one is inserted before the first
+// message or enum declaration.
+func modifyProtoNamespace(data []byte, origNS, newNS string) []byte {
+	content := string(data)
+	old := `option csharp_namespace = "` + origNS + `"`
+	rep := `option csharp_namespace = "` + newNS + `"`
+	if strings.Contains(content, old) {
+		return utils.UnsafeBytesFromString(strings.Replace(content, old, rep, 1))
+	}
+	// No existing option — insert one before the first message/enum.
+	insert := rep + ";\n"
+	for _, kw := range []string{"\nmessage ", "\nenum "} {
+		if idx := strings.Index(content, kw); idx >= 0 {
+			return utils.UnsafeBytesFromString(content[:idx+1] + insert + content[idx+1:])
+		}
+	}
+	return utils.UnsafeBytesFromString(insert + content)
+}
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>%s</AssemblyName>
-    <RootNamespace>%s</RootNamespace>
-  </PropertyGroup>
+func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, withBench bool) error {
+	if err := os.MkdirAll(goOut, 0755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", goOut, err)
+	}
 
-  <ItemGroup>
-    <Compile Remove="Tests/**/*.cs" />
-  </ItemGroup>
+	gen := gogen.NewGenerator(pg)
+	renderGoFile := func(path string, render func(*os.File) error) error {
+		f, err := os.Create(path)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", path, err)
+		}
+		if err := render(f); err != nil {
+			f.Close()
+			return fmt.Errorf("render %s: %w", path, err)
+		}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("close %s: %w", path, err)
+		}
+		fmt.Printf("generated %s\n", path)
+		return nil
+	}
 
-  <ItemGroup>
-    <PackageReference Include="QiWa.Common" Version="*" />
-  </ItemGroup>
+	outPath := filepath.Join(goOut, goBase+".go")
+	if err := renderGoFile(outPath, gen.Render); err != nil {
+		return err
+	}
 
-</Project>
-`, assemblyName, assemblyName)
-	return os.WriteFile(projPath, []byte(content), 0644)
+	if withTest {
+		testPath := filepath.Join(goOut, goBase+"_test.go")
+		if err := renderGoFile(testPath, gen.RenderTest); err != nil {
+			return err
+		}
+	}
+
+	if withBench {
+		benchPath := filepath.Join(goOut, goBase+"_timing_test.go")
+		if err := renderGoFile(benchPath, gen.RenderBench); err != nil {
+			return err
+		}
+	}
+
+	modPath := filepath.Join(goOut, "go.mod")
+	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName); err != nil {
+		return fmt.Errorf("write %s: %w", modPath, err)
+	}
+	fmt.Printf("generated %s\n", modPath)
+	return nil
 }
 
 // runTu generates Go and/or C# code from a .proto file.
@@ -158,6 +166,7 @@ func runTu(args []string) {
 	goOutWithBench := fs.Bool("go_out.with.bench", false, "also generate _timing_test.go with benchmark code alongside Go output")
 	csOut := fs.String("csharp_out", "", "output directory for C# code (optional)")
 	csOutWithTest := fs.Bool("csharp_out.with.test", false, "also generate a Tests/ project with xunit tests alongside C# output")
+	csOutWithBench := fs.Bool("csharp_out.with.bench", false, "also generate a Benchmarks/ project with BenchmarkDotNet benchmarks alongside C# output")
 	fs.Parse(args)
 
 	if *src == "" {
@@ -186,64 +195,15 @@ func runTu(args []string) {
 	goBase := protofile.CamelToSnake(base) // e.g. DemoServer → demo_server
 	csBase := protofile.SnakeToCamel(base) // e.g. demo_server → DemoServer
 
+	var goErrCh chan error
 	if *goOut != "" {
-		if err := os.MkdirAll(*goOut, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", *goOut, err)
-			os.Exit(1)
-		}
-		outPath := filepath.Join(*goOut, goBase+".go")
-		outF, err := os.Create(outPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "create %s: %v\n", outPath, err)
-			os.Exit(1)
-		}
-		defer outF.Close()
-
-		gen := gogen.NewGenerator(pg)
-		if err := gen.Render(outF); err != nil {
-			fmt.Fprintf(os.Stderr, "render: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("generated %s\n", outPath)
-
-		if *goOutWithTest {
-			testPath := filepath.Join(*goOut, goBase+"_test.go")
-			testF, err := os.Create(testPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "create %s: %v\n", testPath, err)
-				os.Exit(1)
-			}
-			defer testF.Close()
-
-			if err := gen.RenderTest(testF); err != nil {
-				fmt.Fprintf(os.Stderr, "render test: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("generated %s\n", testPath)
-		}
-
-		if *goOutWithBench {
-			benchPath := filepath.Join(*goOut, goBase+"_timing_test.go")
-			benchF, err := os.Create(benchPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "create %s: %v\n", benchPath, err)
-				os.Exit(1)
-			}
-			defer benchF.Close()
-
-			if err := gen.RenderBench(benchF); err != nil {
-				fmt.Fprintf(os.Stderr, "render bench: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("generated %s\n", benchPath)
-		}
-
-		modPath := filepath.Join(*goOut, "go.mod")
-		if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, *goOutWithBench); err != nil {
-			fmt.Fprintf(os.Stderr, "write go.mod: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("generated %s\n", modPath)
+		goErrCh = make(chan error, 1)
+		goOutDir := *goOut
+		goWithTest := *goOutWithTest
+		goWithBench := *goOutWithBench
+		go func() {
+			goErrCh <- generateGoOutput(pg, goOutDir, goBase, goWithTest, goWithBench)
+		}()
 	}
 
 	if *csOut != "" {
@@ -266,7 +226,7 @@ func runTu(args []string) {
 		fmt.Printf("generated %s/*.cs\n", *csOut)
 
 		projPath := filepath.Join(*csOut, csBase+".csproj")
-		if err := writeCsProj(projPath, csBase); err != nil {
+		if err := csharp.WriteProject(projPath, csBase); err != nil {
 			fmt.Fprintf(os.Stderr, "write csproj: %v\n", err)
 			os.Exit(1)
 		}
@@ -299,6 +259,82 @@ func runTu(args []string) {
 				os.Exit(1)
 			}
 			fmt.Printf("generated %s\n", testProjPath)
+		}
+
+		if *csOutWithBench {
+			benchDir := filepath.Join(*csOut, "Benchmarks")
+			if err := os.MkdirAll(benchDir, 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", benchDir, err)
+				os.Exit(1)
+			}
+
+			// ${Package}.bench.cs — benchmark source
+			benchCSPath := filepath.Join(benchDir, csBase+".bench.cs")
+			benchCSF, err := os.Create(benchCSPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "create %s: %v\n", benchCSPath, err)
+				os.Exit(1)
+			}
+			defer benchCSF.Close()
+
+			if err := csharp.NewGenerator(pg).RenderCSBench(benchCSF, ns); err != nil {
+				fmt.Fprintf(os.Stderr, "renderCSBench: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", benchCSPath)
+
+			// Program.cs — BenchmarkDotNet entry point
+			programPath := filepath.Join(benchDir, "Program.cs")
+			if err := csharp.WriteBenchmarkProgram(programPath); err != nil {
+				fmt.Fprintf(os.Stderr, "write Program.cs: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", programPath)
+
+			// GrpcGen/ sub-project: write a namespace-modified copy of the proto so that
+			// Grpc.Tools-compiled types land in ns+".GrpcProto" instead of ns.
+			// This avoids type-name collisions with BaoHuLu-generated types in BDN's
+			// auto-generated wrapper project (which does not support extern alias).
+			grpcGenDir := filepath.Join(benchDir, "GrpcGen")
+			if err := os.MkdirAll(grpcGenDir, 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", grpcGenDir, err)
+				os.Exit(1)
+			}
+			protoData, err := os.ReadFile(*src)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "read %s: %v\n", *src, err)
+				os.Exit(1)
+			}
+			grpcNS := ns + ".GrpcProto"
+			protoBase := filepath.Base(*src)
+			grpcProtoPath := filepath.Join(grpcGenDir, protoBase)
+			if err := os.WriteFile(grpcProtoPath, modifyProtoNamespace(protoData, ns, grpcNS), 0644); err != nil {
+				fmt.Fprintf(os.Stderr, "write %s: %v\n", grpcProtoPath, err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", grpcProtoPath)
+
+			grpcGenProjPath := filepath.Join(grpcGenDir, "GrpcGen.csproj")
+			if err := csharp.WriteGrpcGenProj(grpcGenProjPath, protoBase); err != nil {
+				fmt.Fprintf(os.Stderr, "write GrpcGen.csproj: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", grpcGenProjPath)
+
+			// ${Package}.bench.csproj
+			benchProjPath := filepath.Join(benchDir, csBase+".bench.csproj")
+			if err := csharp.WriteBenchmarkProj(benchProjPath, csBase+".bench", ns, csBase+".csproj"); err != nil {
+				fmt.Fprintf(os.Stderr, "write bench csproj: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", benchProjPath)
+		}
+	}
+
+	if goErrCh != nil {
+		if err := <-goErrCh; err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 	}
 }

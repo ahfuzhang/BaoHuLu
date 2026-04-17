@@ -431,18 +431,18 @@ func (g *Generator) Render(out *os.File) error {
 			}
 			return sb.String()
 		},
-		"zeroVal":        ZeroVal,
-		"readerZero":     ReaderZero,
-		"isPackable":     IsPackable,
-		"is8ByteNumeric": Is8ByteNumeric,
-		"isSliceType":    func(s string) bool { return strings.HasPrefix(s, "[]") },
-		"readFunc":       ReadFuncForType,
-		"protoWireType":  ProtoWireType,
-		"trimPtr":        func(s string) string { return strings.TrimPrefix(s, "*") },
-		"mapKeyGoType":   func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
-		"mapValGoType":   func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
-		"mapValIsMsg":    func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
-		"upperFirst":       protofile.UpperFirst,
+		"zeroVal":         ZeroVal,
+		"readerZero":      ReaderZero,
+		"isPackable":      IsPackable,
+		"is8ByteNumeric":  Is8ByteNumeric,
+		"isSliceType":     func(s string) bool { return strings.HasPrefix(s, "[]") },
+		"readFunc":        ReadFuncForType,
+		"protoWireType":   ProtoWireType,
+		"trimPtr":         func(s string) string { return strings.TrimPrefix(s, "*") },
+		"mapKeyGoType":    func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValGoType":    func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValIsMsg":     func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
+		"upperFirst":      protofile.UpperFirst,
 		"enumValueGoName": EnumValueGoName,
 		"readerElemType": func(fd protofile.FieldDef) string {
 			return protofile.ReadonlyGoTypeName(fd.Type)
@@ -506,7 +506,7 @@ func SampleScalarLiteral(protoType, goType string) string {
 	case "string":
 		return `"hello"`
 	case "bytes":
-		return `[]byte("data")`
+		return `utils.UnsafeBytesFromString("data")`
 	default:
 		// enum or unknown – cast integer 1 to the Go type
 		if goType != "" {
@@ -605,11 +605,11 @@ func LargeIntFields(fields []FieldTpl) []FieldTpl {
 func LargeIntLit(ft FieldTpl) string {
 	switch ft.Type {
 	case "int64":
-		return "int64(9007199254740993)"   // 2^53 + 1
+		return "int64(9007199254740993)" // 2^53 + 1
 	case "uint64", "fixed64":
 		return "uint64(9007199254740993)"
 	case "sint64", "sfixed64":
-		return "int64(-9007199254740993)"  // tests the < -MAX_SAFE_INT branch
+		return "int64(-9007199254740993)" // tests the < -MAX_SAFE_INT branch
 	}
 	return "0"
 }
@@ -887,7 +887,7 @@ func benchScalarMapValLit(mapVal string) string {
 	case "string":
 		return `"v"`
 	case "bytes":
-		return `[]byte("v")`
+		return `utils.UnsafeBytesFromString("v")`
 	default:
 		// Enum or message type – use the Go type name.
 		return fmt.Sprintf("benchBuild%s()", protofile.GoTypeName(mapVal))
@@ -940,7 +940,7 @@ func BenchSliceFill(ft FieldTpl) string {
 	case "string":
 		return `for i := 0; i < 101; i++ { s[i] = "element with escape chars:\nnewline\ttab\"quote\\backslash:0123456789abcdef" }`
 	case "bytes":
-		return `for i := 0; i < 101; i++ { s[i] = []byte("bytes element 0123456789abcdef") }`
+		return `for i := 0; i < 101; i++ { s[i] = utils.UnsafeBytesFromString("bytes element 0123456789abcdef") }`
 	default:
 		if ft.IsMsg {
 			elemType := strings.TrimPrefix(ft.GoType, "[]")

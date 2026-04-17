@@ -504,6 +504,12 @@ func ReadBytes(b []byte) ([]byte, []byte, error) {
 	return ConsumeBytes(b)
 }
 
+// UnsafeBytesFromString returns a []byte view of s without copying.
+// The returned slice aliases s's backing storage and must be treated as read-only.
+func UnsafeBytesFromString(s string) []byte {
+	return unsafe.Slice(unsafe.StringData(s), len(s))
+}
+
 // EncodeJSONString appends a JSON-safe escaped version of s into dst.
 // No heap allocations are performed.
 func EncodeJSONString(s string, dst []byte) []byte {

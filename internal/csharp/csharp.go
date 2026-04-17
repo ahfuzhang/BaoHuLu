@@ -542,6 +542,187 @@ func (g *Generator) RenderCSTest(out *os.File, namespace string) error {
 	return tmpl.Execute(out, data)
 }
 
+// ─── C# benchmark helpers ─────────────────────────────────────────────────────
+
+// benchCsMapValLit returns a C# expression for the value side of a map fill loop.
+// The loop variable is named `i`. For message values it calls BenchBuild.BuildXxx().
+// String values use LargeString (≥100 bytes with escape chars) to match Go benchmark.
+func benchCsMapValLit(f CsFieldTpl) string {
+	if f.MapValIsMsg {
+		return fmt.Sprintf("BenchBuild.Build%s()", f.MapValCS)
+	}
+	switch f.MapValCS {
+	case "bool":
+		return "i % 2 == 0"
+	case "string":
+		return "LargeString"
+	case "byte[]":
+		return "new byte[] { (byte)(i & 0xFF) }"
+	case "float":
+		return "(float)i * 0.5f"
+	case "double":
+		return "(double)i * 0.5"
+	case "long":
+		return "(long)i"
+	case "ulong":
+		return "(ulong)i"
+	case "uint":
+		return "(uint)i"
+	case "int":
+		return "i"
+	default:
+		// enum or unknown – cast integer 1 to the enum type
+		return fmt.Sprintf("(%s)1", f.MapValCS)
+	}
+}
+
+// benchCsFixedMapValLit returns a constant C# expression for a map value when
+// there is no loop variable available (used for bool-keyed maps).
+func benchCsFixedMapValLit(f CsFieldTpl) string {
+	if f.MapValIsMsg {
+		return fmt.Sprintf("BenchBuild.Build%s()", f.MapValCS)
+	}
+	switch f.MapValCS {
+	case "bool":
+		return "true"
+	case "string":
+		return `"value"`
+	case "byte[]":
+		return "new byte[] { 0x01 }"
+	case "float":
+		return "1.5f"
+	case "double":
+		return "1.5"
+	case "long":
+		return "42L"
+	case "ulong":
+		return "42UL"
+	case "uint":
+		return "42U"
+	case "int":
+		return "42"
+	default:
+		return fmt.Sprintf("(%s)1", f.MapValCS)
+	}
+}
+
+// BenchCsMapFill generates a C# statement (or pair of statements) that fills the
+// local variable `dict` (type = f.WriterType) with 101 representative entries.
+// Bool-keyed maps produce only 2 entries (true/false) since that is all that exist;
+// those entries use a fixed literal value (no loop variable `i` in scope).
+func BenchCsMapFill(f CsFieldTpl) string {
+	switch f.MapKeyCS {
+	case "string":
+		return fmt.Sprintf("for (var i = 0; i < 101; i++) { dict[i.ToString()] = %s; }", benchCsMapValLit(f))
+	case "bool":
+		fixed := benchCsFixedMapValLit(f)
+		return fmt.Sprintf("dict[true] = %s; dict[false] = %s;", fixed, fixed)
+	case "long":
+		return fmt.Sprintf("for (var i = 0; i < 101; i++) { dict[(long)i] = %s; }", benchCsMapValLit(f))
+	case "ulong":
+		return fmt.Sprintf("for (var i = 0; i < 101; i++) { dict[(ulong)i] = %s; }", benchCsMapValLit(f))
+	case "uint":
+		return fmt.Sprintf("for (var i = 0; i < 101; i++) { dict[(uint)i] = %s; }", benchCsMapValLit(f))
+	default: // "int" (covers int32, sint32, fixed32, sfixed32)
+		return fmt.Sprintf("for (var i = 0; i < 101; i++) { dict[i] = %s; }", benchCsMapValLit(f))
+	}
+}
+
+// benchCsElemLit returns a C# expression for a list element in a fill loop.
+// The loop variable is named `i`. For message elements it calls BenchBuild.BuildXxx().
+// String elements use LargeString (≥100 bytes with escape chars) to match Go benchmark.
+func benchCsElemLit(f CsFieldTpl) string {
+	if f.ElemIsMsg {
+		return fmt.Sprintf("BenchBuild.Build%s()", f.ElemTypeCS)
+	}
+	switch f.ElemTypeCS {
+	case "bool":
+		return "i % 2 == 0"
+	case "string":
+		return "LargeString"
+	case "byte[]":
+		return "new byte[] { (byte)(i & 0xFF) }"
+	case "float":
+		return "(float)i * 0.5f"
+	case "double":
+		return "(double)i * 0.5"
+	case "long":
+		return "(long)i"
+	case "ulong":
+		return "(ulong)i"
+	case "uint":
+		return "(uint)i"
+	case "int":
+		return "i"
+	default:
+		// enum or unknown
+		return fmt.Sprintf("(%s)1", f.ElemTypeCS)
+	}
+}
+
+// BenchCsSliceFill generates a C# for-loop that fills the local variable `lst`
+// (a List<T>) with 101 representative elements.
+func BenchCsSliceFill(f CsFieldTpl) string {
+	return fmt.Sprintf("for (var i = 0; i < 101; i++) { lst.Add(%s); }", benchCsElemLit(f))
+}
+
+// benchCsScalarLit returns a C# literal for a scalar (non-map, non-repeated,
+// non-message, non-string, non-bytes) field in the BenchBuild helper.
+// Signed integer types (sint32, sint64, sfixed32, sfixed64) use negative values
+// to exercise signed-encoding code paths, mirroring the Go benchmark logic.
+func benchCsScalarLit(f CsFieldTpl) string {
+	if f.IsEnum {
+		return fmt.Sprintf("(%s)1", f.WriterType)
+	}
+	switch f.Type {
+	case "bool":
+		return "true"
+	case "double":
+		return "1.5"
+	case "float":
+		return "1.5f"
+	case "sint32", "sfixed32":
+		return "-1"
+	case "sint64", "sfixed64":
+		return "-1L"
+	case "int64":
+		return "1L"
+	case "uint32", "fixed32":
+		return "1U"
+	case "uint64", "fixed64":
+		return "1UL"
+	default: // int32 and other integer types
+		return "1"
+	}
+}
+
+// RenderCSBench renders the benchmark source file for the parsed proto into out.
+// namespace is the C# namespace (same as used for the main and test files).
+func (g *Generator) RenderCSBench(out *os.File, namespace string) error {
+	msgs, _ := g.buildMsgTpls()
+
+	data := CsRenderData{
+		Namespace: namespace,
+		Messages:  msgs,
+	}
+
+	fnMap := template.FuncMap{
+		"csDefault":         csDefaultValue,
+		"upperFirst":        protofile.UpperFirst,
+		"goTypeName":        protofile.GoTypeName,
+		"csSampleLit":       csSampleLit,
+		"benchCsMapFill":    BenchCsMapFill,
+		"benchCsSliceFill":  BenchCsSliceFill,
+		"benchCsScalarLit":  benchCsScalarLit,
+	}
+
+	tmpl, err := template.New("cs_bench").Funcs(fnMap).Parse(csBenchCodeTemplate)
+	if err != nil {
+		return fmt.Errorf("parse cs_bench template: %w", err)
+	}
+	return tmpl.Execute(out, data)
+}
+
 // ─── C# code template ─────────────────────────────────────────────────────────
 
 //go:embed cs.tpl
@@ -549,3 +730,6 @@ var csCodeTemplate string
 
 //go:embed cs_test.tpl
 var csTestCodeTemplate string
+
+//go:embed cs_bench.tpl
+var csBenchCodeTemplate string

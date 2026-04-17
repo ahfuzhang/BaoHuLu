@@ -9,6 +9,8 @@ import (
 	"math"
 {{- end}}
 	"testing"
+
+	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
 )
 
 {{range .Messages}}
@@ -311,10 +313,10 @@ func Test{{$goName}}FromProtobufSkipError(t *testing.T) {
 
 func Test{{$goName}}FromJSONErrors(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte("not-json"), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString("not-json"), nil); err == nil {
 		t.Error("expected error for invalid JSON, got nil")
 	}
-	if err := r.FromJSON([]byte(`[1,2,3]`), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString(`[1,2,3]`), nil); err == nil {
 		t.Error("expected error for JSON array (not object), got nil")
 	}
 }
@@ -330,7 +332,7 @@ func Test{{$goName}}FromJSONErrors(t *testing.T) {
 // Field under test: {{$sf.JsonName}} ({{$sf.Type}})
 func Test{{$goName}}FromJSONScalarTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`{"{{$sf.JsonName}}": null}`), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString(`{"{{$sf.JsonName}}": null}`), nil); err == nil {
 		t.Errorf("expected error when scalar field %q receives null, got nil", "{{$sf.JsonName}}")
 	}
 }
@@ -341,7 +343,7 @@ func Test{{$goName}}FromJSONScalarTypeError(t *testing.T) {
 // Field under test: {{$mf.JsonName}}
 func Test{{$goName}}FromJSONMsgTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`{"{{$mf.JsonName}}": null}`), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString(`{"{{$mf.JsonName}}": null}`), nil); err == nil {
 		t.Errorf("expected error when msg field %q receives null, got nil", "{{$mf.JsonName}}")
 	}
 }
@@ -353,7 +355,7 @@ func Test{{$goName}}FromJSONMsgTypeError(t *testing.T) {
 // Field under test: {{$mapf.JsonName}}
 func Test{{$goName}}FromJSONMapTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`{"{{$mapf.JsonName}}": null}`), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString(`{"{{$mapf.JsonName}}": null}`), nil); err == nil {
 		t.Errorf("expected error when map field %q receives null, got nil", "{{$mapf.JsonName}}")
 	}
 }
@@ -365,7 +367,7 @@ func Test{{$goName}}FromJSONMapTypeError(t *testing.T) {
 // Field under test: {{$repf.JsonName}}
 func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`{"{{$repf.JsonName}}": null}`), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString(`{"{{$repf.JsonName}}": null}`), nil); err == nil {
 		t.Errorf("expected error when repeated field %q receives null, got nil", "{{$repf.JsonName}}")
 	}
 }
@@ -378,7 +380,7 @@ func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
 func Test{{$goName}}FromJSONBytesDecodeError(t *testing.T) {
 	var r {{$roName}}
 	// "!!!" is not valid standard base64.
-	if err := r.FromJSON([]byte(`{"{{$bf.JsonName}}": "!!!"}`), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString(`{"{{$bf.JsonName}}": "!!!"}`), nil); err == nil {
 		t.Errorf("expected error for invalid base64 in field %q, got nil", "{{$bf.JsonName}}")
 	}
 }
@@ -392,7 +394,7 @@ func Test{{$goName}}FromJSONBytesDecodeError(t *testing.T) {
 func Test{{$goName}}FromJSONMapValueTypeError(t *testing.T) {
 	var r {{$roName}}
 	// Null is not a valid value; the inner mv.Int64()/StringBytes()/etc. must error.
-	if err := r.FromJSON([]byte(`{"{{$skm.JsonName}}": {"k": null}}`), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString(`{"{{$skm.JsonName}}": {"k": null}}`), nil); err == nil {
 		t.Errorf("expected error for null map value in field %q, got nil", "{{$skm.JsonName}}")
 	}
 }
@@ -406,7 +408,7 @@ func Test{{$goName}}FromJSONMapValueTypeError(t *testing.T) {
 func Test{{$goName}}FromJSONMapKeyTypeError(t *testing.T) {
 	var r {{$roName}}
 	// "not-a-number" cannot be parsed as the numeric key type.
-	if err := r.FromJSON([]byte(`{"{{$nkm.JsonName}}": {"not-a-number": 1}}`), nil); err == nil {
+	if err := r.FromJSON(utils.UnsafeBytesFromString(`{"{{$nkm.JsonName}}": {"not-a-number": 1}}`), nil); err == nil {
 		t.Errorf("expected error for non-numeric map key in field %q, got nil", "{{$nkm.JsonName}}")
 	}
 }

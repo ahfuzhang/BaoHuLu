@@ -4,11 +4,92 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using QiWa.Common;
 using Xunit;
 using {{.Namespace}};
 
 namespace {{.Namespace}}.Tests;
+
+internal static class TestValidate
+{
+    internal static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
+    {
+        IncludeFields = true,
+    };
+
+    private static void CompareByteArray(byte[] expected, byte[] actual, string fieldName)
+    {
+        if (ReferenceEquals(expected, actual))
+        {
+            return;
+        }
+
+        Assert.NotNull(expected);
+        Assert.NotNull(actual);
+        Assert.Equal(expected.Length, actual.Length);
+        for (var i = 0; i < expected.Length; i++)
+        {
+            Assert.True(expected[i] == actual[i], $"{fieldName}[{i}] mismatch.");
+        }
+    }
+{{range .Messages}}
+{{- $goName := .GoName}}
+
+    internal static void Compare{{$goName}}({{$goName}} expected, {{$goName}} actual)
+    {
+{{range .Fields}}
+{{- if .IsMap}}
+        if (expected.{{.Name}} == null)
+        {
+            Assert.Null(actual.{{.Name}});
+        }
+        else
+        {
+            Assert.NotNull(actual.{{.Name}});
+            Assert.Equal(expected.{{.Name}}.Count, actual.{{.Name}}.Count);
+            foreach (var kv in expected.{{.Name}})
+            {
+                Assert.True(actual.{{.Name}}.TryGetValue(kv.Key, out var actualVal), "Field {{.Name}} mismatch: missing map key.");
+{{- if .MapValIsMsg}}
+                Compare{{.MapValCS}}(kv.Value, actualVal);
+{{- else if eq .MapValCS "byte[]"}}
+                CompareByteArray(kv.Value, actualVal, "{{.Name}}");
+{{- else}}
+                Assert.Equal(kv.Value, actualVal);
+{{- end}}
+            }
+        }
+{{- else if .IsRepeated}}
+        if (expected.{{.Name}} == null)
+        {
+            Assert.Null(actual.{{.Name}});
+        }
+        else
+        {
+            Assert.NotNull(actual.{{.Name}});
+            Assert.Equal(expected.{{.Name}}.Count, actual.{{.Name}}.Count);
+            for (var i = 0; i < expected.{{.Name}}.Count; i++)
+            {
+{{- if .ElemIsMsg}}
+                Compare{{.ElemTypeCS}}(expected.{{.Name}}[i], actual.{{.Name}}[i]);
+{{- else if eq .ElemTypeCS "byte[]"}}
+                CompareByteArray(expected.{{.Name}}[i], actual.{{.Name}}[i], "{{.Name}}");
+{{- else}}
+                Assert.Equal(expected.{{.Name}}[i], actual.{{.Name}}[i]);
+{{- end}}
+            }
+        }
+{{- else if .IsMsg}}
+        Compare{{.WriterType}}(expected.{{.Name}}, actual.{{.Name}});
+{{- else if .IsBytes}}
+        CompareByteArray(expected.{{.Name}}, actual.{{.Name}}, "{{.Name}}");
+{{- else}}
+        Assert.Equal(expected.{{.Name}}, actual.{{.Name}});
+{{- end}}
+{{end}}    }
+{{end}}
+}
 {{range .Messages}}
 {{- $goName := .GoName}}
 {{- $roName := printf "Readonly%s" .GoName}}
@@ -24,6 +105,18 @@ public class {{$goName}}Tests
         {
 {{range .Fields}}            {{.Name}} = {{csSampleLit .}},
 {{end}}        };
+    }
+
+    /// <summary>
+    /// Returns a {{$goName}} with only scalar value-like fields populated.
+    /// Strings, bytes, collections, and nested messages remain at default values.
+    /// </summary>
+    public static {{$goName}} MakeValueTypeOnly{{$goName}}()
+    {
+        return new {{$goName}}
+        {
+{{range .Fields}}{{if and (not .IsMap) (not .IsRepeated) (not .IsString) (not .IsBytes) (not .IsMsg)}}            {{.Name}} = {{csSampleLit .}},
+{{end}}{{end}}        };
     }
 
     // ── Empty ─────────────────────────────────────────────────────────────────
@@ -94,6 +187,51 @@ public class {{$goName}}Tests
         Assert.Equal(json, jBuf2.AsSpan().ToArray());
         jBuf.Dispose();
         jBuf2.Dispose();
+    }
+
+    // Verifies that System.Text.Json serialisation and deserialisation preserve
+    // every field value on the generated writer object.
+    [Fact]
+    public void StdlibJSONRoundtrip_PreservesAllFields()
+    {
+        var expected = MakeSample{{$goName}}();
+        var json = JsonSerializer.Serialize(expected, TestValidate.JsonOptions);
+        var actual = JsonSerializer.Deserialize<{{$goName}}>(json, TestValidate.JsonOptions);
+
+        TestValidate.Compare{{$goName}}(expected, actual);
+    }
+
+    // ── Scalar-only coverage ────────────────────────────────────────────────
+
+    // Verifies that a writer containing only scalar value-like fields can emit
+    // protobuf and JSON, survive Reset(), then be parsed twice by the same
+    // readonly view before that readonly view is Reset() too.
+    [Fact]
+    public void ValueTypeOnly_SerializeParseAndReset()
+    {
+        var w = MakeValueTypeOnly{{$goName}}();
+
+        int sz = w.ProtobufSize();
+        var buf = new RentedBuffer(sz + 4);
+        Assert.False(w.ToProtobuf(ref buf).Err());
+        Assert.Equal(sz, buf.Length);
+
+        var jBuf = new RentedBuffer(256);
+        w.ToJSON(ref jBuf);
+
+        var protobuf = buf.AsSpan().ToArray();
+        var json = jBuf.AsSpan().ToArray();
+
+        w.Reset();
+        Assert.Equal(0, w.ProtobufSize());
+
+        var r = new {{$roName}}();
+        Assert.False(r.FromProtobuf(protobuf).Err());
+        Assert.False(r.FromJSON(json).Err());
+        r.Reset();
+
+        buf.Dispose();
+        jBuf.Dispose();
     }
 
     // ── Reset ─────────────────────────────────────────────────────────────────

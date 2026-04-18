@@ -172,6 +172,7 @@ Apple M2, 1 CPU, 8 logical and 8 physical cores
 
 * 语法检查
   * `hulu xi ./xx.proto`
+  * 或者：`hulu check ./xx.proto`
 
 <img src="./doc/images/1.png" style="zoom:50%;" />
 
@@ -179,6 +180,7 @@ Apple M2, 1 CPU, 8 logical and 8 physical cores
 
 * 生成代码：
   * `hulu tu -src=./xx.proto -go_out=xx_dir -csharp_out=xx_dir _qiwa_out=xx_dir`
+    - 或者 `hulu generate ...`
     - `-src=input.proto`
     - `-go_out=$dir`: 把 golang 代码输出到某个目录
       - `-go_out.with.test`: 生成 golang 的测试代码

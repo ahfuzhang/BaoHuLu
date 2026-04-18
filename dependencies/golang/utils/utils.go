@@ -170,170 +170,6 @@ func AppendLenDelim(b []byte, data []byte) []byte {
 	return append(b, data...)
 }
 
-// ─── Varint read ──────────────────────────────────────────────────────────────
-
-// ConsumeVarint reads a varint from b and returns the value and remaining bytes.
-//
-// Fast path (len(b) >= 9, little-endian platforms): loads 8 bytes as a single
-// uint64, ANDs with 0x8080808080808080 to collect the MSB of every byte, then
-// uses bits.TrailingZeros64 to locate the terminating byte in O(1).  A
-// switch/case on that length lets the compiler emit a jump table — no per-byte
-// loop in the common case.
-//
-// Slow path (len(b) < 9): falls back to the original byte-by-byte loop.
-// 这个方法是负优化
-func ConsumeVarintV2(b []byte) (uint64, []byte, error) {
-	if len(b) < 9 {
-		return consumeVarintSlow(b)
-	}
-
-	// ptr is a fixed-size array pointer covering the first 9 bytes.
-	// The compiler knows ptr[0]…ptr[8] are always in bounds, eliminating
-	// per-access slice bound checks throughout the fast path.
-	var ptr *[9]byte = (*[9]byte)(unsafe.Pointer(&b[0]))
-
-	// Load 8 bytes as a little-endian uint64 (safe on amd64/arm64).
-	// Each byte's MSB sits at bit positions 7, 15, 23, … 63 in the word.
-	// Masking with 0x8080808080808080 isolates all eight continuation bits.
-	w := *(*uint64)(unsafe.Pointer(ptr))
-	m := w & 0x8080808080808080
-
-	if m != 0x8080808080808080 {
-		// At least one of the first 8 bytes is a terminator (MSB == 0).
-		// ^m & mask has bit (8k+7) set for each such byte k.
-		// TrailingZeros64/8 converts that bit position to a byte index.
-		n := bits.TrailingZeros64(^m&0x8080808080808080) / 8
-		var x uint64
-		switch n {
-		case 0:
-			x = uint64(ptr[0])
-		case 1:
-			x = uint64(ptr[0]&0x7f) | uint64(ptr[1])<<7
-		case 2:
-			x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2])<<14
-		case 3:
-			x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-				uint64(ptr[3])<<21
-		case 4:
-			x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-				uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4])<<28
-		case 5:
-			x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-				uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5])<<35
-		case 6:
-			x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-				uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5]&0x7f)<<35 |
-				uint64(ptr[6])<<42
-		case 7:
-			x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-				uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5]&0x7f)<<35 |
-				uint64(ptr[6]&0x7f)<<42 | uint64(ptr[7])<<49
-		}
-		return x, b[n+1:], nil
-	}
-
-	// All 8 bytes are continuation bytes; need to inspect ptr[8] (and maybe b[9]).
-	// len(b) >= 9 is already guaranteed.
-	if ptr[8] < 0x80 {
-		x := uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-			uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5]&0x7f)<<35 |
-			uint64(ptr[6]&0x7f)<<42 | uint64(ptr[7]&0x7f)<<49 | uint64(ptr[8])<<56
-		return x, b[9:], nil
-	}
-	if len(b) < 10 {
-		return 0, b, fmt.Errorf("unexpected EOF reading varint")
-	}
-	if b[9] >= 0x80 {
-		return 0, b, fmt.Errorf("varint overflow")
-	}
-	x := uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-		uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5]&0x7f)<<35 |
-		uint64(ptr[6]&0x7f)<<42 | uint64(ptr[7]&0x7f)<<49 | uint64(ptr[8]&0x7f)<<56 |
-		uint64(b[9])<<63
-	return x, b[10:], nil
-}
-
-// consumeVarintSlow is the fallback for len(b) < 9.
-// 242.6 ns/op       626.49 MB/s  // 目前最快的版本
-func consumeVarintSlow(b []byte) (uint64, []byte, error) {
-	var x uint64
-	var s uint
-	for i, c := range b {
-		if i == 10 {
-			return 0, b, fmt.Errorf("varint overflow")
-		}
-		if c < 0x80 {
-			x |= uint64(c) << s
-			return x, b[i+1:], nil
-		}
-		x |= uint64(c&0x7f) << s
-		s += 7
-	}
-	return 0, b, fmt.Errorf("unexpected EOF reading varint")
-}
-
-// 266.7 ns/op       570.03 MB/s  // 仍然是负优化
-func ConsumeVarintNotAsm(b []byte) (uint64, []byte, error) {
-	// Phase 1: scan-only loop — find the index of the first terminating byte
-	// (MSB == 0).  No bit-ops here, just a single comparison per iteration.
-	n := 0
-	for n < len(b) && b[n] >= 0x80 {
-		n++
-	}
-	// Check overflow before EOF so that a long all-continuation buffer
-	// (e.g. 11×0x80) reports overflow rather than EOF, matching the
-	// original behaviour.
-	if n >= 10 {
-		return 0, b, fmt.Errorf("varint overflow")
-	}
-	if n >= len(b) {
-		return 0, b, fmt.Errorf("unexpected EOF reading varint")
-	}
-
-	// Phase 2: jump table — all bit-ops happen exactly once, no loop
-	// overhead, no accumulated intermediate values.
-	// Use a *[10]byte unsafe pointer to b[0] so every index access below is
-	// against a compile-time-known fixed array, eliminating per-element
-	// bounds checks that would otherwise be emitted for the slice.
-	var x uint64
-	ptr := (*[10]byte)(unsafe.Pointer(&b[0]))
-	switch n {
-	case 0:
-		x = uint64(ptr[0])
-	case 1:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1])<<7
-	case 2:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2])<<14
-	case 3:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-			uint64(ptr[3])<<21
-	case 4:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-			uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4])<<28
-	case 5:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-			uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5])<<35
-	case 6:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-			uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5]&0x7f)<<35 |
-			uint64(ptr[6])<<42
-	case 7:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-			uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5]&0x7f)<<35 |
-			uint64(ptr[6]&0x7f)<<42 | uint64(ptr[7])<<49
-	case 8:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-			uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5]&0x7f)<<35 |
-			uint64(ptr[6]&0x7f)<<42 | uint64(ptr[7]&0x7f)<<49 | uint64(ptr[8])<<56
-	case 9:
-		x = uint64(ptr[0]&0x7f) | uint64(ptr[1]&0x7f)<<7 | uint64(ptr[2]&0x7f)<<14 |
-			uint64(ptr[3]&0x7f)<<21 | uint64(ptr[4]&0x7f)<<28 | uint64(ptr[5]&0x7f)<<35 |
-			uint64(ptr[6]&0x7f)<<42 | uint64(ptr[7]&0x7f)<<49 | uint64(ptr[8]&0x7f)<<56 |
-			uint64(ptr[9])<<63
-	}
-	return x, b[n+1:], nil
-}
-
 // ConsumeTag reads a field tag (field number + wire type) from b.
 func ConsumeTag(b []byte) (fieldNum int, wt WireType, rest []byte, err error) {
 	var v uint64
@@ -543,63 +379,19 @@ func EncodeJSONString(s string, dst []byte) []byte {
 	return dst
 }
 
-// ConsumeVarint decodes a Protocol Buffers base-128 variable-length integer
-// from the head of b.
-//
-// Return values:
-//
-//	value       — the decoded uint64 value (0 on error)
-//	left        — remaining bytes after the consumed varint (== b on error)
-//	returnValue — 0 success / 1 varint overflow / 2 unexpected EOF
-func ConsumeVarint(b []byte) (value uint64, left []byte, returnValue int64) {
-	// Phase 1: scan for the terminating byte (first byte with MSB == 0).
-	n := 0
-	for n < len(b) && b[n] >= 0x80 {
-		n++
-	}
-	// Check overflow before EOF (matches Go protobuf error ordering).
-	if n >= 10 {
-		return 0, b, 1 // varint overflow
-	}
-	if n >= len(b) {
-		return 0, b, 2 // unexpected EOF
-	}
-
-	// Phase 2: jump table — all bit-ops in one shot, no loop.
+func ConsumeVarint(b []byte) (uint64, []byte, int64) {
 	var x uint64
-	switch n {
-	case 0:
-		x = uint64(b[0])
-	case 1:
-		x = uint64(b[0]&0x7f) | uint64(b[1])<<7
-	case 2:
-		x = uint64(b[0]&0x7f) | uint64(b[1]&0x7f)<<7 | uint64(b[2])<<14
-	case 3:
-		x = uint64(b[0]&0x7f) | uint64(b[1]&0x7f)<<7 | uint64(b[2]&0x7f)<<14 |
-			uint64(b[3])<<21
-	case 4:
-		x = uint64(b[0]&0x7f) | uint64(b[1]&0x7f)<<7 | uint64(b[2]&0x7f)<<14 |
-			uint64(b[3]&0x7f)<<21 | uint64(b[4])<<28
-	case 5:
-		x = uint64(b[0]&0x7f) | uint64(b[1]&0x7f)<<7 | uint64(b[2]&0x7f)<<14 |
-			uint64(b[3]&0x7f)<<21 | uint64(b[4]&0x7f)<<28 | uint64(b[5])<<35
-	case 6:
-		x = uint64(b[0]&0x7f) | uint64(b[1]&0x7f)<<7 | uint64(b[2]&0x7f)<<14 |
-			uint64(b[3]&0x7f)<<21 | uint64(b[4]&0x7f)<<28 | uint64(b[5]&0x7f)<<35 |
-			uint64(b[6])<<42
-	case 7:
-		x = uint64(b[0]&0x7f) | uint64(b[1]&0x7f)<<7 | uint64(b[2]&0x7f)<<14 |
-			uint64(b[3]&0x7f)<<21 | uint64(b[4]&0x7f)<<28 | uint64(b[5]&0x7f)<<35 |
-			uint64(b[6]&0x7f)<<42 | uint64(b[7])<<49
-	case 8:
-		x = uint64(b[0]&0x7f) | uint64(b[1]&0x7f)<<7 | uint64(b[2]&0x7f)<<14 |
-			uint64(b[3]&0x7f)<<21 | uint64(b[4]&0x7f)<<28 | uint64(b[5]&0x7f)<<35 |
-			uint64(b[6]&0x7f)<<42 | uint64(b[7]&0x7f)<<49 | uint64(b[8])<<56
-	case 9:
-		x = uint64(b[0]&0x7f) | uint64(b[1]&0x7f)<<7 | uint64(b[2]&0x7f)<<14 |
-			uint64(b[3]&0x7f)<<21 | uint64(b[4]&0x7f)<<28 | uint64(b[5]&0x7f)<<35 |
-			uint64(b[6]&0x7f)<<42 | uint64(b[7]&0x7f)<<49 | uint64(b[8]&0x7f)<<56 |
-			uint64(b[9])<<63
+	var s uint
+	for i, c := range b {
+		if i == 10 {
+			return 0, b, 1
+		}
+		if c < 0x80 {
+			x |= uint64(c) << s
+			return x, b[i+1:], 0
+		}
+		x |= uint64(c&0x7f) << s
+		s += 7
 	}
-	return x, b[n+1:], 0
+	return 0, b, 2
 }

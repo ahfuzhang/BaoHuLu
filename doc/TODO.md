@@ -43,6 +43,8 @@
   - 成员上加上 attribute，支持原生的 json 编解码 ✅
   - 生成 test ✅
   - 生成 benchmark ✅
+  - 是否加了足够多的 readonly ?
+  - 代码覆盖率是否足够?
 * JSON
   - 数值类型，长度超过 53 bit 的问题
     - golang ✅
@@ -50,3 +52,4 @@
   - bool 类型的 key
   - bytes 类型的支持
 * linux + amd64 下的 benchmark
+* 命令行支持传入模板文件，允许自定义的代码生成逻辑

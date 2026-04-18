@@ -99,7 +99,7 @@
   - goarch: arm64
   - cpu: Apple M2
   - go version go1.26.1
-  - JSON 序列化后长度 16763 字节，包含完整的 19 中 protobuf 的数据类型
+  - JSON 序列化后长度 16763 字节，包含完整的 19 种 protobuf 的数据类型，以及所有允许的 map key 类型(bool 类型的 key 除外)
 
 | 测试项 | BaoHuLu | encoding/json | bytedance/sonic |
 | ---- | ---- | ---- | ---- |

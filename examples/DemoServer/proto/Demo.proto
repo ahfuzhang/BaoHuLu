@@ -76,6 +76,23 @@ message AllTypes {
   //  •	20000..536870911
 }
 
+message ValueTypes {
+  double DoubleValue = 1;
+  float FloatValue = 2;
+  int32 Int32Value = 3;
+  int64 Int64Value = 4;
+  uint32 Uint32Value = 5;
+  uint64 Uint64Value = 6;
+  sint32 Sint32Value = 7;
+  sint64 Sint64Value = 8;
+  fixed32 Fixed32Value = 9;
+  fixed64 Fixed64Value = 10;
+  sfixed32 Sfixed32Value = 11;
+  sfixed64 Sfixed64Value = 12;
+  bool BoolValue = 13;
+  Status Status = 16;
+}
+
 message HelloRequest {
   AllTypes Data = 1;
 }

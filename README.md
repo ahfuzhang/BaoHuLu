@@ -94,7 +94,7 @@
 ### Benchmark 数据
 
 #### Macos + arm64, M2, golang
-
+* 16kb 长度的 JSON
   - goos: darwin
   - goarch: arm64
   - cpu: Apple M2
@@ -106,14 +106,24 @@
 | json encode | 265.08 MB/s<br/>0 allocs/op | 71.41 MB/s(快 3.71 倍)<br/>2245 allocs/op | 72.17 MB/s(快 3.67 倍)<br/>2245 allocs/op |
 | json decode | 213.58 MB/s<br/>0 allocs/op | 46.41 MB/s(快 4.60 倍)<br/>1562 allocs/op | 44.61 MB/s(快 4.79 倍)<br/>1562 allocs/op |
 
-| 测试项 | BaoHuLu |
-| ---- | ---- |
-| protobuf encode | 665.17 MB/s<br/>0 allocs/op |
-| protobuf decode | 383.77 MB/s<br/>0 allocs/op |
+| 测试项 | BaoHuLu | google protobuf | github.com/planetscale/vtprotobuf |
+| ---- | ---- | ---- | ---- |
+| protobuf encode | 665.17 MB/s<br/>0 allocs/op | 157.25 MB/s(快 4.23 倍)<br/>4445 allocs/op | 654.29 MB/s(快 1.66 %)<br/>1 allocs/op |
+| protobuf decode | 383.77 MB/s<br/>0 allocs/op | 108.34 MB/s(快 3.54 倍)<br/>2649 allocs/op | 428.57 MB/s(慢 10.45 %)<br/>326 allocs/op |
 
-(时间有限，还未测试小数据场景。)
+* 232 字节的 JSON，只有值类型，没有引用类型
 
-#### Macos + arm64, M2, golang
+| 测试项 | BaoHuLu | encoding/json | bytedance/sonic |
+| ---- | ---- | ---- | ---- |
+| json encode | 1908.69 MB/s<br/>0 allocs/op | 513.88 MB/s(快 3.71 倍)<br/>2 allocs/op | 515.77 MB/s(快 3.70 倍)<br/>2 allocs/op |
+| json decode | 561.07 MB/s<br/>0 allocs/op | 99.13 MB/s(快 5.66 倍)<br/>2 allocs/op | 103.88 MB/s(快 5.40 倍)<br/>2 allocs/op |
+
+| 测试项 | BaoHuLu | google protobuf | github.com/planetscale/vtprotobuf |
+| ---- | ---- | ---- |
+| protobuf encode | 1505.78 MB/s<br/>0 allocs/op | 364.38 MB/s(快 4.13 倍)<br/>1 allocs/op | 1815.16 MB/s(慢  17.04 %)<br/>1 allocs/op<br/>MarshalToVT:<br/>2575.42 MB/s(慢  41.53 %)<br/> 0 allocs/op |
+| protobuf decode | 837.66 MB/s<br/>0 allocs/op | 507.02 MB/s(快 65.2% )<br/>0 allocs/op | 1305.27 MB/s(慢 35.82 %)<br/>0 allocs/op |
+
+#### Macos + arm64, M2, csharp
 
 * DotNet SDK 10.0.101
 
@@ -191,6 +201,21 @@ Apple M2, 1 CPU, 8 logical and 8 physical cores
 
   ![](./doc/images/2.png)
 
+* 生成测试代码
+  - `make gen`
+
+aka:
+
+```bash
+hulu tu \
+	  -src=./examples/DemoServer/proto/Demo.proto \
+	  -go_out=./build/golang/DemoServer/ \
+	  -go_out.with.test \
+	  -go_out.with.bench \
+	  -csharp_out=./build/csharp/DemoServer/ \
+	  -csharp_out.with.test \
+	  -csharp_out.with.bench
+```
 
 ## AI 使用声明
 

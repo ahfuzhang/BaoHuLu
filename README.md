@@ -125,7 +125,7 @@
 
 #### Macos + arm64, M2, csharp
 
-* DotNet SDK 10.0.101
+* DotNet SDK 10.0.101, 16kb 长度的 JSON
 
 ```
 BenchmarkDotNet v0.14.0, macOS 26.4.1 (25E253) [Darwin 25.4.0]
@@ -144,6 +144,18 @@ Apple M2, 1 CPU, 8 logical and 8 physical cores
 | ---- | ---- | ---- |
 | protobuf encode | 1025.0 MB/s<br/> 0 Allocated | 756.7 MB/s(快 35.46% )<br/> 25504 B Allocated |
 | protobuf decode | 997.1 MB/s<br/> 33.02 KB Allocated | 424.3 MB/s(快 35.0% )<br/> 203.92 KB Allocated |
+
+* 232 字节的 JSON，只有值类型，没有引用类型
+
+| 测试项 | BaoHuLu | System.Text.Json.Serialize/Deserialize |
+| ---- | ---- | ---- |
+| json encode | 795.1 MB/s<br/>0 B Allocated | 707.2 MB/s(快 12.43% )<br/>0 B Allocated |
+| json decode | 474.5 MB/s<br/>0 B Allocated | 472.7 MB/s(快 0.38% )<br/>96 B Allocated |
+
+| 测试项 | BaoHuLu | Grpc.Tools |
+| ---- | ---- | ---- |
+| protobuf encode | 845.0 MB/s<br/> 0 Allocated | 788.2 MB/s(快 7.2% )<br/> 152 B Allocated |
+| protobuf decode | 885.9 MB/s<br/> 0 B Allocated | 618.1 MB/s(快 43.33% )<br/> 272 B Allocated |
 
 ## 明确不支持的功能
 

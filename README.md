@@ -119,7 +119,7 @@
 | json decode | 561.07 MB/s<br/>0 allocs/op | 99.13 MB/s(快 5.66 倍)<br/>2 allocs/op | 103.88 MB/s(快 5.40 倍)<br/>2 allocs/op |
 
 | 测试项 | BaoHuLu | google protobuf | github.com/planetscale/vtprotobuf |
-| ---- | ---- | ---- |
+| ---- | ---- | ---- | ---- |
 | protobuf encode | 1505.78 MB/s<br/>0 allocs/op | 364.38 MB/s(快 4.13 倍)<br/>1 allocs/op | 1815.16 MB/s(慢  17.04 %)<br/>1 allocs/op<br/>MarshalToVT:<br/>2575.42 MB/s(慢  41.53 %)<br/> 0 allocs/op |
 | protobuf decode | 837.66 MB/s<br/>0 allocs/op | 507.02 MB/s(快 65.2% )<br/>0 allocs/op | 1305.27 MB/s(慢 35.82 %)<br/>0 allocs/op |
 

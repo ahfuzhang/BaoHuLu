@@ -20,7 +20,6 @@ import (
 	"github.com/valyala/fastjson"
 )
 
-var _ = utils.UnsafeBytesFromString
 {{range .Messages}}
 {{- $goName := .GoName}}
 {{- $roName := printf "Readonly%s" $goName}}
@@ -54,7 +53,7 @@ func benchBuild{{$goName}}() {{$goName}} {
 	w.{{.Name}} = "benchmark payload with escape chars:\n newline \t tab \" double-quote \\ backslash; " +
 		"padding to ensure length exceeds one hundred bytes: 0123456789abcdef0123456789abcdef"
 {{- else if eq .Type "bytes"}}
-	w.{{.Name}} = utils.UnsafeBytesFromString("benchmark bytes payload with special chars: \n \t \\ " +
+	w.{{.Name}} = []byte("benchmark bytes payload with special chars: \n \t \\ " +
 		"padding to exceed one hundred bytes: 0123456789abcdef0123456789abcdef")
 {{- else}}
 	w.{{.Name}} = {{sampleLit .}}

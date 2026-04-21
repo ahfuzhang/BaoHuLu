@@ -66,7 +66,9 @@ message AllTypes {
   map<fixed64, int32> m8 = 1007;
   map<sfixed32, int32> m9 = 1008;
   map<sfixed64, int32> m10 = 1009;
-  map<bool, int32> m11 = 1010;
+
+  // 先注释掉这行：这里会导致 sonic 库反序列化失败
+  //map<bool, int32> m11 = 1010;
 
   map<string, int32> Scores = 20;
   int32 big_tag = 65536;

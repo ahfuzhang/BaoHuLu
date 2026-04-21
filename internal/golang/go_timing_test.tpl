@@ -9,13 +9,7 @@ import (
 {{- end}}
 	"testing"
 
-	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
-	// NOTE: bytedance/sonic uses go:linkname to access encoding/json internals
-	// (e.g. unquoteBytes) that were removed in Go 1.21+. To avoid the linker
-	// error on modern Go toolchains we alias encoding/json as "sonic" so that
-	// the generated BenchmarkXxx_Sonic functions continue to compile and run
-	// while still providing a meaningful comparison against the standard library.
-	sonic "encoding/json"
+	"github.com/bytedance/sonic"
 
 	"github.com/valyala/fastjson"
 )

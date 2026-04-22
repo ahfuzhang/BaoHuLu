@@ -1,0 +1,6 @@
+{
+  "files.associations": {
+    "*.cs.tpl": "csharp"
+  },
+  "extensions.supportNodeGlobalNavigator": true
+}

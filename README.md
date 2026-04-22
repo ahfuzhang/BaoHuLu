@@ -98,11 +98,11 @@
 <table border=1>
 <tr>
   <td colspan=2> &nbsp; </td>
-  <td> 64kb json<br/>对比 StdLib<br/>(protobuf 使用 Grpc.Tools) </td>
-  <td> 232 bytes json<br/>对比 StdLib<br/>(protobuf 使用 Grpc.Tools) </td>
+  <td> 64kb json</td>
+  <td> 232 bytes json</td>
 </tr>
 <tr>
-  <td rowspan=2>JSON</td>
+  <td rowspan=2>JSON<br/>(对比 StdLib)</td>
   <td>encode</td>
   <td>快 9.07%</td>
   <td> 快 26.72% </td>
@@ -113,7 +113,7 @@
   <td> 快 18.53% </td>
 </tr>
 <tr>
-  <td rowspan=2>Protobuf</td>
+  <td rowspan=2>Protobuf<br/>(对比Grpc.Tools)</td>
   <td>encode</td>
   <td>快 57.30 %</td>
   <td> 快 31.46 % </td>

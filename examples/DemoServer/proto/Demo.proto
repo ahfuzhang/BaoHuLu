@@ -112,4 +112,6 @@ service Demo {
     //option (google.api.http) = {get: "/v1/hello"};
     // todo: 或者更简单：以注释的格式，来辅助代码生成
   }
+
+  rpc Query(ValueTypes) returns (Child) {}
 }

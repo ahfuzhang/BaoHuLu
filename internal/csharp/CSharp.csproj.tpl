@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="QiWa.Common" Version="*" />
+    <PackageReference Include="QiWa.framework" Version="*" />
   </ItemGroup>
 
 </Project>

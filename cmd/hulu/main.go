@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
 	"github.com/ahfuzhang/BaoHuLu/internal/csharp"
@@ -157,6 +158,122 @@ func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, w
 	return nil
 }
 
+// ─── template generation ──────────────────────────────────────────────────────
+
+type ServiceTplData struct {
+	CsharpNamespace string
+	ServiceName     string
+	Methods         []MethodEntry
+	Generator       *protofile.Generator
+}
+
+type MethodEntry struct {
+	MethodName   string
+	RequestType  string
+	ResponseType string
+}
+
+type MethodTplData struct {
+	CsharpNamespace string
+	ServiceName     string
+	MethodName      string
+	RequestType     string
+	ResponseType    string
+	Generator       *protofile.Generator
+}
+
+func renderTplToFile(content []byte, data any, outPath string) error {
+	t, err := template.New("").Parse(string(content))
+	if err != nil {
+		return fmt.Errorf("parse template: %w", err)
+	}
+	f, err := os.Create(outPath)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", outPath, err)
+	}
+	if err := t.Execute(f, data); err != nil {
+		f.Close()
+		return fmt.Errorf("execute template %s: %w", outPath, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", outPath, err)
+	}
+	fmt.Printf("generated %s\n", outPath)
+	return nil
+}
+
+func processTplFile(pg *protofile.Generator, ns string, content []byte, outBase, dstDir string) error {
+	switch {
+	case strings.Contains(outBase, "Service"):
+		for _, svc := range pg.Services {
+			outName := strings.ReplaceAll(outBase, "Service", svc.Name)
+			data := ServiceTplData{
+				CsharpNamespace: ns,
+				ServiceName:     svc.Name,
+				Generator:       pg,
+			}
+			for _, m := range svc.Methods {
+				data.Methods = append(data.Methods, MethodEntry{
+					MethodName:   m.Name,
+					RequestType:  m.RequestType,
+					ResponseType: m.ResponseType,
+				})
+			}
+			if err := renderTplToFile(content, data, filepath.Join(dstDir, outName)); err != nil {
+				return err
+			}
+		}
+	case strings.Contains(outBase, "Method"):
+		for _, svc := range pg.Services {
+			for _, m := range svc.Methods {
+				outName := strings.ReplaceAll(outBase, "Method", svc.Name+m.Name)
+				data := MethodTplData{
+					CsharpNamespace: ns,
+					ServiceName:     svc.Name,
+					MethodName:      m.Name,
+					RequestType:     m.RequestType,
+					ResponseType:    m.ResponseType,
+					Generator:       pg,
+				}
+				if err := renderTplToFile(content, data, filepath.Join(dstDir, outName)); err != nil {
+					return err
+				}
+			}
+		}
+	default:
+		if err := renderTplToFile(content, pg, filepath.Join(dstDir, outBase)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func processTemplateDir(pg *protofile.Generator, srcDir, dstDir string) error {
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dstDir, err)
+	}
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("readdir %s: %w", srcDir, err)
+	}
+	ns := pg.CsharpNamespace
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tpl") {
+			continue
+		}
+		tplPath := filepath.Join(srcDir, e.Name())
+		content, err := os.ReadFile(tplPath)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", tplPath, err)
+		}
+		outBase := strings.TrimSuffix(e.Name(), ".tpl")
+		if err := processTplFile(pg, ns, content, outBase, dstDir); err != nil {
+			return fmt.Errorf("%s: %w", tplPath, err)
+		}
+	}
+	return nil
+}
+
 // runTu generates Go and/or C# code from a .proto file.
 func runTu(args []string) {
 	fs := flag.NewFlagSet("tu", flag.ExitOnError)
@@ -167,14 +284,20 @@ func runTu(args []string) {
 	csOut := fs.String("csharp_out", "", "output directory for C# code (optional)")
 	csOutWithTest := fs.Bool("csharp_out.with.test", false, "also generate a Tests/ project with xunit tests alongside C# output")
 	csOutWithBench := fs.Bool("csharp_out.with.bench", false, "also generate a Benchmarks/ project with BenchmarkDotNet benchmarks alongside C# output")
+	srcTemplateDir := fs.String("src.csharp_template.dir", "", "directory containing .tpl files for C# RPC code generation")
+	dstTemplateOutDir := fs.String("dst.csharp_template.out_dir", "", "output directory for files generated from C# .tpl templates")
 	fs.Parse(args)
 
 	if *src == "" {
-		fmt.Fprintln(os.Stderr, "usage: hulu tu -src=xx.proto [-go_out=./dir/] [-csharp_out=./dir/]")
+		fmt.Fprintln(os.Stderr, "usage: hulu tu -src=xx.proto [-go_out=./dir/] [-csharp_out=./dir/] [-src.csharp_template.dir=./dir/ -dst.csharp_template.out_dir=./dir/]")
 		os.Exit(1)
 	}
-	if *goOut == "" && *csOut == "" {
-		fmt.Fprintln(os.Stderr, "hulu tu: at least one of -go_out or -csharp_out must be specified")
+	if *goOut == "" && *csOut == "" && *srcTemplateDir == "" {
+		fmt.Fprintln(os.Stderr, "hulu tu: at least one of -go_out, -csharp_out, or -src.csharp_template.dir must be specified")
+		os.Exit(1)
+	}
+	if *srcTemplateDir != "" && *dstTemplateOutDir == "" {
+		fmt.Fprintln(os.Stderr, "hulu tu: -dst.csharp_template.out_dir is required when -src.csharp_template.dir is specified")
 		os.Exit(1)
 	}
 
@@ -194,6 +317,13 @@ func runTu(args []string) {
 	base := strings.TrimSuffix(filepath.Base(*src), ".proto")
 	goBase := protofile.CamelToSnake(base) // e.g. DemoServer → demo_server
 	csBase := protofile.SnakeToCamel(base) // e.g. demo_server → DemoServer
+
+	if *srcTemplateDir != "" {
+		if err := processTemplateDir(pg, *srcTemplateDir, *dstTemplateOutDir); err != nil {
+			fmt.Fprintf(os.Stderr, "processTemplateDir: %v\n", err)
+			os.Exit(1)
+		}
+	}
 
 	var goErrCh chan error
 	if *goOut != "" {

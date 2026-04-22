@@ -48,6 +48,17 @@ type MessageDef struct {
 	Comment []string // proto comment lines (without leading //), extension lines stripped
 }
 
+type MethodDef struct {
+	Name         string
+	RequestType  string
+	ResponseType string
+}
+
+type ServiceDef struct {
+	Name    string
+	Methods []MethodDef
+}
+
 // ─── generator ────────────────────────────────────────────────────────────────
 
 type Generator struct {
@@ -58,6 +69,7 @@ type Generator struct {
 	Enums            map[string]*EnumDef
 	Messages         map[string]*MessageDef
 	Order            []string
+	Services         []*ServiceDef
 }
 
 func NewGenerator(pkg string) *Generator {
@@ -112,6 +124,19 @@ func (g *Generator) Collect(def *proto.Proto) {
 		}),
 		proto.WithMessage(func(m *proto.Message) {
 			g.CollectMessage(m)
+		}),
+		proto.WithService(func(s *proto.Service) {
+			sd := &ServiceDef{Name: UpperFirst(s.Name)}
+			for _, el := range s.Elements {
+				if rpc, ok := el.(*proto.RPC); ok {
+					sd.Methods = append(sd.Methods, MethodDef{
+						Name:         UpperFirst(rpc.Name),
+						RequestType:  rpc.RequestType,
+						ResponseType: rpc.ReturnsType,
+					})
+				}
+			}
+			g.Services = append(g.Services, sd)
 		}),
 	)
 	// Compute the effective Go package name from the proto declarations.

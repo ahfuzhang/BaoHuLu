@@ -33,7 +33,7 @@ internal struct {{$goName}}Tags
 // Readonly{{$goName}} — immutable view over decoded protobuf bytes
 // ============================================================================
 
-public struct Readonly{{$goName}} : IResettable, IDecoder
+public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {
 {{- range .Fields}}
     [JsonPropertyName("{{.JsonName}}")]
@@ -51,18 +51,6 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsRepeated}}
         var _{{.Name}}List = this.{{.Name}} ?? new {{.LocalType}}();
         _{{.Name}}List.Clear();
-{{- else if .IsString}}
-        string? _{{.Name}} = null;
-{{- else if .IsBytes}}
-        byte[]? _{{.Name}} = null;
-{{- else if .IsMsg}}
-        {{.ReadonlyType}} _{{.Name}} = default;
-{{- else if .IsEnum}}
-        {{.WriterType}} _{{.Name}} = default;
-{{- else if .IsBool}}
-        bool _{{.Name}} = false;
-{{- else}}
-        {{.WriterType}} _{{.Name}} = {{csDefault .WriterType}};
 {{- end}}
 {{- end}}
 
@@ -314,7 +302,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                     if (!TryReadVarint(binary, _pos, out ulong _mlen{{.Name}}, out int _mlb{{.Name}}))
                         return Error.WithLoc(1, "bad msg {{.Name}}");
                     _pos += _mlb{{.Name}};
-                    var _subErr{{.Name}} = _{{.Name}}.FromProtobuf(binary.Slice(_pos, (int)_mlen{{.Name}}));
+                    var _subErr{{.Name}} = this.{{.Name}}.FromProtobuf(binary.Slice(_pos, (int)_mlen{{.Name}}));
                     if (_subErr{{.Name}}.Err()) return _subErr{{.Name}};
                     _pos += (int)_mlen{{.Name}};
                 }
@@ -323,7 +311,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                     if (!TryReadVarint(binary, _pos, out ulong _slen{{.Name}}, out int _slb{{.Name}}))
                         return Error.WithLoc(1, "bad string {{.Name}}");
                     _pos += _slb{{.Name}};
-                    _{{.Name}} = Encoding.UTF8.GetString(binary.Slice(_pos, (int)_slen{{.Name}}));
+                    this.{{.Name}} = Encoding.UTF8.GetString(binary.Slice(_pos, (int)_slen{{.Name}}));
                     _pos += (int)_slen{{.Name}};
                 }
 {{- else if .IsBytes}}
@@ -331,7 +319,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                     if (!TryReadVarint(binary, _pos, out ulong _blen{{.Name}}, out int _blb{{.Name}}))
                         return Error.WithLoc(1, "bad bytes {{.Name}}");
                     _pos += _blb{{.Name}};
-                    _{{.Name}} = binary.Slice(_pos, (int)_blen{{.Name}}).ToArray();
+                    this.{{.Name}} = binary.Slice(_pos, (int)_blen{{.Name}}).ToArray();
                     _pos += (int)_blen{{.Name}};
                 }
 {{- else if .IsFixed32}}
@@ -339,11 +327,11 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                     if (!TryReadFixed32(binary, _pos, out uint _f32v{{.Name}}))
                         return Error.WithLoc(1, "bad fixed32 {{.Name}}");
 {{- if eq .Type "float"}}
-                    _{{.Name}} = BitConverter.UInt32BitsToSingle(_f32v{{.Name}});
+                    this.{{.Name}} = BitConverter.UInt32BitsToSingle(_f32v{{.Name}});
 {{- else if eq .Type "sfixed32"}}
-                    _{{.Name}} = (int)_f32v{{.Name}};
+                    this.{{.Name}} = (int)_f32v{{.Name}};
 {{- else}}
-                    _{{.Name}} = _f32v{{.Name}};
+                    this.{{.Name}} = _f32v{{.Name}};
 {{- end}}
                     _pos += 4;
                 }
@@ -352,11 +340,11 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                     if (!TryReadFixed64(binary, _pos, out ulong _f64v{{.Name}}))
                         return Error.WithLoc(1, "bad fixed64 {{.Name}}");
 {{- if eq .Type "double"}}
-                    _{{.Name}} = BitConverter.UInt64BitsToDouble(_f64v{{.Name}});
+                    this.{{.Name}} = BitConverter.UInt64BitsToDouble(_f64v{{.Name}});
 {{- else if eq .Type "sfixed64"}}
-                    _{{.Name}} = (long)_f64v{{.Name}};
+                    this.{{.Name}} = (long)_f64v{{.Name}};
 {{- else}}
-                    _{{.Name}} = _f64v{{.Name}};
+                    this.{{.Name}} = _f64v{{.Name}};
 {{- end}}
                     _pos += 8;
                 }
@@ -364,21 +352,21 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                 {
                     if (!TryReadVarint(binary, _pos, out ulong _boolv{{.Name}}, out int _boolb{{.Name}}))
                         return Error.WithLoc(1, "bad bool {{.Name}}");
-                    _{{.Name}} = _boolv{{.Name}} != 0;
+                    this.{{.Name}} = _boolv{{.Name}} != 0;
                     _pos += _boolb{{.Name}};
                 }
 {{- else if .IsSint32}}
                 {
                     if (!TryReadVarint(binary, _pos, out ulong _sz32v{{.Name}}, out int _sz32b{{.Name}}))
                         return Error.WithLoc(1, "bad sint32 {{.Name}}");
-                    _{{.Name}} = ZigZagDecode32(_sz32v{{.Name}});
+                    this.{{.Name}} = ZigZagDecode32(_sz32v{{.Name}});
                     _pos += _sz32b{{.Name}};
                 }
 {{- else if .IsSint64}}
                 {
                     if (!TryReadVarint(binary, _pos, out ulong _sz64v{{.Name}}, out int _sz64b{{.Name}}))
                         return Error.WithLoc(1, "bad sint64 {{.Name}}");
-                    _{{.Name}} = ZigZagDecode64(_sz64v{{.Name}});
+                    this.{{.Name}} = ZigZagDecode64(_sz64v{{.Name}});
                     _pos += _sz64b{{.Name}};
                 }
 {{- else}}
@@ -386,7 +374,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                     // varint / enum
                     if (!TryReadVarint(binary, _pos, out ulong _varv{{.Name}}, out int _varb{{.Name}}))
                         return Error.WithLoc(1, "bad varint {{.Name}}");
-                    _{{.Name}} = ({{.WriterType}})_varv{{.Name}};
+                    this.{{.Name}} = ({{.WriterType}})_varv{{.Name}};
                     _pos += _varb{{.Name}};
                 }
 {{- end}}
@@ -404,12 +392,6 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
         this.{{.Name}} = _{{.Name}}Dict;
 {{- else if .IsRepeated}}
         this.{{.Name}} = _{{.Name}}List;
-{{- else if .IsString}}
-        this.{{.Name}} = _{{.Name}} ?? string.Empty;
-{{- else if .IsBytes}}
-        this.{{.Name}} = _{{.Name}} ?? Array.Empty<byte>();
-{{- else}}
-        this.{{.Name}} = _{{.Name}};
 {{- end}}
 {{- end}}
         return default;
@@ -451,18 +433,6 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsRepeated}}
         var _{{.Name}}List = this.{{.Name}} ?? new {{.LocalType}}();
         _{{.Name}}List.Clear();
-{{- else if .IsString}}
-        string? _{{.Name}} = null;
-{{- else if .IsBytes}}
-        byte[]? _{{.Name}} = null;
-{{- else if .IsMsg}}
-        {{.ReadonlyType}} _{{.Name}} = default;
-{{- else if .IsEnum}}
-        {{.WriterType}} _{{.Name}} = default;
-{{- else if .IsBool}}
-        bool _{{.Name}} = false;
-{{- else}}
-        {{.WriterType}} _{{.Name}} = {{csDefault .WriterType}};
 {{- end}}
 {{- end}}
 
@@ -556,29 +526,29 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
                 }
 {{- else if .IsMsg}}
                 {
-                    var _jerr{{.Name}} = _{{.Name}}.FromJSONReader(ref reader);
+                    var _jerr{{.Name}} = this.{{.Name}}.FromJSONReader(ref reader);
                     if (_jerr{{.Name}}.Err()) return _jerr{{.Name}};
                 }
 {{- else if .IsString}}
-                    _{{.Name}} = reader.GetString();
+                    this.{{.Name}} = reader.GetString() ?? string.Empty;
 {{- else if .IsBytes}}
-                    _{{.Name}} = reader.GetBytesFromBase64();
+                    this.{{.Name}} = reader.GetBytesFromBase64();
 {{- else if .IsBool}}
-                    _{{.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
+                    this.{{.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else if .IsEnum}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _ev{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = ({{.WriterType}})_ev{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _ev{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_ev{{.Name}}; }
 {{- else if eq .WriterType "double"}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = _dv{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _dv{{.Name}}; }
 {{- else if eq .WriterType "float"}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _fv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = _fv{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _fv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _fv{{.Name}}; }
 {{- else if .IsFixed64}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = ({{.WriterType}})_fl{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_fl{{.Name}}; }
 {{- else if eq .WriterType "long"}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = _fl{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _fl{{.Name}}; }
 {{- else if eq .WriterType "ulong"}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _ful{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = _ful{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _ful{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _ful{{.Name}}; }
 {{- else}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _iv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); _{{.Name}} = ({{.WriterType}})_iv{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _iv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_iv{{.Name}}; }
 {{- end}}
 {{- end}}
             else { reader.Skip(); }
@@ -588,12 +558,6 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
         this.{{.Name}} = _{{.Name}}Dict;
 {{- else if .IsRepeated}}
         this.{{.Name}} = _{{.Name}}List;
-{{- else if .IsString}}
-        this.{{.Name}} = _{{.Name}} ?? string.Empty;
-{{- else if .IsBytes}}
-        this.{{.Name}} = _{{.Name}} ?? Array.Empty<byte>();
-{{- else}}
-        this.{{.Name}} = _{{.Name}};
 {{- end}}
 {{- end}}
         return default;
@@ -675,7 +639,7 @@ public struct Readonly{{$goName}} : IResettable, IDecoder
 // {{$goName}} — mutable struct for building / serialising
 // ============================================================================
 
-public struct {{$goName}} : IResettable, IEncoder
+public partial struct {{$goName}} : IResettable, IEncoder
 {
 {{- range .Fields}}
     [JsonPropertyName("{{.JsonName}}")]
@@ -684,7 +648,7 @@ public struct {{$goName}} : IResettable, IEncoder
 
     // ── ProtobufSize ────────────────────────────────────────────────────────
 
-    public int ProtobufSize()
+    public readonly int ProtobufSize()
     {
         int _size = 0;
 {{- range .Fields}}
@@ -840,7 +804,7 @@ public struct {{$goName}} : IResettable, IEncoder
 
     // ── ToProtobuf ───────────────────────────────────────────────────────────
 
-    public Error ToProtobuf(ref RentedBuffer buf)
+    public readonly Error ToProtobuf(ref RentedBuffer buf)
     {
 {{- range .Fields}}
 {{- if .IsMap}}
@@ -1131,7 +1095,7 @@ public struct {{$goName}} : IResettable, IEncoder
 
     // ── ToJSON ───────────────────────────────────────────────────────────────
 
-    public void ToJSON(ref RentedBuffer buf)
+    public readonly void ToJSON(ref RentedBuffer buf)
     {
         buf.Append((byte)'{');
         bool _first = true;

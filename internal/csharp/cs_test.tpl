@@ -156,7 +156,8 @@ public class {{$goName}}Tests
         var err = r.FromProtobuf(buf.AsSpan());
         Assert.False(err.Err());
 
-        var w2 = r.Clone();
+        var w2 = new {{$goName}}();
+        r.Clone(ref w2);
         var buf2 = new RentedBuffer(w2.ProtobufSize() + 4);
         w2.ToProtobuf(ref buf2);
 
@@ -180,7 +181,8 @@ public class {{$goName}}Tests
         var err = r.FromJSON(json);
         Assert.False(err.Err());
 
-        var w2 = r.Clone();
+        var w2 = new {{$goName}}();
+        r.Clone(ref w2);
         var jBuf2 = new RentedBuffer(256);
         w2.ToJSON(ref jBuf2);
 
@@ -266,7 +268,8 @@ public class {{$goName}}Tests
         w.ToProtobuf(ref buf);
         var r = new {{$roName}}();
         Assert.False(r.FromProtobuf(buf.AsSpan()).Err());
-        var w2 = r.Clone();
+        var w2 = new {{$goName}}();
+        r.Clone(ref w2);
         var buf2 = new RentedBuffer(w2.ProtobufSize() + 4);
         w2.ToProtobuf(ref buf2);
         Assert.Equal(buf.AsSpan().ToArray(), buf2.AsSpan().ToArray());
@@ -341,7 +344,8 @@ public class {{$goName}}Tests
         w.ToProtobuf(ref buf);
         var r = new {{$roName}}();
         Assert.False(r.FromProtobuf(buf.AsSpan()).Err());
-        var w2 = r.Clone();
+        var w2 = new {{$goName}}();
+        r.Clone(ref w2);
         Assert.Equal(escStr, w2.{{$strf.Name}});
 
         // JSON roundtrip
@@ -350,7 +354,8 @@ public class {{$goName}}Tests
         var json = jBuf.AsSpan().ToArray();
         var r2 = new {{$roName}}();
         Assert.False(r2.FromJSON(json).Err());
-        var w3 = r2.Clone();
+        var w3 = new {{$goName}}();
+        r2.Clone(ref w3);
         Assert.Equal(escStr, w3.{{$strf.Name}});
 
         buf.Dispose();

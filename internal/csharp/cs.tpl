@@ -565,48 +565,59 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 
     // ── Clone ─────────────────────────────────────────────────────────────────
 
-    public {{$goName}} Clone()
+    public void Clone(ref {{$goName}} dst)
     {
-        var _clone = new {{$goName}}();
 {{- range .Fields}}
 {{- if .IsMap}}
 {{- if .MapValIsMsg}}
-        if ({{.Name}} != null)
-        {
-            _clone.{{.Name}} = new Dictionary<{{.MapKeyCS}}, {{.MapValCS}}>({{.Name}}.Count);
-            foreach (var _kv{{.Name}} in {{.Name}})
-                _clone.{{.Name}}[_kv{{.Name}}.Key] = _kv{{.Name}}.Value.Clone();
-        }
+        if (dst.{{.Name}} == null)
+            dst.{{.Name}} = new Dictionary<{{.MapKeyCS}}, {{.MapValCS}}>({{.Name}}?.Count ?? 0);
         else
-        {
-            _clone.{{.Name}} = new Dictionary<{{.MapKeyCS}}, {{.MapValCS}}>();
-        }
+            dst.{{.Name}}.Clear();
+        if ({{.Name}} != null)
+            foreach (var _kv{{.Name}} in {{.Name}})
+            {
+                {{.MapValCS}} _v{{.Name}} = default;
+                _kv{{.Name}}.Value.Clone(ref _v{{.Name}});
+                dst.{{.Name}}[_kv{{.Name}}.Key] = _v{{.Name}};
+            }
 {{- else}}
-        _clone.{{.Name}} = {{.Name}} != null ? new Dictionary<{{.MapKeyCS}}, {{.MapValCS}}>({{.Name}}) : new Dictionary<{{.MapKeyCS}}, {{.MapValCS}}>();
+        if (dst.{{.Name}} == null)
+            dst.{{.Name}} = new Dictionary<{{.MapKeyCS}}, {{.MapValCS}}>({{.Name}}?.Count ?? 0);
+        else
+            dst.{{.Name}}.Clear();
+        if ({{.Name}} != null)
+            foreach (var _kv{{.Name}} in {{.Name}})
+                dst.{{.Name}}[_kv{{.Name}}.Key] = _kv{{.Name}}.Value;
 {{- end}}
 {{- else if .IsRepeated}}
 {{- if .ElemIsMsg}}
-        if ({{.Name}} != null)
-        {
-            var _lst{{.Name}} = new List<{{.ElemTypeCS}}>({{.Name}}.Count);
-            foreach (var _item{{.Name}} in {{.Name}})
-                _lst{{.Name}}.Add(_item{{.Name}}.Clone());
-            _clone.{{.Name}} = _lst{{.Name}};
-        }
+        if (dst.{{.Name}} == null)
+            dst.{{.Name}} = new List<{{.ElemTypeCS}}>({{.Name}}?.Count ?? 0);
         else
-        {
-            _clone.{{.Name}} = new List<{{.ElemTypeCS}}>();
-        }
+            dst.{{.Name}}.Clear();
+        if ({{.Name}} != null)
+            foreach (var _item{{.Name}} in {{.Name}})
+            {
+                {{.ElemTypeCS}} _e{{.Name}} = default;
+                _item{{.Name}}.Clone(ref _e{{.Name}});
+                dst.{{.Name}}.Add(_e{{.Name}});
+            }
 {{- else}}
-        _clone.{{.Name}} = {{.Name}} != null ? new List<{{.ElemTypeCS}}>({{.Name}}) : new List<{{.ElemTypeCS}}>();
+        if (dst.{{.Name}} == null)
+            dst.{{.Name}} = new List<{{.ElemTypeCS}}>({{.Name}}?.Count ?? 0);
+        else
+            dst.{{.Name}}.Clear();
+        if ({{.Name}} != null)
+            foreach (var _item{{.Name}} in {{.Name}})
+                dst.{{.Name}}.Add(_item{{.Name}});
 {{- end}}
 {{- else if .IsMsg}}
-        _clone.{{.Name}} = {{.Name}}.Clone();
+        {{.Name}}.Clone(ref dst.{{.Name}});
 {{- else}}
-        _clone.{{.Name}} = {{.Name}};
+        dst.{{.Name}} = {{.Name}};
 {{- end}}
 {{- end}}
-        return _clone;
     }
 
     // ── Reset ─────────────────────────────────────────────────────────────────

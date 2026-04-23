@@ -171,6 +171,7 @@ type MethodEntry struct {
 	MethodName   string
 	RequestType  string
 	ResponseType string
+	Path         string // @path annotation value; non-empty means an additional HTTP path alias
 }
 
 type MethodTplData struct {
@@ -217,6 +218,7 @@ func processTplFile(pg *protofile.Generator, ns string, content []byte, outBase,
 					MethodName:   m.Name,
 					RequestType:  m.RequestType,
 					ResponseType: m.ResponseType,
+					Path:         m.Path,
 				})
 			}
 			if err := renderTplToFile(content, data, filepath.Join(dstDir, outName)); err != nil {

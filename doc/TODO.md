@@ -53,8 +53,11 @@
   - bool 类型的 key
   - bytes 类型的支持
 * linux + amd64 下的 benchmark ✅
-* 命令行支持传入模板文件，允许自定义的代码生成逻辑
+* 命令行支持传入模板文件，允许自定义的代码生成逻辑 ✅
 * csharp rpc
   - 生成 QiWa 框架的 server 端代码  50%
   - 生成 QiWa 框架的 client 端的代码
     - 是否需要 client context ?
+  - 支持 rpc 上的扩展语法
+  - Clone() 方法不够好：如何对象重用?
+  - 支持 @path=/xx 的扩展

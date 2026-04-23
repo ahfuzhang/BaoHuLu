@@ -52,6 +52,7 @@ type MethodDef struct {
 	Name         string
 	RequestType  string
 	ResponseType string
+	Path         string // @path annotation value; non-empty means an additional HTTP path alias
 }
 
 type ServiceDef struct {
@@ -129,10 +130,13 @@ func (g *Generator) Collect(def *proto.Proto) {
 			sd := &ServiceDef{Name: UpperFirst(s.Name)}
 			for _, el := range s.Elements {
 				if rpc, ok := el.(*proto.RPC); ok {
+					rawComments := ExtractCommentLines(rpc.Comment)
+					rpcExt, _ := protoextensions.ParseAndStripRpc(rawComments)
 					sd.Methods = append(sd.Methods, MethodDef{
 						Name:         UpperFirst(rpc.Name),
 						RequestType:  rpc.RequestType,
 						ResponseType: rpc.ReturnsType,
+						Path:         rpcExt.Path,
 					})
 				}
 			}

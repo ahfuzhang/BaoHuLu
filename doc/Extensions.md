@@ -84,3 +84,21 @@ message Child{
 * 语法为： `// @tag=${Name}:${value}`
 * 对于 golang:
   - 每个 struct 后的成员，在 json 这个 tag 之后增加 `json:"${XX},omitempty", ${Name}:"${Value}"`
+
+## method 扩展语法
+
+### @path
+
+在 rpc 上，可以通过 @path 来指定 api 的访问路径。
+
+```protobuf
+service Demo {
+  // @path=/api/v1/login
+  rpc Login(LoginRequest) returns (LoginResponse) {}
+  rpc GetUserInfo(GetUserInfoRequest) returns (GetUserInfoResponse) {}
+  rpc SetUserTags(SetUserTagsRequest) returns (SetUserTagsResponse) {}
+}
+```
+
+当生成 service 的代码时，`@path` 中指定的路径变成分发的路径。
+

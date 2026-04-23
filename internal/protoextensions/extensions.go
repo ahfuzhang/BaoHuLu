@@ -73,6 +73,33 @@ func ParseAndStripField(lines []string) (FieldExtensions, []string) {
 	return ext, clean
 }
 
+// RpcExtensions collects all extension annotations found on a proto RPC method.
+type RpcExtensions struct {
+	// Path, when non-empty, specifies an additional HTTP path alias (@path=xxx).
+	Path string
+}
+
+// ParseAndStripRpc scans comment lines for RPC-level extension annotations,
+// removes those lines, and returns the parsed extensions together with the
+// remaining clean lines.
+func ParseAndStripRpc(lines []string) (RpcExtensions, []string) {
+	var ext RpcExtensions
+	var clean []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "@") {
+			clean = append(clean, line)
+			continue
+		}
+		key, value := splitKeyValue(trimmed[1:])
+		if key == "path" {
+			ext.Path = value
+		}
+		// Unknown RPC-level annotations are silently dropped.
+	}
+	return ext, clean
+}
+
 // ParseAndStripMessage scans comment lines for message-level extension
 // annotations, removes those lines, and returns the parsed extensions together
 // with the remaining clean lines.

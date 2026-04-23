@@ -88,6 +88,9 @@ public class {{.ServiceName}}  // 这里是 service 的名字
         {
 {{- range .Methods}}
             case "/{{$.ServiceName}}/{{.MethodName}}":
+{{- if .Path}}
+            case "{{.Path}}":
+{{- end}}
                 {
                     Interlocked.Increment(ref Counters.{{.MethodName}}RequestTotal);
                     {{.MethodName}}Context ctx = {{.MethodName}}ContextPool.Get();

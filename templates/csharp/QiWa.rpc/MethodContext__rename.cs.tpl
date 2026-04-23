@@ -2,6 +2,7 @@
 
 namespace {{.CsharpNamespace}};
 
+using System.Text;
 using QiWa.Common;
 using QiWa.KestrelWrap;
 
@@ -21,13 +22,23 @@ class {{.MethodName}}Context : ContextBase, QiWa.Common.IResettable
 
     public async ValueTask<Error> Run()
     {
-        // todo: 业务代码写在这里
-        // ref readonly Readonly{{.RequestType}} req = ref Request;
-        // req.Reset();
-        // ref {{.ResponseType}} rsp = ref Response;
-        // rsp.Reset();
-        Request.Reset();
-        Response.Reset();
+        ref readonly var req = ref Request;
+        ref var rsp = ref Response;
+        // todo: write your bussiness logic code here
+        rsp.Code = 0;
+        var buf = new RentedBuffer(1024);
+        string j;
+        try
+        {
+            {{.RequestType}} temp = req.Clone();
+            temp.ToJSON(ref buf);
+            j = Encoding.UTF8.GetString(buf.AsSpan());
+        }
+        finally
+        {
+            buf.Dispose();
+        }
+        rsp.Message = $"success. req={j}";
         return default;
     }
 }

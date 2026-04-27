@@ -220,11 +220,12 @@ func JsonScalarClass(protoType string) string {
 
 type FieldTpl struct {
 	protofile.FieldDef
-	WireType    WireTypeVal
-	ReaderType  string
-	IsRawBuf    bool   // synthetic rawBuffer []byte field for readonly structs
-	StructTag   string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
-	MapValIsMsg bool   // true when MapVal is a message type (not scalar/enum)
+	WireType        WireTypeVal
+	ReaderType      string
+	IsRawBuf        bool   // synthetic rawBuffer []byte field for readonly structs
+	StructTag       string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
+	MapValIsMsg     bool   // true when MapVal is a message type (not scalar/enum)
+	ElemIsRecursive bool   // true when map/repeated element msg type cycles back to the containing message
 }
 
 type MsgTpl struct {
@@ -300,7 +301,38 @@ func buildStructTag(fd protofile.FieldDef) string {
 	return sb.String()
 }
 
-func (g *Generator) makeFieldTpl(fd protofile.FieldDef) FieldTpl {
+// canReachViaAllEdges reports whether message type 'start' can reach 'target'
+// following all field types — plain msg, repeated elem, map value — in the
+// message graph.  Used to detect runtime infinite-recursion in test builders.
+func canReachViaAllEdges(messages map[string]*protofile.MessageDef, start, target string, visited map[string]bool) bool {
+	if start == target {
+		return true
+	}
+	if visited[start] {
+		return false
+	}
+	visited[start] = true
+	md, ok := messages[start]
+	if !ok {
+		return false
+	}
+	for _, fd := range md.Fields {
+		var next string
+		if fd.IsMsg && !fd.Map {
+			next = fd.Type
+		} else if fd.Map && fd.MapVal != "" {
+			if _, ok := messages[fd.MapVal]; ok {
+				next = fd.MapVal
+			}
+		}
+		if next != "" && canReachViaAllEdges(messages, next, target, visited) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Generator) makeFieldTpl(fd protofile.FieldDef, containingMsgName string) FieldTpl {
 	var wt WireTypeVal
 	if fd.Map || fd.Repeated {
 		wt = WireTypeLenDelim
@@ -312,12 +344,30 @@ func (g *Generator) makeFieldTpl(fd protofile.FieldDef) FieldTpl {
 		_, isMsg, _ := g.ProtoTypeToGo(fd.MapVal, false)
 		mapValIsMsg = isMsg
 	}
+	// Detect whether a map-value or repeated-element message type can reach the
+	// containing message through any chain of fields (including maps and slices).
+	// Such fields would cause infinite recursion if their builder calls the
+	// containing message's builder, so they need an independent "Base" builder.
+	var elemIsRecursive bool
+	if containingMsgName != "" {
+		if fd.Map && fd.MapVal != "" {
+			_, isMsg, _ := g.ProtoTypeToGo(fd.MapVal, false)
+			if isMsg {
+				visited := map[string]bool{}
+				elemIsRecursive = canReachViaAllEdges(g.Messages, fd.MapVal, containingMsgName, visited)
+			}
+		} else if fd.IsMsg && fd.Repeated {
+			visited := map[string]bool{}
+			elemIsRecursive = canReachViaAllEdges(g.Messages, fd.Type, containingMsgName, visited)
+		}
+	}
 	return FieldTpl{
-		FieldDef:    fd,
-		WireType:    wt,
-		ReaderType:  g.readerGoType(fd),
-		StructTag:   buildStructTag(fd),
-		MapValIsMsg: mapValIsMsg,
+		FieldDef:        fd,
+		WireType:        wt,
+		ReaderType:      g.readerGoType(fd),
+		StructTag:       buildStructTag(fd),
+		MapValIsMsg:     mapValIsMsg,
+		ElemIsRecursive: elemIsRecursive,
 	}
 }
 
@@ -342,6 +392,9 @@ func (g *Generator) Render(out *os.File) error {
 
 		// --- Writer struct: sort using precomputed writer layouts for IsMsg fields.
 		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // recursive field stored as a pointer
+			}
 			if fd.IsMsg {
 				if li, ok := writerLayouts[fd.Type]; ok {
 					return li.Size
@@ -350,6 +403,9 @@ func (g *Generator) Render(out *os.File) error {
 			return protofile.FieldGoSize(fd)
 		}
 		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // pointer word
+			}
 			if fd.IsMsg {
 				if li, ok := writerLayouts[fd.Type]; ok {
 					return li.Ptrdata
@@ -362,7 +418,7 @@ func (g *Generator) Render(out *os.File) error {
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedWriterDefs, writerSizeOf, writerPtrdataOf)
 
 		for _, fd := range sortedWriterDefs {
-			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd))
+			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
 		}
 
 		// --- Readonly struct: include rawBuffer in the sort, and use precomputed
@@ -373,6 +429,9 @@ func (g *Generator) Render(out *os.File) error {
 		readerDefs = append(readerDefs, md.Fields...)
 
 		readerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // recursive field stored as a pointer
+			}
 			if fd.IsMsg {
 				if li, ok := readerLayouts[fd.Type]; ok {
 					return li.Size
@@ -381,6 +440,9 @@ func (g *Generator) Render(out *os.File) error {
 			return protofile.FieldGoSize(fd)
 		}
 		readerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // pointer word
+			}
 			if fd.IsMsg {
 				if li, ok := readerLayouts[fd.Type]; ok {
 					return li.Ptrdata
@@ -400,7 +462,7 @@ func (g *Generator) Render(out *os.File) error {
 					IsRawBuf:   true,
 				})
 			} else {
-				mt.ReaderFields = append(mt.ReaderFields, g.makeFieldTpl(fd))
+				mt.ReaderFields = append(mt.ReaderFields, g.makeFieldTpl(fd, name))
 			}
 		}
 
@@ -525,7 +587,8 @@ func SampleScalarLiteral(protoType, goType string) string {
 
 // SampleFieldLiteral returns a Go source expression that produces a
 // representative non-zero value for field ft, suitable for use inside a
-// makeSampleXxx() struct literal.
+// makeSampleXxxBase() struct literal.  Recursive fields (IsRecursive or
+// ElemIsRecursive) return "nil" so the Base function stays recursion-free.
 func SampleFieldLiteral(ft FieldTpl) string {
 	if ft.Map {
 		// Single-entry map to avoid non-deterministic serialisation order.
@@ -539,6 +602,9 @@ func SampleFieldLiteral(ft FieldTpl) string {
 			keyLit = SampleScalarLiteral(ft.MapKey, "")
 		}
 		if ft.MapValIsMsg {
+			if ft.ElemIsRecursive {
+				return "nil" // recursive map value; populated by makeSampleXxx using Base
+			}
 			// Struct field is map[keyType]*MsgType; use an IIFE to build a pointer entry.
 			msgGoName := protofile.GoTypeName(ft.MapVal)
 			keyGoType, ok := protofile.ScalarProtoToGo[ft.MapKey]
@@ -558,13 +624,91 @@ func SampleFieldLiteral(ft FieldTpl) string {
 		return fmt.Sprintf("%s{%s: %s}", ft.GoType, keyLit, valLit)
 	}
 	if ft.Repeated {
+		if ft.IsMsg && ft.ElemIsRecursive {
+			return "nil" // recursive repeated elem; populated by makeSampleXxx using Base
+		}
 		elemLit := SampleScalarLiteral(ft.Type, strings.TrimPrefix(ft.GoType, "[]"))
 		return fmt.Sprintf("%s{%s}", ft.GoType, elemLit)
 	}
 	if ft.IsMsg {
+		if ft.IsRecursive {
+			return "nil" // recursive pointer field; avoid infinite recursion in sample generation
+		}
 		return fmt.Sprintf("makeSample%s()", ft.GoType)
 	}
 	return SampleScalarLiteral(ft.Type, ft.GoType)
+}
+
+// SampleRecursiveFieldLiteral returns the Go expression for a recursive field's
+// value using the independent "Base" builder, to be used in the full
+// makeSampleXxx() function after calling makeSampleXxxBase().
+func SampleRecursiveFieldLiteral(ft FieldTpl) string {
+	if ft.IsMsg && ft.IsRecursive {
+		return fmt.Sprintf("(func() *%s { v := makeSample%sBase(); return &v }())", ft.GoType, ft.GoType)
+	}
+	if ft.Map && ft.MapValIsMsg && ft.ElemIsRecursive {
+		msgGoName := protofile.GoTypeName(ft.MapVal)
+		var keyLit string
+		switch ft.MapKey {
+		case "string":
+			keyLit = `"k"`
+		case "bool":
+			return "nil"
+		default:
+			keyLit = SampleScalarLiteral(ft.MapKey, "")
+		}
+		keyGoType, ok := protofile.ScalarProtoToGo[ft.MapKey]
+		if !ok {
+			keyGoType = ft.MapKey
+		}
+		return fmt.Sprintf(
+			`(func() map[%s]*%s { v := makeSample%sBase(); return map[%s]*%s{%s: &v} }())`,
+			keyGoType, msgGoName, msgGoName, keyGoType, msgGoName, keyLit)
+	}
+	if ft.Repeated && ft.IsMsg && ft.ElemIsRecursive {
+		elemType := strings.TrimPrefix(ft.GoType, "[]")
+		return fmt.Sprintf("%s{makeSample%sBase()}", ft.GoType, elemType)
+	}
+	return "nil"
+}
+
+// HasAnyRecursiveField returns true when any field is a direct recursive
+// message pointer (IsRecursive) or a map/repeated whose element type cycles
+// back to the containing message (ElemIsRecursive).
+func HasAnyRecursiveField(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if f.IsRecursive || f.ElemIsRecursive {
+			return true
+		}
+	}
+	return false
+}
+
+// BenchMapFillRecursive generates a single-entry fill for a recursive map
+// field using the independent "Base" builder, avoiding infinite recursion.
+func BenchMapFillRecursive(ft FieldTpl) string {
+	msgGoName := protofile.GoTypeName(ft.MapVal)
+	switch ft.MapKey {
+	case "string":
+		return fmt.Sprintf(`{ v := benchBuild%sBase(); m[strconv.Itoa(0)] = &v }`, msgGoName)
+	case "int32", "sint32", "sfixed32":
+		return fmt.Sprintf(`{ v := benchBuild%sBase(); m[int32(0)] = &v }`, msgGoName)
+	case "uint32", "fixed32":
+		return fmt.Sprintf(`{ v := benchBuild%sBase(); m[uint32(0)] = &v }`, msgGoName)
+	case "int64", "sint64", "sfixed64":
+		return fmt.Sprintf(`{ v := benchBuild%sBase(); m[int64(0)] = &v }`, msgGoName)
+	case "uint64", "fixed64":
+		return fmt.Sprintf(`{ v := benchBuild%sBase(); m[uint64(0)] = &v }`, msgGoName)
+	default:
+		return fmt.Sprintf(`{ v := benchBuild%sBase(); m[0] = &v }`, msgGoName)
+	}
+}
+
+// BenchSliceFillRecursive generates a single-element fill for a recursive
+// repeated field using the independent "Base" builder.
+func BenchSliceFillRecursive(ft FieldTpl) string {
+	elemType := strings.TrimPrefix(ft.GoType, "[]")
+	return fmt.Sprintf(`s[0] = benchBuild%sBase()`, elemType)
 }
 
 // isLargeIntType returns true for proto scalar types whose JSON serialisation
@@ -1076,6 +1220,9 @@ func (g *Generator) RenderTest(out *os.File) error {
 		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
 
 		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // recursive field stored as a pointer
+			}
 			if fd.IsMsg {
 				if li, ok := writerLayouts[fd.Type]; ok {
 					return li.Size
@@ -1084,6 +1231,9 @@ func (g *Generator) RenderTest(out *os.File) error {
 			return protofile.FieldGoSize(fd)
 		}
 		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // pointer word
+			}
 			if fd.IsMsg {
 				if li, ok := writerLayouts[fd.Type]; ok {
 					return li.Ptrdata
@@ -1095,7 +1245,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedWriterDefs, writerSizeOf, writerPtrdataOf)
 
 		for _, fd := range sortedWriterDefs {
-			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd))
+			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
 		}
 
 		rawBufDef := protofile.FieldDef{Name: "rawBuffer", Type: "bytes", GoType: "[]byte"}
@@ -1104,6 +1254,9 @@ func (g *Generator) RenderTest(out *os.File) error {
 		readerDefs = append(readerDefs, md.Fields...)
 
 		readerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // recursive field stored as a pointer
+			}
 			if fd.IsMsg {
 				if li, ok := readerLayouts[fd.Type]; ok {
 					return li.Size
@@ -1112,6 +1265,9 @@ func (g *Generator) RenderTest(out *os.File) error {
 			return protofile.FieldGoSize(fd)
 		}
 		readerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // pointer word
+			}
 			if fd.IsMsg {
 				if li, ok := readerLayouts[fd.Type]; ok {
 					return li.Ptrdata
@@ -1130,7 +1286,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 					IsRawBuf:   true,
 				})
 			} else {
-				mt.ReaderFields = append(mt.ReaderFields, g.makeFieldTpl(fd))
+				mt.ReaderFields = append(mt.ReaderFields, g.makeFieldTpl(fd, name))
 			}
 		}
 
@@ -1145,6 +1301,8 @@ func (g *Generator) RenderTest(out *os.File) error {
 
 	fnMap := template.FuncMap{
 		"sampleLit":                SampleFieldLiteral,
+		"sampleLitFull":            SampleRecursiveFieldLiteral,
+		"hasAnyRecursiveField":     HasAnyRecursiveField,
 		"hasLargeIntFields":        HasLargeIntFields,
 		"largeIntFields":           LargeIntFields,
 		"largeIntLit":              LargeIntLit,
@@ -1188,6 +1346,9 @@ func (g *Generator) RenderBench(out *os.File) error {
 		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
 
 		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // recursive field stored as a pointer
+			}
 			if fd.IsMsg {
 				if li, ok := writerLayouts[fd.Type]; ok {
 					return li.Size
@@ -1196,6 +1357,9 @@ func (g *Generator) RenderBench(out *os.File) error {
 			return protofile.FieldGoSize(fd)
 		}
 		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8 // pointer word
+			}
 			if fd.IsMsg {
 				if li, ok := writerLayouts[fd.Type]; ok {
 					return li.Ptrdata
@@ -1207,7 +1371,7 @@ func (g *Generator) RenderBench(out *os.File) error {
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedWriterDefs, writerSizeOf, writerPtrdataOf)
 
 		for _, fd := range sortedWriterDefs {
-			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd))
+			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
 		}
 
 		msgs = append(msgs, mt)
@@ -1220,11 +1384,14 @@ func (g *Generator) RenderBench(out *os.File) error {
 	}
 
 	fnMap := template.FuncMap{
-		"sampleLit":         SampleFieldLiteral,
-		"benchMapFill":      BenchMapFill,
-		"benchSliceFill":    BenchSliceFill,
-		"benchNeedsStrconv": BenchNeedsStrconv,
-		"mapWriterGoType":   MapWriterGoType,
+		"sampleLit":               SampleFieldLiteral,
+		"benchMapFill":            BenchMapFill,
+		"benchSliceFill":          BenchSliceFill,
+		"benchNeedsStrconv":       BenchNeedsStrconv,
+		"mapWriterGoType":         MapWriterGoType,
+		"hasAnyRecursiveField":    HasAnyRecursiveField,
+		"benchMapFillRecursive":   BenchMapFillRecursive,
+		"benchSliceFillRecursive": BenchSliceFillRecursive,
 	}
 	tmpl, err := template.New("pb_timing_test").Funcs(fnMap).Parse(benchTemplate)
 	if err != nil {

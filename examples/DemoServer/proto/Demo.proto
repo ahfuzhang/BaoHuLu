@@ -77,7 +77,9 @@ message AllTypes {
   // 	•	1..18999
   //  •	20000..536870911
 
-  map<string, ValueTypes> values = 1010;
+  map<string, ValueTypes> values = 1010; // map value 是 message 类型的情况
+  AllTypes next = 1011; // 测试递归定义的情形
+  map<uint64, AllTypes> children = 1012;
 }
 
 message ValueTypes {

@@ -196,12 +196,23 @@ type CsFieldTpl struct {
 	MapKey string // proto key type (for map entry decode)
 	MapVal string // proto val type
 	Type   string // proto field type
+	// Wrapper support (set in buildMsgTpls second pass)
+	IsRecursive          bool   // from protofile.FieldDef.IsRecursive
+	UseMapValWrapper     bool   // map value is a message: use Wrapper class for map values
+	UseDirectWrapper     bool   // plain msg field that is recursive: use Wrapper class
+	EffWriterType        string // effective C# type for writer field (with wrapper if applicable)
+	EffReadonlyType      string // effective C# type for readonly field (with wrapper if applicable)
+	EffLocalType         string // effective C# type for local decode variable (with wrapper if applicable)
+	WrapMapValCS         string // e.g. "ValueTypesWrapper" — writer wrapper type for map value
+	WrapReadonlyMapValCS string // e.g. "ReadonlyValueTypesWrapper" — readonly wrapper type for map value
+	MapValIsSelfRef      bool   // map value type is the same as the enclosing message (self-referential)
 }
 
 type CsMsgTpl struct {
-	Name   string // proto name
-	GoName string // stripped name (used as C# type name)
-	Fields []CsFieldTpl
+	Name         string // proto name
+	GoName       string // stripped name (used as C# type name)
+	Fields       []CsFieldTpl
+	NeedsWrapper bool // true when this message type needs Wrapper classes generated
 }
 
 // ─── generator ────────────────────────────────────────────────────────────────
@@ -249,6 +260,8 @@ func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 	if fd.Repeated {
 		f.ElemIsMsg = fd.IsMsg
 	}
+	f.IsRecursive = fd.IsRecursive
+	f.UseDirectWrapper = fd.IsMsg && !fd.Map && !fd.Repeated && fd.IsRecursive
 	return f
 }
 
@@ -316,6 +329,44 @@ func (g *Generator) buildMsgTpls() ([]CsMsgTpl, map[string]protofile.MsgLayoutIn
 		}
 		msgs = append(msgs, mt)
 	}
+
+	// Second pass: compute wrapper-related fields.
+	// A message type T needs Wrapper classes when T is used as a map value or as a direct recursive field.
+	wrapperNeeded := make(map[string]bool)
+	for _, mt := range msgs {
+		for _, f := range mt.Fields {
+			if f.IsMap && f.MapValIsMsg {
+				wrapperNeeded[f.MapVal] = true
+			}
+			if f.UseDirectWrapper {
+				wrapperNeeded[f.Type] = true
+			}
+		}
+	}
+	for i := range msgs {
+		msgs[i].NeedsWrapper = wrapperNeeded[msgs[i].Name]
+		for j := range msgs[i].Fields {
+			f := &msgs[i].Fields[j]
+			if f.IsMap && f.MapValIsMsg {
+				f.UseMapValWrapper = true
+				f.WrapMapValCS = f.MapValCS + "Wrapper"
+				f.WrapReadonlyMapValCS = f.ReadonlyMapValCS + "Wrapper"
+				f.EffWriterType = fmt.Sprintf("Dictionary<%s, %s>", f.MapKeyCS, f.WrapMapValCS)
+				f.EffReadonlyType = fmt.Sprintf("Dictionary<%s, %s>", f.MapKeyCS, f.WrapReadonlyMapValCS)
+				f.EffLocalType = f.EffReadonlyType
+				f.MapValIsSelfRef = (f.MapVal == msgs[i].Name)
+			} else if f.UseDirectWrapper {
+				f.EffWriterType = f.WriterType + "Wrapper"
+				f.EffReadonlyType = f.ReadonlyType + "Wrapper"
+				f.EffLocalType = f.EffReadonlyType
+			} else {
+				f.EffWriterType = f.WriterType
+				f.EffReadonlyType = f.ReadonlyType
+				f.EffLocalType = f.LocalType
+			}
+		}
+	}
+
 	return msgs, writerLayouts
 }
 
@@ -431,14 +482,27 @@ func csSampleLit(f CsFieldTpl) string {
 		}
 		var valSample string
 		if f.MapValIsMsg {
-			valSample = fmt.Sprintf("%sTests.MakeSample%s()", f.MapValCS, f.MapValCS)
+			if f.UseMapValWrapper {
+				if f.MapValIsSelfRef {
+					// self-referential map value: avoid infinite recursion
+					valSample = fmt.Sprintf("new %s()", f.WrapMapValCS)
+				} else {
+					valSample = fmt.Sprintf("new %s { Value = %sTests.MakeSample%s() }", f.WrapMapValCS, f.MapValCS, f.MapValCS)
+				}
+			} else {
+				valSample = fmt.Sprintf("%sTests.MakeSample%s()", f.MapValCS, f.MapValCS)
+			}
 		} else {
 			valSample = primitiveCSLit(f.MapValCS)
 			if valSample == "" {
 				valSample = fmt.Sprintf("(%s)1", f.MapValCS)
 			}
 		}
-		return fmt.Sprintf("new %s { { %s, %s } }", f.WriterType, keySample, valSample)
+		dictType := f.EffWriterType
+		if dictType == "" {
+			dictType = f.WriterType
+		}
+		return fmt.Sprintf("new %s { { %s, %s } }", dictType, keySample, valSample)
 	}
 	if f.IsRepeated {
 		var elemSample string
@@ -455,6 +519,10 @@ func csSampleLit(f CsFieldTpl) string {
 		return fmt.Sprintf("new %s { %s }", f.WriterType, elemSample)
 	}
 	if f.IsMsg {
+		if f.UseDirectWrapper {
+			// recursive field: avoid infinite recursion, use empty wrapper
+			return fmt.Sprintf("new %s()", f.EffWriterType)
+		}
 		return fmt.Sprintf("%sTests.MakeSample%s()", f.WriterType, f.WriterType)
 	}
 	if f.IsEnum {
@@ -488,38 +556,7 @@ func (g *Generator) RenderCSTest(out *os.File, namespace string) error {
 		enums = append(enums, *ed)
 	}
 
-	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
-
-	var msgs []CsMsgTpl
-	for _, name := range g.Order {
-		md := g.Messages[name]
-
-		writerSizeOf := func(fd protofile.FieldDef) int {
-			if fd.IsMsg {
-				if li, ok := writerLayouts[fd.Type]; ok {
-					return li.Size
-				}
-			}
-			return protofile.FieldGoSize(fd)
-		}
-		writerPtrdataOf := func(fd protofile.FieldDef) int {
-			if fd.IsMsg {
-				if li, ok := writerLayouts[fd.Type]; ok {
-					return li.Ptrdata
-				}
-			}
-			return protofile.FieldPtrdata(fd)
-		}
-
-		sortedFields := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
-		writerLayouts[name] = protofile.ComputeStructLayout(sortedFields, writerSizeOf, writerPtrdataOf)
-
-		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name)}
-		for _, fd := range sortedFields {
-			mt.Fields = append(mt.Fields, g.buildCSField(fd))
-		}
-		msgs = append(msgs, mt)
-	}
+	msgs, _ := g.buildMsgTpls()
 
 	data := CsRenderData{
 		Namespace: namespace,

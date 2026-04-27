@@ -38,8 +38,13 @@ type FieldDef struct {
 	Comment  []string // proto comment lines (without leading //), extension lines stripped
 
 	// Extension annotations (@keyword=value in proto comments).
-	YamlName  string                      // @yamlName override; non-empty adds yaml struct tag + constant
-	ExtraTags []protoextensions.TagExt    // @tag=Name:Value extra struct tags
+	YamlName  string                   // @yamlName override; non-empty adds yaml struct tag + constant
+	ExtraTags []protoextensions.TagExt // @tag=Name:Value extra struct tags
+
+	// IsRecursive is true for a plain (non-map, non-repeated) IsMsg field whose
+	// type participates in a cycle in the message dependency graph. Such fields
+	// must be pointer types in Go to avoid an infinite-size struct.
+	IsRecursive bool
 }
 
 type MessageDef struct {
@@ -151,6 +156,54 @@ func (g *Generator) Collect(def *proto.Proto) {
 	} else if g.PackageName != "" {
 		g.Pkg = g.PackageName
 	}
+	g.ComputeRecursiveFields()
+}
+
+// ComputeRecursiveFields marks plain (non-map, non-repeated) IsMsg fields as
+// IsRecursive when their type participates in a cycle in the message dependency
+// graph. Such fields require pointer indirection in Go to avoid infinite struct size.
+func (g *Generator) ComputeRecursiveFields() {
+	// Build adjacency list: message name → direct message-type dependencies
+	// (plain fields only; maps and slices are already pointer-indirected by Go).
+	graph := make(map[string][]string, len(g.Messages))
+	for name, md := range g.Messages {
+		for _, fd := range md.Fields {
+			if fd.IsMsg && !fd.Map && !fd.Repeated {
+				graph[name] = append(graph[name], fd.Type)
+			}
+		}
+	}
+	// For each plain message field, check whether its type can reach the
+	// enclosing message through the graph (i.e., there is a cycle through it).
+	for name, md := range g.Messages {
+		for i := range md.Fields {
+			fd := &md.Fields[i]
+			if !fd.IsMsg || fd.Map || fd.Repeated {
+				continue
+			}
+			visited := make(map[string]bool)
+			if canReachMsg(graph, fd.Type, name, visited) {
+				fd.IsRecursive = true
+			}
+		}
+	}
+}
+
+// canReachMsg reports whether 'start' can reach 'target' following edges in graph.
+func canReachMsg(graph map[string][]string, start, target string, visited map[string]bool) bool {
+	if start == target {
+		return true
+	}
+	if visited[start] {
+		return false
+	}
+	visited[start] = true
+	for _, next := range graph[start] {
+		if canReachMsg(graph, next, target, visited) {
+			return true
+		}
+	}
+	return false
 }
 
 // SnakeToCamel converts a snake_case proto field name to PascalCase Go name.

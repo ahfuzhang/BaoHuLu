@@ -62,7 +62,7 @@ type {{$goName}} struct {
 {{fieldCommentBlock .Comment}}	{{.Name}} map[{{mapKeyGoType .MapKey}}]*{{mapValGoType .MapVal}} {{.StructTag}}
 	_{{.Name}}Arr []{{mapValGoType .MapVal}}
 {{- else}}
-{{fieldCommentBlock .Comment}}	{{.Name}} {{.GoType}} {{.StructTag}}
+{{fieldCommentBlock .Comment}}	{{.Name}} {{if and .IsMsg .IsRecursive}}*{{end}}{{.GoType}} {{.StructTag}}
 {{- end}}
 {{- end}}
 	arena []byte
@@ -81,7 +81,11 @@ func (m *{{$goName}}) Reset() {
 {{- else if .Repeated}}
 	m.{{.Name}} = m.{{.Name}}[:0]
 {{- else if .IsMsg}}
+{{- if .IsRecursive}}
+	m.{{.Name}} = nil
+{{- else}}
 	m.{{.Name}}.Reset()
+{{- end}}
 {{- else if isSliceType .GoType}}
 	m.{{.Name}} = m.{{.Name}}[:0]
 {{- else}}
@@ -186,12 +190,21 @@ func (m *{{$goName}}) ProtobufSize() int {
 	}
 {{- end}}
 {{- else if .IsMsg}}
+{{- if .IsRecursive}}
+	if m.{{.Name}} != nil {
+		sub := m.{{.Name}}.ProtobufSize()
+		if sub > 0 {
+			size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
+		}
+	}
+{{- else}}
 	{
 		sub := m.{{.Name}}.ProtobufSize()
 		if sub > 0 {
 			size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
 		}
 	}
+{{- end}}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
 		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType64bit) + 8
@@ -415,6 +428,16 @@ func (m *{{$goName}}) ToProtobuf(in []byte) []byte {
 	}
 {{- end}}
 {{- else if .IsMsg}}
+{{- if .IsRecursive}}
+	if m.{{.Name}} != nil {
+		sub := m.{{.Name}}.ProtobufSize()
+		if sub > 0 {
+			in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
+			in = utils.AppendVarint(in, uint64(sub))
+			in = m.{{.Name}}.ToProtobuf(in)
+		}
+	}
+{{- else}}
 	{
 		sub := m.{{.Name}}.ProtobufSize()
 		if sub > 0 {
@@ -423,6 +446,7 @@ func (m *{{$goName}}) ToProtobuf(in []byte) []byte {
 			in = m.{{.Name}}.ToProtobuf(in)
 		}
 	}
+{{- end}}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
 		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType64bit)
@@ -663,6 +687,18 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 		}
 	}
 {{- else if $f.IsMsg}}
+{{- if $f.IsRecursive}}
+	if m.{{$f.Name}} != nil {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		dst = m.{{$f.Name}}.ToJSON(dst)
+	}
+{{- else}}
 	if !_jsonFirstField {
 		dst = append(dst, ',')
 	}
@@ -671,6 +707,7 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 	dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
 	dst = append(dst, '"', ':')
 	dst = m.{{$f.Name}}.ToJSON(dst)
+{{- end}}
 {{- else if eq $f.Type "string"}}
 	if len(m.{{$f.Name}}) > 0 {
 		if !_jsonFirstField {
@@ -820,7 +857,7 @@ type Readonly{{$goName}} struct {
 {{fieldCommentBlock .Comment}}	{{.Name}} map[{{mapKeyGoType .MapKey}}]*{{readonlyTypeName .MapVal}} `json:"{{.JsonName}},omitempty"`
 	_{{.Name}}Arr []{{readonlyTypeName .MapVal}}
 {{- else}}
-{{fieldCommentBlock .Comment}}	{{.Name}} {{.ReaderType}} `json:"{{.JsonName}},omitempty"`
+{{fieldCommentBlock .Comment}}	{{.Name}} {{if and .IsMsg .IsRecursive}}*{{end}}{{.ReaderType}} `json:"{{.JsonName}},omitempty"`
 {{- end}}
 {{- end}}
 }
@@ -1028,7 +1065,15 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 	}
 {{- end}}
 {{- else if .IsMsg}}
+{{- if .IsRecursive}}
+	if r.{{.Name}} != nil {
+		dst.{{.Name}} = r.{{.Name}}.Clone(dst.{{.Name}})
+	} else {
+		dst.{{.Name}} = nil
+	}
+{{- else}}
 	r.{{.Name}}.Clone(&dst.{{.Name}})
+{{- end}}
 {{- else if eq .Type "string"}}
 	if len(r.{{.Name}}) > 0 {
 		_loc := len(dst.arena)
@@ -1065,7 +1110,11 @@ func (r *Readonly{{$goName}}) Reset() {
 {{- else if .Repeated}}
 	r.{{.Name}} = r.{{.Name}}[:0]
 {{- else if .IsMsg}}
+{{- if .IsRecursive}}
+	r.{{.Name}} = nil
+{{- else}}
 	r.{{.Name}}.Reset()
+{{- end}}
 {{- else if isSliceType .ReaderType}}
 	r.{{.Name}} = r.{{.Name}}[:0]
 {{- else}}
@@ -1164,6 +1213,11 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			var subData []byte
 			subData, in, err = utils.ConsumeBytes(in)
 			if err != nil { return err }
+{{- if .IsRecursive}}
+			if r.{{.Name}} == nil {
+				r.{{.Name}} = &{{.ReaderType}}{}
+			}
+{{- end}}
 			if err = r.{{.Name}}.FromProtobuf(subData); err != nil { return err }
 {{- else if eq .Type "double"}}
 			r.{{.Name}}, in, err = utils.ReadDouble(in)
@@ -1422,6 +1476,11 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 {{- else if .IsMsg}}
 			_subObj, _e := v.Object()
 			if _e != nil { visitErr = _e; return }
+{{- if .IsRecursive}}
+			if r.{{.Name}} == nil {
+				r.{{.Name}} = &{{.ReaderType}}{}
+			}
+{{- end}}
 			if _e2 := r.{{.Name}}.fromJSONValue(_subObj); _e2 != nil { visitErr = _e2 }
 {{- else if .IsEnum}}
 			_iv, _e := v.Int64()

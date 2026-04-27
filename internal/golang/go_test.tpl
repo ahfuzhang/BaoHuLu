@@ -19,6 +19,31 @@ import (
 
 // ─── {{$goName}} ──────────────────────────────────────────────────────────────
 
+{{if hasAnyRecursiveField .Fields -}}
+// makeSample{{$goName}}Base returns {{$goName}} with non-recursive fields pre-filled.
+// It is an independent helper used by makeSample{{$goName}} to build test data
+// for recursive sub-member fields without causing infinite recursion.
+func makeSample{{$goName}}Base() {{$goName}} {
+	return {{$goName}}{
+{{- range .Fields}}
+		{{.Name}}: {{sampleLit .}},
+{{- end}}
+	}
+}
+
+// makeSample{{$goName}} returns a writer struct pre-filled with representative
+// non-zero values. Recursive sub-member fields are populated using the
+// independent makeSample{{$goName}}Base to avoid infinite recursion.
+func makeSample{{$goName}}() {{$goName}} {
+	w := makeSample{{$goName}}Base()
+{{- range .Fields}}
+{{- if or .IsRecursive .ElemIsRecursive}}
+	w.{{.Name}} = {{sampleLitFull .}}
+{{- end}}
+{{- end}}
+	return w
+}
+{{- else -}}
 // makeSample{{$goName}} returns a writer struct pre-filled with representative
 // non-zero values. Maps have exactly one entry to avoid non-deterministic
 // serialisation order.
@@ -29,6 +54,7 @@ func makeSample{{$goName}}() {{$goName}} {
 {{- end}}
 	}
 }
+{{- end}}
 
 func Test{{$goName}}Empty(t *testing.T) {
 	m := &{{$goName}}{}

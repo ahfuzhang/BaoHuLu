@@ -37,7 +37,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {
 {{- range .Fields}}
     [JsonPropertyName("{{.JsonName}}")]
-    public {{.ReadonlyType}} {{.Name}};
+    public {{.EffReadonlyType}} {{.Name}};
 {{- end}}
 
     // ── FromProtobuf ─────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
         // local decode variables
 {{- range .Fields}}
 {{- if .IsMap}}
-        var _{{.Name}}Dict = this.{{.Name}} ?? new {{.LocalType}}();
+        var _{{.Name}}Dict = this.{{.Name}} ?? new {{.EffLocalType}}();
 {{- else if .IsRepeated}}
         var _{{.Name}}List = this.{{.Name}} ?? new {{.LocalType}}();
         _{{.Name}}List.Clear();
@@ -77,7 +77,9 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else}}
                     {{.MapKeyCS}} _entKey{{.Name}} = default;
 {{- end}}
-{{- if eq .ReadonlyMapValCS "string"}}
+{{- if .UseMapValWrapper}}
+                    {{.WrapReadonlyMapValCS}} _entVal{{.Name}} = null;
+{{- else if eq .ReadonlyMapValCS "string"}}
                     {{.ReadonlyMapValCS}} _entVal{{.Name}} = string.Empty;
 {{- else}}
                     {{.ReadonlyMapValCS}} _entVal{{.Name}} = default;
@@ -128,10 +130,14 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- if .MapValIsMsg}}
                             if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vmlen{{.Name}}, out int _vmlb{{.Name}})) break;
                             _ep{{.Name}} += _vmlb{{.Name}};
-                            {{.ReadonlyMapValCS}} _vsubMsg{{.Name}} = default;
-                            var _vsubErr{{.Name}} = _vsubMsg{{.Name}}.FromProtobuf(_entBin{{.Name}}.Slice(_ep{{.Name}}, (int)_vmlen{{.Name}}));
+                            {{.ReadonlyMapValCS}} _vsubInner{{.Name}} = default;
+                            var _vsubErr{{.Name}} = _vsubInner{{.Name}}.FromProtobuf(_entBin{{.Name}}.Slice(_ep{{.Name}}, (int)_vmlen{{.Name}}));
                             if (_vsubErr{{.Name}}.Err()) return _vsubErr{{.Name}};
-                            _entVal{{.Name}} = _vsubMsg{{.Name}}; _ep{{.Name}} += (int)_vmlen{{.Name}};
+{{- if .UseMapValWrapper}}
+                            _entVal{{.Name}} = new {{.WrapReadonlyMapValCS}}() { Value = _vsubInner{{.Name}} }; _ep{{.Name}} += (int)_vmlen{{.Name}};
+{{- else}}
+                            _entVal{{.Name}} = _vsubInner{{.Name}}; _ep{{.Name}} += (int)_vmlen{{.Name}};
+{{- end}}
 {{- else if eq .MapVal "string"}}
                             if (!TryReadVarint(_entBin{{.Name}}, _ep{{.Name}}, out ulong _vsl{{.Name}}, out int _vsb{{.Name}})) break;
                             _ep{{.Name}} += _vsb{{.Name}};
@@ -302,7 +308,12 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                     if (!TryReadVarint(binary, _pos, out ulong _mlen{{.Name}}, out int _mlb{{.Name}}))
                         return Error.WithLoc(1, "bad msg {{.Name}}");
                     _pos += _mlb{{.Name}};
+{{- if .UseDirectWrapper}}
+                    if (this.{{.Name}} == null) this.{{.Name}} = new {{.EffReadonlyType}}();
+                    var _subErr{{.Name}} = this.{{.Name}}.Value.FromProtobuf(binary.Slice(_pos, (int)_mlen{{.Name}}));
+{{- else}}
                     var _subErr{{.Name}} = this.{{.Name}}.FromProtobuf(binary.Slice(_pos, (int)_mlen{{.Name}}));
+{{- end}}
                     if (_subErr{{.Name}}.Err()) return _subErr{{.Name}};
                     _pos += (int)_mlen{{.Name}};
                 }
@@ -429,7 +440,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
         // local decode variables
 {{- range .Fields}}
 {{- if .IsMap}}
-        var _{{.Name}}Dict = this.{{.Name}} ?? new {{.LocalType}}();
+        var _{{.Name}}Dict = this.{{.Name}} ?? new {{.EffLocalType}}();
 {{- else if .IsRepeated}}
         var _{{.Name}}List = this.{{.Name}} ?? new {{.LocalType}}();
         _{{.Name}}List.Clear();
@@ -460,10 +471,14 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
                             reader.Read();
 {{- if .MapValIsMsg}}
-                            {{.ReadonlyMapValCS}} _mvMsg{{.Name}} = default;
-                            var _mvErr{{.Name}} = _mvMsg{{.Name}}.FromJSONReader(ref reader);
+                            {{.ReadonlyMapValCS}} _mvInner{{.Name}} = default;
+                            var _mvErr{{.Name}} = _mvInner{{.Name}}.FromJSONReader(ref reader);
                             if (_mvErr{{.Name}}.Err()) return _mvErr{{.Name}};
-                            _{{.Name}}Dict[_mke{{.Name}}] = _mvMsg{{.Name}};
+{{- if .UseMapValWrapper}}
+                            _{{.Name}}Dict[_mke{{.Name}}] = new {{.WrapReadonlyMapValCS}}() { Value = _mvInner{{.Name}} };
+{{- else}}
+                            _{{.Name}}Dict[_mke{{.Name}}] = _mvInner{{.Name}};
+{{- end}}
 {{- else if eq .MapVal "string"}}
                             _{{.Name}}Dict[_mke{{.Name}}] = reader.GetString() ?? string.Empty;
 {{- else if eq .MapVal "bytes"}}
@@ -526,7 +541,12 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                 }
 {{- else if .IsMsg}}
                 {
+{{- if .UseDirectWrapper}}
+                    if (this.{{.Name}} == null) this.{{.Name}} = new {{.EffReadonlyType}}();
+                    var _jerr{{.Name}} = this.{{.Name}}.Value.FromJSONReader(ref reader);
+{{- else}}
                     var _jerr{{.Name}} = this.{{.Name}}.FromJSONReader(ref reader);
+{{- end}}
                     if (_jerr{{.Name}}.Err()) return _jerr{{.Name}};
                 }
 {{- else if .IsString}}
@@ -570,6 +590,19 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- range .Fields}}
 {{- if .IsMap}}
 {{- if .MapValIsMsg}}
+{{- if .UseMapValWrapper}}
+        if (dst.{{.Name}} == null)
+            dst.{{.Name}} = new Dictionary<{{.MapKeyCS}}, {{.WrapMapValCS}}>({{.Name}}?.Count ?? 0);
+        else
+            dst.{{.Name}}.Clear();
+        if ({{.Name}} != null)
+            foreach (var _kv{{.Name}} in {{.Name}})
+            {
+                {{.MapValCS}} _v{{.Name}} = default;
+                if (_kv{{.Name}}.Value != null) _kv{{.Name}}.Value.Value.Clone(ref _v{{.Name}});
+                dst.{{.Name}}[_kv{{.Name}}.Key] = new {{.WrapMapValCS}}() { Value = _v{{.Name}} };
+            }
+{{- else}}
         if (dst.{{.Name}} == null)
             dst.{{.Name}} = new Dictionary<{{.MapKeyCS}}, {{.MapValCS}}>({{.Name}}?.Count ?? 0);
         else
@@ -581,6 +614,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                 _kv{{.Name}}.Value.Clone(ref _v{{.Name}});
                 dst.{{.Name}}[_kv{{.Name}}.Key] = _v{{.Name}};
             }
+{{- end}}
 {{- else}}
         if (dst.{{.Name}} == null)
             dst.{{.Name}} = new Dictionary<{{.MapKeyCS}}, {{.MapValCS}}>({{.Name}}?.Count ?? 0);
@@ -613,7 +647,17 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                 dst.{{.Name}}.Add(_item{{.Name}});
 {{- end}}
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        if ({{.Name}} != null)
+        {
+            if (dst.{{.Name}} == null) dst.{{.Name}} = new {{.EffWriterType}}();
+            {{.Name}}.Value.Clone(ref dst.{{.Name}}.Value);
+        }
+        else
+            dst.{{.Name}} = null;
+{{- else}}
         {{.Name}}.Clone(ref dst.{{.Name}});
+{{- end}}
 {{- else}}
         dst.{{.Name}} = {{.Name}};
 {{- end}}
@@ -630,7 +674,11 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsRepeated}}
         {{.Name}}?.Clear();
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        {{.Name}} = null;
+{{- else}}
         {{.Name}}.Reset();
+{{- end}}
 {{- else if .IsString}}
         {{.Name}} = string.Empty;
 {{- else if .IsBytes}}
@@ -643,6 +691,13 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
     }
 }
+{{- if .NeedsWrapper}}
+
+public class Readonly{{$goName}}Wrapper
+{
+    public Readonly{{$goName}} Value;
+}
+{{- end}}
 {{end}}
 {{- define "CsWriterBlock"}}
 {{- $goName := .GoName}}
@@ -654,7 +709,7 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {
 {{- range .Fields}}
     [JsonPropertyName("{{.JsonName}}")]
-    public {{.WriterType}} {{.Name}};
+    public {{.EffWriterType}} {{.Name}};
 {{- end}}
 
     // ── ProtobufSize ────────────────────────────────────────────────────────
@@ -690,7 +745,11 @@ public partial struct {{$goName}} : IResettable, IEncoder
                 _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Key);
 {{- end}}
 {{- if .MapValIsMsg}}
+{{- if .UseMapValWrapper}}
+                int _vsize{{.Name}} = _kv{{.Name}}.Value != null ? _kv{{.Name}}.Value.Value.ProtobufSize() : 0;
+{{- else}}
                 int _vsize{{.Name}} = _kv{{.Name}}.Value.ProtobufSize();
+{{- end}}
                 _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vsize{{.Name}});
 {{- else if eq .MapVal "string"}}
                 int _vlen{{.Name}} = StringByteCount(_kv{{.Name}}.Value);
@@ -773,11 +832,20 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- end}}
         }
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        if ({{.Name}} != null)
+        {
+            int _subSize{{.Name}} = {{.Name}}.Value.ProtobufSize();
+            if (_subSize{{.Name}} > 0)
+                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_subSize{{.Name}});
+        }
+{{- else}}
         {
             int _subSize{{.Name}} = {{.Name}}.ProtobufSize();
             if (_subSize{{.Name}} > 0)
                 _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_subSize{{.Name}});
         }
+{{- end}}
 {{- else if .IsString}}
         if (!string.IsNullOrEmpty({{.Name}}))
         {
@@ -846,7 +914,11 @@ public partial struct {{$goName}} : IResettable, IEncoder
                 _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Key);
 {{- end}}
 {{- if .MapValIsMsg}}
+{{- if .UseMapValWrapper}}
+                int _valMsgSize{{.Name}} = _kv{{.Name}}.Value != null ? _kv{{.Name}}.Value.Value.ProtobufSize() : 0;
+{{- else}}
                 int _valMsgSize{{.Name}} = _kv{{.Name}}.Value.ProtobufSize();
+{{- end}}
                 _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_valMsgSize{{.Name}});
 {{- else if eq .MapVal "string"}}
                 int _vlen{{.Name}} = StringByteCount(_kv{{.Name}}.Value);
@@ -909,7 +981,11 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- if .MapValIsMsg}}
                 WriteTag(ref buf, 2, WireTypeLenDelim);
                 WriteVarint(ref buf, (ulong)_valMsgSize{{.Name}});
+{{- if .UseMapValWrapper}}
+                if (_kv{{.Name}}.Value != null) _kv{{.Name}}.Value.Value.ToProtobuf(ref buf);
+{{- else}}
                 _kv{{.Name}}.Value.ToProtobuf(ref buf);
+{{- end}}
 {{- else if eq .MapVal "string"}}
                 WriteTag(ref buf, 2, WireTypeLenDelim);
                 WriteString(ref buf, _kv{{.Name}}.Value);
@@ -1023,6 +1099,19 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- end}}
         }
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        if ({{.Name}} != null)
+        {
+            var _msub{{.Name}} = new RentedBuffer(64);
+            {{.Name}}.Value.ToProtobuf(ref _msub{{.Name}});
+            if (_msub{{.Name}}.Length > 0)
+            {
+                WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim);
+                WriteBytes(ref buf, _msub{{.Name}}.AsSpan());
+            }
+            _msub{{.Name}}.Dispose();
+        }
+{{- else}}
         {
             var _msub{{.Name}} = new RentedBuffer(64);
             {{.Name}}.ToProtobuf(ref _msub{{.Name}});
@@ -1033,6 +1122,7 @@ public partial struct {{$goName}} : IResettable, IEncoder
             }
             _msub{{.Name}}.Dispose();
         }
+{{- end}}
 {{- else if .IsString}}
         if (!string.IsNullOrEmpty({{.Name}}))
         {
@@ -1130,7 +1220,11 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- end}}
                 buf.Append((byte)'"'); buf.Append((byte)':');
 {{- if .MapValIsMsg}}
+{{- if .UseMapValWrapper}}
+                if (_kv{{.Name}}.Value != null) _kv{{.Name}}.Value.Value.ToJSON(ref buf); else buf.Append("{}"u8);
+{{- else}}
                 _kv{{.Name}}.Value.ToJSON(ref buf);
+{{- end}}
 {{- else if eq .MapVal "string"}}
                 buf.Append((byte)'"'); buf.AppendAsJsonEscapedString(_kv{{.Name}}.Value); buf.Append((byte)'"');
 {{- else if eq .MapVal "bytes"}}
@@ -1191,11 +1285,20 @@ public partial struct {{$goName}} : IResettable, IEncoder
             buf.Append((byte)']');
         }
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        if ({{.Name}} != null)
+        {
+            if (!_first) buf.Append((byte)','); _first = false;
+            buf.Append((byte)'"'); buf.Append({{$goName}}Tags.JsonKey{{.Name}}); buf.Append("\":"u8);
+            {{.Name}}.Value.ToJSON(ref buf);
+        }
+{{- else}}
         {
             if (!_first) buf.Append((byte)','); _first = false;
             buf.Append((byte)'"'); buf.Append({{$goName}}Tags.JsonKey{{.Name}}); buf.Append("\":"u8);
             {{.Name}}.ToJSON(ref buf);
         }
+{{- end}}
 {{- else if .IsString}}
         if (!string.IsNullOrEmpty({{.Name}}))
         {
@@ -1285,7 +1388,11 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- else if .IsRepeated}}
         {{.Name}}?.Clear();
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        {{.Name}} = null;
+{{- else}}
         {{.Name}}.Reset();
+{{- end}}
 {{- else if .IsString}}
         {{.Name}} = string.Empty;
 {{- else}}
@@ -1294,6 +1401,13 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- end}}
     }
 }
+{{- if .NeedsWrapper}}
+
+public class {{$goName}}Wrapper
+{
+    public {{$goName}} Value;
+}
+{{- end}}
 {{end}}
 {{- define "CsTagsWriterFile"}}{{template "CsFileHeader" .}}
 {{with .Msg}}

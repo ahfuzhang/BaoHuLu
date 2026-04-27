@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using QiWa.Common;
 using Xunit;
@@ -52,7 +53,12 @@ internal static class TestValidate
             {
                 Assert.True(actual.{{.Name}}.TryGetValue(kv.Key, out var actualVal), "Field {{.Name}} mismatch: missing map key.");
 {{- if .MapValIsMsg}}
+{{- if .UseMapValWrapper}}
+                if (kv.Value?.Value != null)
+                    Compare{{.MapValCS}}(kv.Value.Value, actualVal!.Value);
+{{- else}}
                 Compare{{.MapValCS}}(kv.Value, actualVal);
+{{- end}}
 {{- else if eq .MapValCS "byte[]"}}
                 CompareByteArray(kv.Value, actualVal, "{{.Name}}");
 {{- else}}
@@ -81,7 +87,12 @@ internal static class TestValidate
             }
         }
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        if (expected.{{.Name}}?.Value != null)
+            Compare{{.WriterType}}(expected.{{.Name}}.Value, actual.{{.Name}}.Value);
+{{- else}}
         Compare{{.WriterType}}(expected.{{.Name}}, actual.{{.Name}});
+{{- end}}
 {{- else if .IsBytes}}
         CompareByteArray(expected.{{.Name}}, actual.{{.Name}}, "{{.Name}}");
 {{- else}}
@@ -318,6 +329,36 @@ public class {{$goName}}Tests
         Assert.True(r.FromProtobuf(bad).Err());
     }
 
+    // Serialises a populated {{$goName}}, then appends unknown fields of every
+    // wire type that a proto3 parser must be able to skip.  Covers the
+    // skip-unknown-field branches for all four live wire types:
+    //   wire 0 (varint)    – field 100: tag [0xA0,0x06], value 1    → [0x01]
+    //   wire 1 (64-bit)    – field 101: tag [0xA9,0x06]             + 8 bytes
+    //   wire 2 (len-delim) – field 102: tag [0xB2,0x06], length 3   + "abc"
+    //   wire 5 (32-bit)    – field 103: tag [0xBD,0x06]             + 4 bytes
+    [Fact]
+    public void FromProtobuf_UnknownTrailingFields_AllWireTypes_Ignored()
+    {
+        var w = MakeSample{{$goName}}();
+        var buf = new RentedBuffer(w.ProtobufSize() + 4);
+        w.ToProtobuf(ref buf);
+        var valid = buf.AsSpan().ToArray();
+        buf.Dispose();
+
+        var cases = new[]
+        {
+            valid.Concat(new byte[] { 0xA0, 0x06, 0x01 }).ToArray(),                                             // wire 0: varint
+            valid.Concat(new byte[] { 0xA9, 0x06, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 }).ToArray(), // wire 1: 64-bit
+            valid.Concat(new byte[] { 0xB2, 0x06, 0x03, 0x61, 0x62, 0x63 }).ToArray(),                          // wire 2: len-delim
+            valid.Concat(new byte[] { 0xBD, 0x06, 0x01, 0x02, 0x03, 0x04 }).ToArray(),                          // wire 5: 32-bit
+        };
+        foreach (var data in cases)
+        {
+            var r = new {{$roName}}();
+            Assert.False(r.FromProtobuf(data).Err());
+        }
+    }
+
     // ── FromJSON error cases ──────────────────────────────────────────────────
 
     [Fact]
@@ -327,6 +368,39 @@ public class {{$goName}}Tests
         Assert.True(r.FromJSON(System.Text.Encoding.UTF8.GetBytes("not-json")).Err());
         Assert.True(r.FromJSON(System.Text.Encoding.UTF8.GetBytes("[1,2,3]")).Err());
     }
+{{- range .Fields}}{{if .UseDirectWrapper}}
+
+    // Verifies that recursive field {{.Name}} with a non-null inner value survives
+    // both a protobuf and JSON roundtrip, exercising wrapper encode/decode paths.
+    [Fact]
+    public void RecursiveField_{{.Name}}_PopulatedValue_Roundtrip()
+    {
+        var inner = MakeValueTypeOnly{{$goName}}();
+        var w = new {{$goName}} { {{.Name}} = new {{.EffWriterType}} { Value = inner } };
+
+        // Protobuf roundtrip
+        int sz = w.ProtobufSize();
+        var buf = new RentedBuffer(sz + 4);
+        Assert.False(w.ToProtobuf(ref buf).Err());
+        Assert.Equal(sz, buf.Length);
+        var r = new {{$roName}}();
+        Assert.False(r.FromProtobuf(buf.AsSpan()).Err());
+        var w2 = new {{$goName}}();
+        r.Clone(ref w2);
+        Assert.NotNull(w2.{{.Name}});
+        buf.Dispose();
+
+        // JSON roundtrip
+        var jBuf = new RentedBuffer(256);
+        w.ToJSON(ref jBuf);
+        var r2 = new {{$roName}}();
+        Assert.False(r2.FromJSON(jBuf.AsSpan().ToArray()).Err());
+        var w3 = new {{$goName}}();
+        r2.Clone(ref w3);
+        Assert.NotNull(w3.{{.Name}});
+        jBuf.Dispose();
+    }
+{{end}}{{end}}
 {{- $strf := firstCsStringField .Fields}}
 {{if $strf}}
     // Verifies that strings containing special escape characters (\n newline,

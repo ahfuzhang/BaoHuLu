@@ -76,6 +76,8 @@ message AllTypes {
   // tag 范围:
   // 	•	1..18999
   //  •	20000..536870911
+
+  map<string, ValueTypes> values = 1010;
 }
 
 message ValueTypes {

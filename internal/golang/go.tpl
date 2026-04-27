@@ -58,16 +58,26 @@ const (
 // Fields are ordered by alignment (desc) then size (desc) for minimal memory padding.
 type {{$goName}} struct {
 {{- range .Fields}}
+{{- if and .Map (mapValIsMsg .MapVal)}}
+{{fieldCommentBlock .Comment}}	{{.Name}} map[{{mapKeyGoType .MapKey}}]*{{mapValGoType .MapVal}} {{.StructTag}}
+	_{{.Name}}Arr []{{mapValGoType .MapVal}}
+{{- else}}
 {{fieldCommentBlock .Comment}}	{{.Name}} {{.GoType}} {{.StructTag}}
+{{- end}}
 {{- end}}
 	arena []byte
 }
 
 func (m *{{$goName}}) Reset() {
+	clear(m.arena)  // pointer might be cause not GC correctly
 	m.arena = m.arena[:0]
 {{- range .Fields}}
 {{- if .Map}}
 	clear(m.{{.Name}})
+{{- if (mapValIsMsg .MapVal)}}
+	clear(m._{{.Name}}Arr)
+	m._{{.Name}}Arr = m._{{.Name}}Arr[:0]
+{{- end}}
 {{- else if .Repeated}}
 	m.{{.Name}} = m.{{.Name}}[:0]
 {{- else if .IsMsg}}
@@ -806,6 +816,9 @@ type Readonly{{$goName}} struct {
 {{- range .ReaderFields}}
 {{- if .IsRawBuf}}
 	rawBuffer []byte
+{{- else if and .Map (mapValIsMsg .MapVal)}}
+{{fieldCommentBlock .Comment}}	{{.Name}} map[{{mapKeyGoType .MapKey}}]*{{readonlyTypeName .MapVal}} `json:"{{.JsonName}},omitempty"`
+	_{{.Name}}Arr []{{readonlyTypeName .MapVal}}
 {{- else}}
 {{fieldCommentBlock .Comment}}	{{.Name}} {{.ReaderType}} `json:"{{.JsonName}},omitempty"`
 {{- end}}
@@ -828,10 +841,25 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 {{- if .Map}}
 	if len(r.{{.Name}}) > 0 {
 		if dst.{{.Name}} == nil {
+			{{- if mapValIsMsg .MapVal}}
+			dst.{{.Name}} = make(map[{{mapKeyGoType .MapKey}}]*{{mapValGoType .MapVal}}, len(r.{{.Name}}))
+			{{- else}}
 			dst.{{.Name}} = make({{.GoType}}, len(r.{{.Name}}))
+			{{- end}}
 		} else {
 			clear(dst.{{.Name}})
 		}
+		{{- if mapValIsMsg .MapVal}}
+		if dst._{{.Name}}Arr == nil {
+			dst._{{.Name}}Arr = make([]{{mapValGoType .MapVal}}, 0, len(r.{{.Name}}))
+		} else {
+			if cap(dst._{{.Name}}Arr) < len(r.{{.Name}}) {
+				dst._{{.Name}}Arr = make([]{{mapValGoType .MapVal}}, 0, len(r.{{.Name}}))
+			} else {
+				dst._{{.Name}}Arr = dst._{{.Name}}Arr[:0]
+			}
+		}
+		{{- end}}
 		for _rk, _rv := range r.{{.Name}} {
 			{{- if eq .MapKey "string"}}
 			{
@@ -856,8 +884,9 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 					dst.{{.Name}}[_nk] = nil
 				}
 				{{- else if mapValIsMsg .MapVal}}
-				var _nv {{mapValGoType .MapVal}}
-				_rv.Clone(&_nv)
+				dst._{{.Name}}Arr = append(dst._{{.Name}}Arr, {{mapValGoType .MapVal}}{})
+				_nv := &dst._{{.Name}}Arr[len(dst._{{.Name}}Arr)-1]
+				_rv.Clone(_nv)
 				dst.{{.Name}}[_nk] = _nv
 				{{- else}}
 				dst.{{.Name}}[_nk] = _rv
@@ -883,8 +912,9 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 					dst.{{.Name}}[_rk] = nil
 				}
 				{{- else if mapValIsMsg .MapVal}}
-				var _nv {{mapValGoType .MapVal}}
-				_rv.Clone(&_nv)
+				dst._{{.Name}}Arr = append(dst._{{.Name}}Arr, {{mapValGoType .MapVal}}{})
+				_nv := &dst._{{.Name}}Arr[len(dst._{{.Name}}Arr)-1]
+				_rv.Clone(_nv)
 				dst.{{.Name}}[_rk] = _nv
 				{{- else}}
 				dst.{{.Name}}[_rk] = _rv
@@ -1028,6 +1058,10 @@ func (r *Readonly{{$goName}}) Reset() {
 {{- range .Fields}}
 {{- if .Map}}
 	clear(r.{{.Name}})
+{{- if (mapValIsMsg .MapVal)}}
+	clear(r._{{.Name}}Arr)
+	r._{{.Name}}Arr = r._{{.Name}}Arr[:0]
+{{- end}}
 {{- else if .Repeated}}
 	r.{{.Name}} = r.{{.Name}}[:0]
 {{- else if .IsMsg}}
@@ -1058,7 +1092,12 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			entryData, in, err = utils.ConsumeBytes(in)
 			if err != nil { return err }
 			var mKey {{mapKeyGoType .MapKey}}
+			{{- if mapValIsMsg .MapVal}}
+			r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
+			_mValIdx := len(r._{{.Name}}Arr) - 1
+			{{- else}}
 			var mVal {{mapValGoType .MapVal}}
+			{{- end}}
 			for len(entryData) > 0 {
 				var efn int
 				var ewt utils.WireType
@@ -1069,14 +1108,29 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 				case 1:
 					mKey, entryData, err = {{readFunc .MapKey}}(entryData)
 				case 2:
+					{{- if mapValIsMsg .MapVal}}
+					var _subBytes []byte
+					_subBytes, entryData, err = utils.ConsumeBytes(entryData)
+					if err != nil { break }
+					err = r._{{.Name}}Arr[_mValIdx].FromProtobuf(_subBytes)
+					{{- else}}
 					mVal, entryData, err = {{readFunc .MapVal}}(entryData)
+					{{- end}}
 				}
 				if err != nil { return err }
 			}
 			if r.{{.Name}} == nil {
+				{{- if mapValIsMsg .MapVal}}
+				r.{{.Name}} = make(map[{{mapKeyGoType .MapKey}}]*{{readonlyTypeName .MapVal}})
+				{{- else}}
 				r.{{.Name}} = make({{.ReaderType}})
+				{{- end}}
 			}
+			{{- if mapValIsMsg .MapVal}}
+			r.{{.Name}}[mKey] = &r._{{.Name}}Arr[_mValIdx]
+			{{- else}}
 			r.{{.Name}}[mKey] = mVal
+			{{- end}}
 {{- else if .Repeated}}
 {{- if isPackable .Type}}
 			var packedData []byte
@@ -1185,7 +1239,13 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 {{- if .Map}}
 			_mapObj, _e := v.Object()
 			if _e != nil { visitErr = _e; return }
-			if r.{{.Name}} == nil { r.{{.Name}} = make({{.ReaderType}}) }
+			if r.{{.Name}} == nil {
+				{{- if mapValIsMsg .MapVal}}
+				r.{{.Name}} = make(map[{{mapKeyGoType .MapKey}}]*{{readonlyTypeName .MapVal}})
+				{{- else}}
+				r.{{.Name}} = make({{.ReaderType}})
+				{{- end}}
+			}
 			_mapObj.Visit(func(mk []byte, mv *fastjson.Value) {
 				if visitErr != nil { return }
 				var mKey {{mapKeyGoType .MapKey}}
@@ -1211,14 +1271,15 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 				if _ek != nil { visitErr = _ek; return }
 				mKey = _mku64
 {{- end}}
-				var mVal {{mapValGoType .MapVal}}
 {{- if mapValIsMsg .MapVal}}
+				r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
+				_mValIdx := len(r._{{.Name}}Arr) - 1
 				_subObj, _eo := mv.Object()
 				if _eo != nil { visitErr = _eo; return }
-				var _msgVal {{readonlyTypeName .MapVal}}
-				if _eo2 := _msgVal.fromJSONValue(_subObj); _eo2 != nil { visitErr = _eo2; return }
-				mVal = _msgVal
+				if _eo2 := r._{{.Name}}Arr[_mValIdx].fromJSONValue(_subObj); _eo2 != nil { visitErr = _eo2; return }
+				r.{{.Name}}[mKey] = &r._{{.Name}}Arr[_mValIdx]
 {{- else}}
+			var mVal {{mapValGoType .MapVal}}
 {{- $vc := jsonScalarClass .MapVal}}
 {{- if eq $vc "string"}}
 				_b, _ev := mv.StringBytes()
@@ -1275,8 +1336,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 				}
 				mVal = {{mapValGoType .MapVal}}(_uv)
 {{- end}}
-{{- end}}
 				r.{{.Name}}[mKey] = mVal
+{{- end}}
 			})
 {{- else if .Repeated}}
 			_arr, _e := v.Array()

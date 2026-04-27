@@ -228,7 +228,7 @@ func processTplFile(pg *protofile.Generator, ns string, content []byte, outBase,
 	case strings.Contains(outBase, "Method"):
 		for _, svc := range pg.Services {
 			for _, m := range svc.Methods {
-				outName := strings.ReplaceAll(outBase, "Method", svc.Name+m.Name)
+				outName := strings.ReplaceAll(outBase, "Method", svc.Name+"."+m.Name)
 				data := MethodTplData{
 					CsharpNamespace: ns,
 					ServiceName:     svc.Name,

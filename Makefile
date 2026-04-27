@@ -17,6 +17,13 @@ gen: build
 	  -csharp_out.with.test \
 	  -csharp_out.with.bench
 
+go: build
+	./build/hulu tu \
+	  -src=./examples/DemoServer/proto/Demo.proto \
+	  -go_out=./build/golang/DemoServer/ \
+	  -go_out.with.test \
+	  -go_out.with.bench
+
 QiWa.rpc:
 	./build/hulu tu \
 	  -src=./examples/DemoServer/proto/Demo.proto \

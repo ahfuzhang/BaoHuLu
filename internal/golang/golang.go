@@ -220,10 +220,11 @@ func JsonScalarClass(protoType string) string {
 
 type FieldTpl struct {
 	protofile.FieldDef
-	WireType   WireTypeVal
-	ReaderType string
-	IsRawBuf   bool   // synthetic rawBuffer []byte field for readonly structs
-	StructTag  string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
+	WireType    WireTypeVal
+	ReaderType  string
+	IsRawBuf    bool   // synthetic rawBuffer []byte field for readonly structs
+	StructTag   string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
+	MapValIsMsg bool   // true when MapVal is a message type (not scalar/enum)
 }
 
 type MsgTpl struct {
@@ -306,11 +307,17 @@ func (g *Generator) makeFieldTpl(fd protofile.FieldDef) FieldTpl {
 	} else {
 		wt = WireType(fd.Type, fd.IsMsg)
 	}
+	var mapValIsMsg bool
+	if fd.Map && fd.MapVal != "" {
+		_, isMsg, _ := g.ProtoTypeToGo(fd.MapVal, false)
+		mapValIsMsg = isMsg
+	}
 	return FieldTpl{
-		FieldDef:   fd,
-		WireType:   wt,
-		ReaderType: g.readerGoType(fd),
-		StructTag:  buildStructTag(fd),
+		FieldDef:    fd,
+		WireType:    wt,
+		ReaderType:  g.readerGoType(fd),
+		StructTag:   buildStructTag(fd),
+		MapValIsMsg: mapValIsMsg,
 	}
 }
 
@@ -530,6 +537,17 @@ func SampleFieldLiteral(ft FieldTpl) string {
 			keyLit = "true"
 		default:
 			keyLit = SampleScalarLiteral(ft.MapKey, "")
+		}
+		if ft.MapValIsMsg {
+			// Struct field is map[keyType]*MsgType; use an IIFE to build a pointer entry.
+			msgGoName := protofile.GoTypeName(ft.MapVal)
+			keyGoType, ok := protofile.ScalarProtoToGo[ft.MapKey]
+			if !ok {
+				keyGoType = ft.MapKey // string or bool
+			}
+			return fmt.Sprintf(
+				`(func() map[%s]*%s { v := makeSample%s(); return map[%s]*%s{%s: &v} }())`,
+				keyGoType, msgGoName, msgGoName, keyGoType, msgGoName, keyLit)
 		}
 		var valLit string
 		if ft.MapVal == "bool" {
@@ -898,6 +916,26 @@ func benchScalarMapValLit(mapVal string) string {
 // the local variable `m` (already declared with the correct map type) with
 // 101 representative entries.  For bool keys only two entries are possible.
 func BenchMapFill(ft FieldTpl) string {
+	if ft.MapValIsMsg {
+		// Map value is a message type; struct field uses *MsgType as value.
+		msgGoName := protofile.GoTypeName(ft.MapVal)
+		switch ft.MapKey {
+		case "string":
+			return fmt.Sprintf(`for i := 0; i < 101; i++ { v := benchBuild%s(); m[strconv.Itoa(i)] = &v }`, msgGoName)
+		case "bool":
+			return fmt.Sprintf("{ v1 := benchBuild%s(); m[false] = &v1; v2 := benchBuild%s(); m[true] = &v2 }", msgGoName, msgGoName)
+		case "int32", "sint32", "sfixed32":
+			return fmt.Sprintf(`for i := int32(0); i < 101; i++ { v := benchBuild%s(); m[i] = &v }`, msgGoName)
+		case "uint32", "fixed32":
+			return fmt.Sprintf(`for i := uint32(0); i < 101; i++ { v := benchBuild%s(); m[i] = &v }`, msgGoName)
+		case "int64", "sint64", "sfixed64":
+			return fmt.Sprintf(`for i := int64(0); i < 101; i++ { v := benchBuild%s(); m[i] = &v }`, msgGoName)
+		case "uint64", "fixed64":
+			return fmt.Sprintf(`for i := uint64(0); i < 101; i++ { v := benchBuild%s(); m[i] = &v }`, msgGoName)
+		default:
+			return fmt.Sprintf(`for i := int32(0); i < 101; i++ { v := benchBuild%s(); m[i] = &v }`, msgGoName)
+		}
+	}
 	valLit := benchScalarMapValLit(ft.MapVal)
 	switch ft.MapKey {
 	case "string":
@@ -948,6 +986,21 @@ func BenchSliceFill(ft FieldTpl) string {
 		}
 		return `for i := 0; i < 101; i++ { s[i] = 1 }`
 	}
+}
+
+// MapWriterGoType returns the correct Go map type for use in the writer struct
+// context. When the map value is a message type, the value is a pointer
+// (map[K]*MsgType); for all other types it returns ft.GoType unchanged.
+func MapWriterGoType(ft FieldTpl) string {
+	if ft.MapValIsMsg {
+		keyGoType, ok := protofile.ScalarProtoToGo[ft.MapKey]
+		if !ok {
+			keyGoType = ft.MapKey // string or bool
+		}
+		msgGoName := protofile.GoTypeName(ft.MapVal)
+		return fmt.Sprintf("map[%s]*%s", keyGoType, msgGoName)
+	}
+	return ft.GoType
 }
 
 // BenchNeedsStrconv returns true when any message in msgs contains a
@@ -1171,6 +1224,7 @@ func (g *Generator) RenderBench(out *os.File) error {
 		"benchMapFill":      BenchMapFill,
 		"benchSliceFill":    BenchSliceFill,
 		"benchNeedsStrconv": BenchNeedsStrconv,
+		"mapWriterGoType":   MapWriterGoType,
 	}
 	tmpl, err := template.New("pb_timing_test").Funcs(fnMap).Parse(benchTemplate)
 	if err != nil {

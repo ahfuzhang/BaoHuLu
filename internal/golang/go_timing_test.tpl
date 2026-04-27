@@ -32,7 +32,7 @@ func benchBuild{{$goName}}() {{$goName}} {
 	// Leave bool-keyed maps nil: encoding/json does not support map[bool] keys.
 {{- else}}
 	{
-		m := make({{.GoType}}, 101)
+		m := make({{mapWriterGoType .}}, 101)
 		{{benchMapFill .}}
 		w.{{.Name}} = m
 	}

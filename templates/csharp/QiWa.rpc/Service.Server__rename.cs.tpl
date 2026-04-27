@@ -7,13 +7,19 @@ using Microsoft.Extensions.ObjectPool;
 using QiWa.Common;
 using QiWa.ConsoleLogger;
 using QiWa.KestrelWrap;
+using QiWa.Metrics;
 
-public class {{.ServiceName}}Counters : QiWa.Common.IResettable
+public class {{.ServiceName}}Counters : QiWa.Metrics.MetricsBase, QiWa.Common.IResettable
 {
+{{$root := .}}
 {{- range .Methods}}
+    [PrometheusMetric("http_request_total", "service=\"{{$root.ServiceName}}\",method=\"{{.MethodName}}\"")]
     public UInt64 {{.MethodName}}RequestTotal;
+    [PrometheusMetric("errors_total", "service=\"{{$root.ServiceName}}\",method=\"{{.MethodName}}\",error_type=\"decode\"")]
     public UInt64 {{.MethodName}}DecodeErrorsTotal;
+    [PrometheusMetric("errors_total", "service=\"{{$root.ServiceName}}\",method=\"{{.MethodName}}\",error_type=\"exception\"")]
     public UInt64 {{.MethodName}}ExceptionsTotal;
+    [PrometheusMetric("errors_total", "service=\"{{$root.ServiceName}}\",method=\"{{.MethodName}}\",error_type=\"logic error\"")]
     public UInt64 {{.MethodName}}LogicErrorsTotal;
 {{- end}}
 
@@ -118,8 +124,8 @@ public class {{.ServiceName}}  // 这里是 service 的名字
                         Interlocked.Increment(ref ContextBase.Counters.InitErrorsTotal);
                         return;
                     }
-                    byte[]? reqRequest;
-                    (reqRequest, err) = await ctx.ReadRequest().ConfigureAwait(true);
+                    // read http post body
+                    err = await ctx.ReadRequest().ConfigureAwait(true);
                     if (err.Err())
                     {
                         // 打日志
@@ -131,6 +137,20 @@ public class {{.ServiceName}}  // 这里是 service 的名字
                         Interlocked.Increment(ref ContextBase.Counters.InitErrorsTotal);
                         return;
                     }
+                    // 解压缩
+                    byte[]? reqRequest;
+                    (reqRequest, err) = ctx.Decompress();
+                    if (err.Err())
+                    {
+                        // 打日志
+                        ctx.L!.Warn(
+                            Field.Int64("error_code"u8, err.Code),
+                            Field.String("message"u8, err.Message)
+                        );
+                        // 数据上报
+                        Interlocked.Increment(ref ContextBase.Counters.InitErrorsTotal);
+                        return;
+                    }                    
                     // 解码
                     err = ctx.Decode<Readonly{{.RequestType}}>(reqRequest!, ref ctx.Request);
                     if (err.Err())

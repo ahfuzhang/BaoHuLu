@@ -69,7 +69,7 @@ func runXi(args []string) {
 // modulePath is derived from the proto file: the full "option go_package" value
 // is used when present; otherwise the "package" statement value is used.
 // The generated file declares the runtime dependencies of the generated code.
-func writeGoMod(modPath, goPackage, packageName string) error {
+func writeGoMod(modPath, goPackage, packageName string, withVtprotobuf bool) error {
 	modulePath := goPackage
 	if modulePath == "" {
 		modulePath = packageName
@@ -77,7 +77,7 @@ func writeGoMod(modPath, goPackage, packageName string) error {
 	if modulePath == "" {
 		modulePath = "generated"
 	}
-	content := gogen.GoModContent(modulePath)
+	content := gogen.GoModContent(modulePath, withVtprotobuf)
 	return os.WriteFile(modPath, utils.UnsafeBytesFromString(content), 0644)
 }
 
@@ -109,7 +109,7 @@ func modifyProtoNamespace(data []byte, origNS, newNS string) []byte {
 	return utils.UnsafeBytesFromString(insert + content)
 }
 
-func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, withBench bool) error {
+func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, withBench, withVtprotobuf bool) error {
 	if err := os.MkdirAll(goOut, 0755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", goOut, err)
 	}
@@ -150,8 +150,15 @@ func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, w
 		}
 	}
 
+	if withVtprotobuf {
+		vtPath := filepath.Join(goOut, goBase+".vtprotobuf.go")
+		if err := renderGoFile(vtPath, gen.RenderVtprotobuf); err != nil {
+			return err
+		}
+	}
+
 	modPath := filepath.Join(goOut, "go.mod")
-	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName); err != nil {
+	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, withVtprotobuf); err != nil {
 		return fmt.Errorf("write %s: %w", modPath, err)
 	}
 	fmt.Printf("generated %s\n", modPath)
@@ -283,6 +290,7 @@ func runTu(args []string) {
 	goOut := fs.String("go_out", "", "output directory for Go code (optional)")
 	goOutWithTest := fs.Bool("go_out.with.test", false, "also generate _test.go alongside Go output")
 	goOutWithBench := fs.Bool("go_out.with.bench", false, "also generate _timing_test.go with benchmark code alongside Go output")
+	goOutWithVtprotobuf := fs.Bool("go_out.with.vtprotobuf", false, "also generate .vtprotobuf.go with ProtobufSizeVT/ToProtobufVT/FromProtobufVT methods alongside Go output")
 	csOut := fs.String("csharp_out", "", "output directory for C# code (optional)")
 	csOutWithTest := fs.Bool("csharp_out.with.test", false, "also generate a Tests/ project with xunit tests alongside C# output")
 	csOutWithBench := fs.Bool("csharp_out.with.bench", false, "also generate a Benchmarks/ project with BenchmarkDotNet benchmarks alongside C# output")
@@ -333,8 +341,9 @@ func runTu(args []string) {
 		goOutDir := *goOut
 		goWithTest := *goOutWithTest
 		goWithBench := *goOutWithBench
+		goWithVtprotobuf := *goOutWithVtprotobuf
 		go func() {
-			goErrCh <- generateGoOutput(pg, goOutDir, goBase, goWithTest, goWithBench)
+			goErrCh <- generateGoOutput(pg, goOutDir, goBase, goWithTest, goWithBench, goWithVtprotobuf)
 		}()
 	}
 

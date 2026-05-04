@@ -1400,6 +1400,163 @@ func (g *Generator) RenderBench(out *os.File) error {
 	return tmpl.Execute(out, data)
 }
 
+// RenderVtprotobuf renders the vtprotobuf compatibility methods file to out.
+// It generates ProtobufSizeVT, ToProtobufVT on each message type and
+// FromProtobufVT on each Readonly message type.
+func (g *Generator) RenderVtprotobuf(out *os.File) error {
+	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
+	readerLayouts := make(map[string]protofile.MsgLayoutInfo)
+
+	var msgs []MsgTpl
+	for _, name := range g.Order {
+		md := g.Messages[name]
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
+
+		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8
+			}
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Size
+				}
+			}
+			return protofile.FieldGoSize(fd)
+		}
+		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8
+			}
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Ptrdata
+				}
+			}
+			return protofile.FieldPtrdata(fd)
+		}
+		sortedWriterDefs := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
+		writerLayouts[name] = protofile.ComputeStructLayout(sortedWriterDefs, writerSizeOf, writerPtrdataOf)
+		for _, fd := range sortedWriterDefs {
+			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
+		}
+
+		rawBufDef := protofile.FieldDef{Name: "rawBuffer", Type: "bytes", GoType: "[]byte"}
+		readerDefs := make([]protofile.FieldDef, 0, len(md.Fields)+1)
+		readerDefs = append(readerDefs, rawBufDef)
+		readerDefs = append(readerDefs, md.Fields...)
+
+		readerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8
+			}
+			if fd.IsMsg {
+				if li, ok := readerLayouts[fd.Type]; ok {
+					return li.Size
+				}
+			}
+			return protofile.FieldGoSize(fd)
+		}
+		readerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8
+			}
+			if fd.IsMsg {
+				if li, ok := readerLayouts[fd.Type]; ok {
+					return li.Ptrdata
+				}
+			}
+			return protofile.FieldPtrdata(fd)
+		}
+		sortedReaderDefs := protofile.SortFieldsWithCallbacks(readerDefs, readerSizeOf, readerPtrdataOf)
+		readerLayouts[name] = protofile.ComputeStructLayout(sortedReaderDefs, readerSizeOf, readerPtrdataOf)
+		for _, fd := range sortedReaderDefs {
+			if fd.Name == rawBufDef.Name && fd.Number == 0 {
+				mt.ReaderFields = append(mt.ReaderFields, FieldTpl{
+					FieldDef:   fd,
+					ReaderType: "[]byte",
+					IsRawBuf:   true,
+				})
+			} else {
+				mt.ReaderFields = append(mt.ReaderFields, g.makeFieldTpl(fd, name))
+			}
+		}
+
+		msgs = append(msgs, mt)
+	}
+
+	data := RenderData{
+		Package:  g.Pkg,
+		Messages: msgs,
+	}
+
+	fnMap := template.FuncMap{
+		"isPackable":   IsPackable,
+		"protoWireType": ProtoWireType,
+		"trimPtr":      func(s string) string { return strings.TrimPrefix(s, "*") },
+		"mapKeyGoType": func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValGoType": func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValIsMsg":  func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
+		"readonlyTypeName": protofile.ReadonlyGoTypeName,
+		"readerElemType": func(fd protofile.FieldDef) string {
+			return protofile.ReadonlyGoTypeName(fd.Type)
+		},
+		"elemType":    func(s string) string { return strings.TrimPrefix(s, "[]") },
+		"wireTypeInt": func(pt string) int { return int(ProtoWireType(pt)) },
+		// sizeofTag returns the byte count of the varint-encoded proto field tag.
+		// fieldNum is the proto field number; wireType is the raw wire type integer (0,1,2,5).
+		"sizeofTag": func(fieldNum, wireType int) int {
+			tag := uint64(fieldNum<<3 | wireType)
+			switch {
+			case tag < 0x80:
+				return 1
+			case tag < 0x4000:
+				return 2
+			default:
+				return 3
+			}
+		},
+		// writeTagBytes returns Go statements (with \t\t continuation indentation) that
+		// write the field tag backward in a buffer (vtprotobuf backward-fill style).
+		// The caller's template line must supply the leading \t\t indentation.
+		"writeTagBytes": func(fieldNum, wireType int) string {
+			var wtName string
+			switch wireType {
+			case 0:
+				wtName = "Varint"
+			case 1:
+				wtName = "64bit"
+			case 2:
+				wtName = "LenDelim"
+			case 5:
+				wtName = "32bit"
+			default:
+				wtName = fmt.Sprintf("wt%d", wireType)
+			}
+			tag := uint64(fieldNum<<3 | wireType)
+			if tag < 0x80 {
+				return fmt.Sprintf("i--\n\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d=%d*/",
+					byte(tag), fieldNum, wtName, fieldNum, wireType, tag)
+			}
+			if tag < 0x4000 {
+				lo := byte(tag&0x7f | 0x80) // LSB with continuation bit
+				hi := byte(tag >> 7)         // MSB without continuation bit
+				return fmt.Sprintf(
+					"i--\n\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d=%d, byte[1]=%d>>7=%d*/\n\t\ti--\n\t\tdAtA[i] = %d /*byte[0]=%d&0x7f|0x80=%d*/",
+					hi, fieldNum, wtName, fieldNum, wireType, tag, tag, hi,
+					lo, tag, lo)
+			}
+			// Field number >= 2048: 3-byte tag, keep as EncodeVarint call
+			return fmt.Sprintf("i = protohelpers.EncodeVarint(dAtA, i, %d) /*field=%d, wireType=%s, (%d<<3)|%d=%d*/",
+				tag, fieldNum, wtName, fieldNum, wireType, tag)
+		},
+	}
+	tmpl, err := template.New("vtprotobuf").Funcs(fnMap).Parse(vtprotobufTemplate)
+	if err != nil {
+		return fmt.Errorf("parse vtprotobuf template: %w", err)
+	}
+	return tmpl.Execute(out, data)
+}
+
 // ─── code template ────────────────────────────────────────────────────────────
 
 //go:embed go.tpl
@@ -1410,3 +1567,6 @@ var testTemplate string
 
 //go:embed go_timing_test.tpl
 var benchTemplate string
+
+//go:embed vtprotobuf.go.tpl
+var vtprotobufTemplate string

@@ -157,6 +157,35 @@ func (g *Generator) Collect(def *proto.Proto) {
 		g.Pkg = g.PackageName
 	}
 	g.ComputeRecursiveFields()
+	g.removeDeprecatedMsgTypeFields()
+}
+
+// removeDeprecatedMsgTypeFields removes fields from each message whose
+// referenced message type is absent from g.Messages (i.e., was deprecated
+// and skipped during collection). Handles plain/repeated message fields and
+// map fields whose value type is a deprecated message.
+func (g *Generator) removeDeprecatedMsgTypeFields() {
+	for _, md := range g.Messages {
+		kept := md.Fields[:0]
+		for _, fd := range md.Fields {
+			if fd.IsMsg && !fd.Map {
+				if _, ok := g.Messages[fd.Type]; !ok {
+					continue
+				}
+			}
+			if fd.Map && fd.MapVal != "" {
+				_, isScalar := ScalarProtoToGo[fd.MapVal]
+				_, isEnum := g.Enums[fd.MapVal]
+				if !isScalar && !isEnum {
+					if _, ok := g.Messages[fd.MapVal]; !ok {
+						continue
+					}
+				}
+			}
+			kept = append(kept, fd)
+		}
+		md.Fields = kept
+	}
 }
 
 // ComputeRecursiveFields marks plain (non-map, non-repeated) IsMsg fields as

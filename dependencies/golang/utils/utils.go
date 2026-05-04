@@ -141,6 +141,21 @@ func TagSize(fieldNum int, wt WireType) int {
 	return VarintSize(uint64(fieldNum)<<3 | uint64(wt))
 }
 
+// EncodeVarintBackward encodes v as a varint ending at dAtA[offset] (exclusive)
+// and returns the starting offset. Equivalent to protohelpers.EncodeVarint:
+// the varint bytes are placed at dAtA[base:offset] where base is returned.
+func EncodeVarintBackward(dAtA []byte, offset int, v uint64) int {
+	offset -= VarintSize(v)
+	base := offset
+	for v >= 0x80 {
+		dAtA[offset] = byte(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = byte(v)
+	return base
+}
+
 // AppendSint32 zigzag-encodes v and appends the varint to b.
 func AppendSint32(b []byte, v int32) []byte {
 	uv := (uint32(v) << 1) ^ uint32(v>>31)

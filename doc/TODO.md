@@ -40,6 +40,7 @@
   - ToJSON() 只序列化有效字段 ✅
   - Clone 方法中: 整数的数组类型，是否按照字节对齐了? ✅
   - 与 golang 1.26 的 json/v2 做性能对比
+  - 把 FromProtobufVT() 做出来
 * CSharp
   - 成员上加上 attribute，支持原生的 json 编解码 ✅
   - 生成 test ✅
@@ -57,14 +58,14 @@
 * 命令行支持传入模板文件，允许自定义的代码生成逻辑 ✅
 * csharp rpc
   - 生成 QiWa 框架的 server 端代码  50%
-  - 生成 QiWa 框架的 client 端的代码
+  - 生成 QiWa 框架的 client 端的代码  => WIP
     - 是否需要 client context ?
   - 支持 rpc 上的扩展语法  ✅
   - Clone() 方法不够好：如何对象重用?  ✅
   - 支持 @path=/xx 的扩展  ✅
   - 生成的 Grpc.Tools 文件夹，影响编译
-  - 支持代理模式
-  - 支持获取原始请求内容
+  - 支持代理模式，生成 DemoProxy.cs 文件
+  - 支持获取原始请求内容  50%
 * proto 文件
   - 递归定义的情况  ✅
   - message 作为各种子类型的情况  ✅

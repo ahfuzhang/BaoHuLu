@@ -26,3 +26,57 @@ BenchmarkToProtobuf_AllTypes-8                     40082             27310 ns/op
 BenchmarkFromProtobuf_AllTypes
 BenchmarkFromProtobuf_AllTypes-8                   24741             47336 ns/op         383.77 MB/s           1 B/op          0 allocs/op
 ```
+
+# 2026-05-05
+
+## macos + arm64 + golang
+
+```
+go test -run=^$ -bench='.*AllTypes.*' -v  -benchtime=60s
+goos: darwin
+goarch: arm64
+pkg: github.com/ahfuzhang/BaoHuLu/examples/Demo
+cpu: Apple M2
+BenchmarkToJSON_AllTypes_Generated
+BenchmarkToJSON_AllTypes_Generated-8              487318            145568 ns/op         841.09 MB/s           0 B/op          0 allocs/op
+BenchmarkToJSON_AllTypes_EncodingJSON
+BenchmarkToJSON_AllTypes_EncodingJSON-8           115636            620130 ns/op         197.43 MB/s      318262 B/op       7039 allocs/op
+BenchmarkToJSON_AllTypes_Sonic
+BenchmarkToJSON_AllTypes_Sonic-8                  219277            334594 ns/op         365.92 MB/s      127262 B/op         40 allocs/op
+BenchmarkFromJSON_AllTypes_Generated
+BenchmarkFromJSON_AllTypes_Generated-8            197461            379330 ns/op         322.77 MB/s      174370 B/op        313 allocs/op
+BenchmarkFromJSON_AllTypes_EncodingJSON
+BenchmarkFromJSON_AllTypes_EncodingJSON-8          47475           1488364 ns/op          82.26 MB/s      284642 B/op       5598 allocs/op
+BenchmarkFromJSON_AllTypes_Sonic
+BenchmarkFromJSON_AllTypes_Sonic-8                251452            304255 ns/op         402.41 MB/s      275450 B/op        778 allocs/op
+BenchmarkToProtobuf_AllTypes
+BenchmarkToProtobuf_AllTypes-8                    709494            105106 ns/op         714.43 MB/s           0 B/op          0 allocs/op
+BenchmarkFromProtobuf_AllTypes
+BenchmarkFromProtobuf_AllTypes-8                  400658            184964 ns/op         405.98 MB/s      174097 B/op        311 allocs/op
+BenchmarkToProtobufVT_AllTypes
+BenchmarkToProtobufVT_AllTypes-8                  691990            104545 ns/op         718.26 MB/s           0 B/op          0 allocs/op
+BenchmarkFromProtobufVT_AllTypes
+BenchmarkFromProtobufVT_AllTypes-8                446850            154568 ns/op       485.81 MB/s       144513 B/op        601 allocs/op
+
+优化后:
+BenchmarkFromProtobufVT_AllTypes-8                517660            138442 ns/op         542.40 MB/s      174353 B/op        313 allocs/op
+
+BenchmarkProtobufSizeVT_AllTypes
+BenchmarkProtobufSizeVT_AllTypes-8               2524764             26708 ns/op      2811.56 MB/s            0 B/op          0 allocs/op
+PASS
+ok      github.com/ahfuzhang/BaoHuLu/examples/Demo      863.311s
+
+go test -run=^$ -bench='.*AllTypes.*' -v -benchtime=60s
+goos: darwin
+goarch: arm64
+pkg: github.com/ahfuzhang/BaoHuLu/build/buf/golang/vtprotobuf
+cpu: Apple M2
+BenchmarkMarshalVT_AllTypes
+BenchmarkMarshalVT_AllTypes-8             695641            105851 ns/op         709.40 MB/s       81920 B/op          1 allocs/op
+BenchmarkUnmarshalVT_AllTypes
+BenchmarkUnmarshalVT_AllTypes-8           396976            177052 ns/op         424.12 MB/s      234050 B/op       1591 allocs/op
+PASS
+ok      github.com/ahfuzhang/BaoHuLu/build/buf/golang/vtprotobuf        147.354s
+
+```
+

@@ -1400,6 +1400,54 @@ func (g *Generator) RenderBench(out *os.File) error {
 	return tmpl.Execute(out, data)
 }
 
+// RenderVtprotobufTest renders the vtprotobuf test file to out.
+// The generated file tests ProtobufSizeVT, ToProtobufVT, and FromProtobufVT.
+// It reuses the makeSampleXxx helpers defined in the regular _test.go file,
+// so it must only be emitted alongside that file.
+func (g *Generator) RenderVtprotobufTest(out *os.File) error {
+	var msgs []MsgTpl
+	for _, name := range g.Order {
+		md := g.Messages[name]
+		msgs = append(msgs, MsgTpl{
+			Name:   md.Name,
+			GoName: protofile.GoTypeName(md.Name),
+		})
+	}
+	data := RenderData{
+		Package:  g.Pkg,
+		Messages: msgs,
+	}
+	tmpl, err := template.New("vtprotobuf_test").Parse(vtprotobufTestTemplate)
+	if err != nil {
+		return fmt.Errorf("parse vtprotobuf test template: %w", err)
+	}
+	return tmpl.Execute(out, data)
+}
+
+// RenderVtprotobufBench renders the vtprotobuf timing-benchmark test file to out.
+// The generated file benchmarks ProtobufSizeVT, ToProtobufVT, and FromProtobufVT.
+// It reuses the benchBuildXxx helpers defined in the regular _timing_test.go file,
+// so it must only be emitted alongside that file.
+func (g *Generator) RenderVtprotobufBench(out *os.File) error {
+	var msgs []MsgTpl
+	for _, name := range g.Order {
+		md := g.Messages[name]
+		msgs = append(msgs, MsgTpl{
+			Name:   md.Name,
+			GoName: protofile.GoTypeName(md.Name),
+		})
+	}
+	data := RenderData{
+		Package:  g.Pkg,
+		Messages: msgs,
+	}
+	tmpl, err := template.New("vtprotobuf_timing_test").Parse(vtprotobufBenchTemplate)
+	if err != nil {
+		return fmt.Errorf("parse vtprotobuf bench template: %w", err)
+	}
+	return tmpl.Execute(out, data)
+}
+
 // RenderVtprotobuf renders the vtprotobuf compatibility methods file to out.
 // It generates ProtobufSizeVT, ToProtobufVT on each message type and
 // FromProtobufVT on each Readonly message type.
@@ -1570,3 +1618,9 @@ var benchTemplate string
 
 //go:embed vtprotobuf.go.tpl
 var vtprotobufTemplate string
+
+//go:embed vtprotobuf.test.go.tpl
+var vtprotobufTestTemplate string
+
+//go:embed vtprotobuf_timing_test.go.tpl
+var vtprotobufBenchTemplate string

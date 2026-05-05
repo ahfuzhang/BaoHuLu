@@ -40,7 +40,11 @@
   - ToJSON() 只序列化有效字段 ✅
   - Clone 方法中: 整数的数组类型，是否按照字节对齐了? ✅
   - 与 golang 1.26 的 json/v2 做性能对比
-  - 把 FromProtobufVT() 做出来
+  - 把 FromProtobufVT() 做出来 ✅
+  - vtprotobuf
+    - 增加单元测试
+    - 增加对比测试
+    - 增加 benchmark
 * CSharp
   - 成员上加上 attribute，支持原生的 json 编解码 ✅
   - 生成 test ✅

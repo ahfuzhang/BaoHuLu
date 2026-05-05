@@ -69,7 +69,7 @@ func runXi(args []string) {
 // modulePath is derived from the proto file: the full "option go_package" value
 // is used when present; otherwise the "package" statement value is used.
 // The generated file declares the runtime dependencies of the generated code.
-func writeGoMod(modPath, goPackage, packageName string, withVtprotobuf bool) error {
+func writeGoMod(modPath, goPackage, packageName string, withVtprotobuf, withTest bool) error {
 	modulePath := goPackage
 	if modulePath == "" {
 		modulePath = packageName
@@ -77,7 +77,7 @@ func writeGoMod(modPath, goPackage, packageName string, withVtprotobuf bool) err
 	if modulePath == "" {
 		modulePath = "generated"
 	}
-	content := gogen.GoModContent(modulePath, withVtprotobuf)
+	content := gogen.GoModContent(modulePath, withVtprotobuf, withTest)
 	return os.WriteFile(modPath, utils.UnsafeBytesFromString(content), 0644)
 }
 
@@ -157,8 +157,22 @@ func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, w
 		}
 	}
 
+	if withTest && withVtprotobuf {
+		vtTestPath := filepath.Join(goOut, goBase+"_vtprotobuf_test.go")
+		if err := renderGoFile(vtTestPath, gen.RenderVtprotobufTest); err != nil {
+			return err
+		}
+	}
+
+	if withVtprotobuf && withBench {
+		vtBenchPath := filepath.Join(goOut, goBase+"_vtprotobuf_timing_test.go")
+		if err := renderGoFile(vtBenchPath, gen.RenderVtprotobufBench); err != nil {
+			return err
+		}
+	}
+
 	modPath := filepath.Join(goOut, "go.mod")
-	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, withVtprotobuf); err != nil {
+	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, withVtprotobuf, withTest); err != nil {
 		return fmt.Errorf("write %s: %w", modPath, err)
 	}
 	fmt.Printf("generated %s\n", modPath)

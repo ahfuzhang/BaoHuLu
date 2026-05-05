@@ -601,7 +601,8 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			}
 			var mapKey {{mapKeyGoType .MapKey}}
 			{{- if mapValIsMsg .MapVal}}
-			var mapMsgVal {{readonlyTypeName .MapVal}}
+			r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
+			_mapMsgValIdx := len(r._{{.Name}}Arr) - 1
 			{{- else}}
 			var mapVal {{mapValGoType .MapVal}}
 			{{- end}}
@@ -700,7 +701,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 					if sublen < 0 { return fmt.Errorf("proto: negative length") }
 					subEnd := iNdEx + sublen
 					if subEnd > l { return io.ErrUnexpectedEOF }
-					if err := mapMsgVal.FromProtobufVT(dAtA[iNdEx:subEnd]); err != nil { return err }
+					if err := r._{{.Name}}Arr[_mapMsgValIdx].FromProtobufVT(dAtA[iNdEx:subEnd]); err != nil { return err }
 					iNdEx = subEnd
 					{{- else if eq .MapVal "string"}}
 					var slen uint64
@@ -801,7 +802,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 				}
 			}
 			{{- if mapValIsMsg .MapVal}}
-			r.{{.Name}}[mapKey] = &mapMsgVal
+			r.{{.Name}}[mapKey] = &r._{{.Name}}Arr[_mapMsgValIdx]
 			{{- else}}
 			r.{{.Name}}[mapKey] = mapVal
 			{{- end}}

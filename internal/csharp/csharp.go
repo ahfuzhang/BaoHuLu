@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"strings"
@@ -271,6 +272,12 @@ func buildCSTmpl() (*template.Template, error) {
 		"csDefault":  csDefaultValue,
 		"upperFirst": protofile.UpperFirst,
 		"goTypeName": protofile.GoTypeName,
+		// tagSize computes the byte size of a varint-encoded proto field tag at
+		// template generation time so the generated code contains a literal integer.
+		"tagSize": func(fieldNum, wireType int) int {
+			tag := uint64(fieldNum<<3 | wireType)
+			return (bits.Len64(tag|1) + 6) / 7
+		},
 	}
 	tmpl, err := template.New("cs").Funcs(fnMap).Parse(csCodeTemplate)
 	if err != nil {

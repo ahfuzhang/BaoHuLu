@@ -726,23 +726,23 @@ public partial struct {{$goName}} : IResettable, IEncoder
                 int _entrySize{{.Name}} = 0;
 {{- if eq .MapKey "string"}}
                 int _klen{{.Name}} = StringByteCount(_kv{{.Name}}.Key);
-                _entrySize{{.Name}} += TagSize(1, WireTypeLenDelim) + LenDelimSize(_klen{{.Name}});
+                _entrySize{{.Name}} += {{tagSize 1 2}} /* TagSize(1, LenDelim=2) */ + LenDelimSize(_klen{{.Name}});
 {{- else if eq .MapKey "bool"}}
-                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(_kv{{.Name}}.Key ? 1UL : 0UL);
+                _entrySize{{.Name}} += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + VarintSize(_kv{{.Name}}.Key ? 1UL : 0UL);
 {{- else if eq .MapKey "fixed32"}}
-                _entrySize{{.Name}} += TagSize(1, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 1 5}} /* TagSize(1, 32bit=5) */ + 4;
 {{- else if eq .MapKey "sfixed32"}}
-                _entrySize{{.Name}} += TagSize(1, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 1 5}} /* TagSize(1, 32bit=5) */ + 4;
 {{- else if eq .MapKey "fixed64"}}
-                _entrySize{{.Name}} += TagSize(1, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 1 1}} /* TagSize(1, 64bit=1) */ + 8;
 {{- else if eq .MapKey "sfixed64"}}
-                _entrySize{{.Name}} += TagSize(1, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 1 1}} /* TagSize(1, 64bit=1) */ + 8;
 {{- else if eq .MapKey "sint32"}}
-                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(ZigZagEncode32(_kv{{.Name}}.Key));
+                _entrySize{{.Name}} += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + VarintSize(ZigZagEncode32(_kv{{.Name}}.Key));
 {{- else if eq .MapKey "sint64"}}
-                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(ZigZagEncode64(_kv{{.Name}}.Key));
+                _entrySize{{.Name}} += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + VarintSize(ZigZagEncode64(_kv{{.Name}}.Key));
 {{- else}}
-                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Key);
+                _entrySize{{.Name}} += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + VarintSize((ulong)_kv{{.Name}}.Key);
 {{- end}}
 {{- if .MapValIsMsg}}
 {{- if .UseMapValWrapper}}
@@ -750,35 +750,35 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- else}}
                 int _vsize{{.Name}} = _kv{{.Name}}.Value.ProtobufSize();
 {{- end}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vsize{{.Name}});
+                _entrySize{{.Name}} += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + LenDelimSize(_vsize{{.Name}});
 {{- else if eq .MapVal "string"}}
                 int _vlen{{.Name}} = StringByteCount(_kv{{.Name}}.Value);
-                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vlen{{.Name}});
+                _entrySize{{.Name}} += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + LenDelimSize(_vlen{{.Name}});
 {{- else if eq .MapVal "bytes"}}
                 int _vlen{{.Name}} = _kv{{.Name}}.Value != null ? _kv{{.Name}}.Value.Length : 0;
-                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vlen{{.Name}});
+                _entrySize{{.Name}} += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + LenDelimSize(_vlen{{.Name}});
 {{- else if eq .MapVal "double"}}
-                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8;
 {{- else if eq .MapVal "float"}}
-                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4;
 {{- else if eq .MapVal "fixed32"}}
-                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4;
 {{- else if eq .MapVal "sfixed32"}}
-                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4;
 {{- else if eq .MapVal "fixed64"}}
-                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8;
 {{- else if eq .MapVal "sfixed64"}}
-                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8;
 {{- else if eq .MapVal "sint32"}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(ZigZagEncode32(_kv{{.Name}}.Value));
+                _entrySize{{.Name}} += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + VarintSize(ZigZagEncode32(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "sint64"}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(ZigZagEncode64(_kv{{.Name}}.Value));
+                _entrySize{{.Name}} += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + VarintSize(ZigZagEncode64(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "bool"}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(_kv{{.Name}}.Value ? 1UL : 0UL);
+                _entrySize{{.Name}} += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + VarintSize(_kv{{.Name}}.Value ? 1UL : 0UL);
 {{- else}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Value);
+                _entrySize{{.Name}} += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + VarintSize((ulong)_kv{{.Name}}.Value);
 {{- end}}
-                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_entrySize{{.Name}});
+                _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_entrySize{{.Name}});
             }
         }
 {{- else if .IsRepeated}}
@@ -786,49 +786,49 @@ public partial struct {{$goName}} : IResettable, IEncoder
         {
 {{- if .IsPackable}}
 {{- if .IsFixed32}}
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Count * 4);
+            _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize({{.Name}}.Count * 4);
 {{- else if .IsFixed64}}
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Count * 8);
+            _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize({{.Name}}.Count * 8);
 {{- else if .IsBool}}
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Count);
+            _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize({{.Name}}.Count);
 {{- else if .IsSint32}}
             int _packed{{.Name}} = 0;
             foreach (var _pv{{.Name}} in {{.Name}})
                 _packed{{.Name}} += VarintSize(ZigZagEncode32(_pv{{.Name}}));
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_packed{{.Name}});
+            _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_packed{{.Name}});
 {{- else if .IsSint64}}
             int _packed{{.Name}} = 0;
             foreach (var _pv{{.Name}} in {{.Name}})
                 _packed{{.Name}} += VarintSize(ZigZagEncode64(_pv{{.Name}}));
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_packed{{.Name}});
+            _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_packed{{.Name}});
 {{- else}}
             int _packed{{.Name}} = 0;
             foreach (var _pv{{.Name}} in {{.Name}})
                 _packed{{.Name}} += VarintSize((ulong)_pv{{.Name}});
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_packed{{.Name}});
+            _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_packed{{.Name}});
 {{- end}}
 {{- else if .IsString}}
             foreach (var _sv{{.Name}} in {{.Name}})
             {
                 int _len{{.Name}} = StringByteCount(_sv{{.Name}});
-                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_len{{.Name}});
+                _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_len{{.Name}});
             }
 {{- else if .IsBytes}}
             foreach (var _bv{{.Name}} in {{.Name}})
             {
                 int _len{{.Name}} = _bv{{.Name}} != null ? _bv{{.Name}}.Length : 0;
-                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_len{{.Name}});
+                _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_len{{.Name}});
             }
 {{- else if .ElemIsMsg}}
             foreach (var _mv{{.Name}} in {{.Name}})
             {
                 int _subSize{{.Name}} = _mv{{.Name}}.ProtobufSize();
                 if (_subSize{{.Name}} > 0)
-                    _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_subSize{{.Name}});
+                    _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_subSize{{.Name}});
             }
 {{- else}}
             foreach (var _ev{{.Name}} in {{.Name}})
-                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize((ulong)_ev{{.Name}});
+                _size += {{tagSize .Number 0}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, Varint=0) */ + VarintSize((ulong)_ev{{.Name}});
 {{- end}}
         }
 {{- else if .IsMsg}}
@@ -837,45 +837,45 @@ public partial struct {{$goName}} : IResettable, IEncoder
         {
             int _subSize{{.Name}} = {{.Name}}.Value.ProtobufSize();
             if (_subSize{{.Name}} > 0)
-                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_subSize{{.Name}});
+                _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_subSize{{.Name}});
         }
 {{- else}}
         {
             int _subSize{{.Name}} = {{.Name}}.ProtobufSize();
             if (_subSize{{.Name}} > 0)
-                _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_subSize{{.Name}});
+                _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_subSize{{.Name}});
         }
 {{- end}}
 {{- else if .IsString}}
         if (!string.IsNullOrEmpty({{.Name}}))
         {
             int _len{{.Name}} = StringByteCount({{.Name}});
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize(_len{{.Name}});
+            _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize(_len{{.Name}});
         }
 {{- else if .IsBytes}}
         if ({{.Name}} != null && {{.Name}}.Length > 0)
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeLenDelim) + LenDelimSize({{.Name}}.Length);
+            _size += {{tagSize .Number 2}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, LenDelim=2) */ + LenDelimSize({{.Name}}.Length);
 {{- else if .IsBool}}
         if ({{.Name}})
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + 1;
+            _size += {{tagSize .Number 0}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, Varint=0) */ + 1;
 {{- else if .IsFixed32}}
         if ({{.Name}} != {{csDefault .WriterType}})
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireType32Bit) + 4;
+            _size += {{tagSize .Number 5}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, 32bit=5) */ + 4;
 {{- else if .IsFixed64}}
         if ({{.Name}} != {{csDefault .WriterType}})
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireType64Bit) + 8;
+            _size += {{tagSize .Number 1}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, 64bit=1) */ + 8;
 {{- else if .IsSint32}}
         if ({{.Name}} != 0)
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize(ZigZagEncode32({{.Name}}));
+            _size += {{tagSize .Number 0}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, Varint=0) */ + VarintSize(ZigZagEncode32({{.Name}}));
 {{- else if .IsSint64}}
         if ({{.Name}} != 0)
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize(ZigZagEncode64({{.Name}}));
+            _size += {{tagSize .Number 0}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, Varint=0) */ + VarintSize(ZigZagEncode64({{.Name}}));
 {{- else if .IsEnum}}
         if ((int){{.Name}} != 0)
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize((ulong)(int){{.Name}});
+            _size += {{tagSize .Number 0}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, Varint=0) */ + VarintSize((ulong)(int){{.Name}});
 {{- else}}
         if ({{.Name}} != {{csDefault .WriterType}})
-            _size += TagSize({{$goName}}Tags.Tag{{.Name}}, WireTypeVarint) + VarintSize((ulong){{.Name}});
+            _size += {{tagSize .Number 0}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, Varint=0) */ + VarintSize((ulong){{.Name}});
 {{- end}}
 {{- end}}
         return _size;
@@ -895,23 +895,23 @@ public partial struct {{$goName}} : IResettable, IEncoder
                 int _entrySize{{.Name}} = 0;
 {{- if eq .MapKey "string"}}
                 int _klen{{.Name}} = StringByteCount(_kv{{.Name}}.Key);
-                _entrySize{{.Name}} += TagSize(1, WireTypeLenDelim) + LenDelimSize(_klen{{.Name}});
+                _entrySize{{.Name}} += {{tagSize 1 2}} /* TagSize(1, LenDelim=2) */ + LenDelimSize(_klen{{.Name}});
 {{- else if eq .MapKey "bool"}}
-                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(_kv{{.Name}}.Key ? 1UL : 0UL);
+                _entrySize{{.Name}} += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + VarintSize(_kv{{.Name}}.Key ? 1UL : 0UL);
 {{- else if eq .MapKey "fixed32"}}
-                _entrySize{{.Name}} += TagSize(1, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 1 5}} /* TagSize(1, 32bit=5) */ + 4;
 {{- else if eq .MapKey "sfixed32"}}
-                _entrySize{{.Name}} += TagSize(1, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 1 5}} /* TagSize(1, 32bit=5) */ + 4;
 {{- else if eq .MapKey "fixed64"}}
-                _entrySize{{.Name}} += TagSize(1, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 1 1}} /* TagSize(1, 64bit=1) */ + 8;
 {{- else if eq .MapKey "sfixed64"}}
-                _entrySize{{.Name}} += TagSize(1, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 1 1}} /* TagSize(1, 64bit=1) */ + 8;
 {{- else if eq .MapKey "sint32"}}
-                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(ZigZagEncode32(_kv{{.Name}}.Key));
+                _entrySize{{.Name}} += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + VarintSize(ZigZagEncode32(_kv{{.Name}}.Key));
 {{- else if eq .MapKey "sint64"}}
-                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize(ZigZagEncode64(_kv{{.Name}}.Key));
+                _entrySize{{.Name}} += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + VarintSize(ZigZagEncode64(_kv{{.Name}}.Key));
 {{- else}}
-                _entrySize{{.Name}} += TagSize(1, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Key);
+                _entrySize{{.Name}} += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + VarintSize((ulong)_kv{{.Name}}.Key);
 {{- end}}
 {{- if .MapValIsMsg}}
 {{- if .UseMapValWrapper}}
@@ -919,33 +919,33 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- else}}
                 int _valMsgSize{{.Name}} = _kv{{.Name}}.Value.ProtobufSize();
 {{- end}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_valMsgSize{{.Name}});
+                _entrySize{{.Name}} += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + LenDelimSize(_valMsgSize{{.Name}});
 {{- else if eq .MapVal "string"}}
                 int _vlen{{.Name}} = StringByteCount(_kv{{.Name}}.Value);
-                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vlen{{.Name}});
+                _entrySize{{.Name}} += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + LenDelimSize(_vlen{{.Name}});
 {{- else if eq .MapVal "bytes"}}
                 int _vlen{{.Name}} = _kv{{.Name}}.Value != null ? _kv{{.Name}}.Value.Length : 0;
-                _entrySize{{.Name}} += TagSize(2, WireTypeLenDelim) + LenDelimSize(_vlen{{.Name}});
+                _entrySize{{.Name}} += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + LenDelimSize(_vlen{{.Name}});
 {{- else if eq .MapVal "double"}}
-                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8;
 {{- else if eq .MapVal "float"}}
-                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4;
 {{- else if eq .MapVal "fixed32"}}
-                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4;
 {{- else if eq .MapVal "sfixed32"}}
-                _entrySize{{.Name}} += TagSize(2, WireType32Bit) + 4;
+                _entrySize{{.Name}} += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4;
 {{- else if eq .MapVal "fixed64"}}
-                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8;
 {{- else if eq .MapVal "sfixed64"}}
-                _entrySize{{.Name}} += TagSize(2, WireType64Bit) + 8;
+                _entrySize{{.Name}} += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8;
 {{- else if eq .MapVal "sint32"}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(ZigZagEncode32(_kv{{.Name}}.Value));
+                _entrySize{{.Name}} += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + VarintSize(ZigZagEncode32(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "sint64"}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(ZigZagEncode64(_kv{{.Name}}.Value));
+                _entrySize{{.Name}} += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + VarintSize(ZigZagEncode64(_kv{{.Name}}.Value));
 {{- else if eq .MapVal "bool"}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize(_kv{{.Name}}.Value ? 1UL : 0UL);
+                _entrySize{{.Name}} += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + VarintSize(_kv{{.Name}}.Value ? 1UL : 0UL);
 {{- else}}
-                _entrySize{{.Name}} += TagSize(2, WireTypeVarint) + VarintSize((ulong)_kv{{.Name}}.Value);
+                _entrySize{{.Name}} += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + VarintSize((ulong)_kv{{.Name}}.Value);
 {{- end}}
                 WriteVarint(ref buf, (ulong)_entrySize{{.Name}});
                 // key (field 1)

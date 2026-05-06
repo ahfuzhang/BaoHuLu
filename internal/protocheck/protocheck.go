@@ -23,6 +23,9 @@ func Check(srcFile string) error {
 	}
 
 	var checkErr error
+	messageNames := make(map[string]int) // message name -> first occurrence line
+	fieldNames := make(map[string]int)   // field name -> first occurrence line
+
 	proto.Walk(definition,
 		// 1. import 语句不支持
 		proto.WithImport(func(i *proto.Import) {
@@ -43,8 +46,17 @@ func Check(srcFile string) error {
 			}
 			if nf.Optional {
 				checkErr = fmt.Errorf("%s:%d: optional field modifier is not supported", srcFile, nf.Position.Line)
+				return
 			} else if nf.Required {
 				checkErr = fmt.Errorf("%s:%d: required field modifier is not supported", srcFile, nf.Position.Line)
+				return
+			}
+			// warn on duplicate field names across all messages
+			if firstLine, exists := fieldNames[nf.Name]; exists {
+				fmt.Fprintf(os.Stderr, "warning: %s:%d: field name %q already used at line %d in another message\n",
+					srcFile, nf.Position.Line, nf.Name, firstLine)
+			} else {
+				fieldNames[nf.Name] = nf.Position.Line
 			}
 		}),
 		// 3. extensions 语法不支持（WithExtensions 未提供，用自定义 Handler）
@@ -56,9 +68,20 @@ func Check(srcFile string) error {
 			checkErr = fmt.Errorf("%s:%d: extensions is not supported", srcFile, e.Position.Line)
 		},
 		// 3. extend 语法不支持（表现为 Message.IsExtend == true）
+		// also check for duplicate message names
 		proto.WithMessage(func(m *proto.Message) {
-			if checkErr == nil && m.IsExtend {
+			if checkErr != nil {
+				return
+			}
+			if m.IsExtend {
 				checkErr = fmt.Errorf("%s:%d: extend is not supported", srcFile, m.Position.Line)
+				return
+			}
+			if firstLine, exists := messageNames[m.Name]; exists {
+				checkErr = fmt.Errorf("%s:%d: duplicate message name %q (first defined at line %d)",
+					srcFile, m.Position.Line, m.Name, firstLine)
+			} else {
+				messageNames[m.Name] = m.Position.Line
 			}
 		}),
 		// 4. service method 中 stream 修饰符不支持

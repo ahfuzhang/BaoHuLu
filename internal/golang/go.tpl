@@ -101,46 +101,46 @@ func (m *{{$goName}}) ProtobufSize() int {
 	for k, v := range m.{{.Name}} {
 		entrySize := 0
 		{{- if eq .MapKey "string"}}
-		{ kn := len(k); entrySize += utils.TagSize(1, utils.WireTypeLenDelim) + utils.VarintSize(uint64(kn)) + kn }
+		{ kn := len(k); entrySize += {{tagSize 1 2}} /* TagSize(1, LenDelim=2) */ + utils.VarintSize(uint64(kn)) + kn }
 		{{- else if eq .MapKey "bool"}}
-		{ var bk uint64; if k { bk = 1 }; entrySize += utils.TagSize(1, utils.WireTypeVarint) + utils.VarintSize(bk) }
+		{ var bk uint64; if k { bk = 1 }; entrySize += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + utils.VarintSize(bk) }
 		{{- else if eq .MapKey "fixed32"}}
-		_ = k; entrySize += utils.TagSize(1, utils.WireType32bit) + 4
+		_ = k; entrySize += {{tagSize 1 5}} /* TagSize(1, 32bit=5) */ + 4
 		{{- else if eq .MapKey "sfixed32"}}
-		_ = k; entrySize += utils.TagSize(1, utils.WireType32bit) + 4
+		_ = k; entrySize += {{tagSize 1 5}} /* TagSize(1, 32bit=5) */ + 4
 		{{- else if eq .MapKey "fixed64"}}
-		_ = k; entrySize += utils.TagSize(1, utils.WireType64bit) + 8
+		_ = k; entrySize += {{tagSize 1 1}} /* TagSize(1, 64bit=1) */ + 8
 		{{- else if eq .MapKey "sfixed64"}}
-		_ = k; entrySize += utils.TagSize(1, utils.WireType64bit) + 8
+		_ = k; entrySize += {{tagSize 1 1}} /* TagSize(1, 64bit=1) */ + 8
 		{{- else if eq .MapKey "sint32"}}
-		entrySize += utils.TagSize(1, utils.WireTypeVarint) + utils.VarintSize(uint64((uint32(k)<<1)^uint32(k>>31)))
+		entrySize += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + utils.VarintSize(uint64((uint32(k)<<1)^uint32(k>>31)))
 		{{- else if eq .MapKey "sint64"}}
-		entrySize += utils.TagSize(1, utils.WireTypeVarint) + utils.VarintSize((uint64(k)<<1)^uint64(k>>63))
+		entrySize += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + utils.VarintSize((uint64(k)<<1)^uint64(k>>63))
 		{{- else}}
-		entrySize += utils.TagSize(1, {{protoWireType .MapKey}}) + utils.VarintSize(uint64(k))
+		entrySize += {{tagSize 1 (protoWireTypeInt .MapKey)}} /* TagSize(1, {{protoWireType .MapKey}}) */ + utils.VarintSize(uint64(k))
 		{{- end}}
 		{{- if eq .MapVal "string"}}
-		{ vn := len(v); entrySize += utils.TagSize(2, utils.WireTypeLenDelim) + utils.VarintSize(uint64(vn)) + vn }
+		{ vn := len(v); entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + utils.VarintSize(uint64(vn)) + vn }
 		{{- else if eq .MapVal "bytes"}}
-		{ vn := len(v); entrySize += utils.TagSize(2, utils.WireTypeLenDelim) + utils.VarintSize(uint64(vn)) + vn }
+		{ vn := len(v); entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + utils.VarintSize(uint64(vn)) + vn }
 		{{- else if mapValIsMsg .MapVal}}
-		{ sub := v.ProtobufSize(); entrySize += utils.TagSize(2, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub }
+		{ sub := v.ProtobufSize(); entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + utils.VarintSize(uint64(sub)) + sub }
 		{{- else if eq .MapVal "double"}}
-		entrySize += utils.TagSize(2, utils.WireType64bit) + 8
+		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else if eq .MapVal "float"}}
-		entrySize += utils.TagSize(2, utils.WireType32bit) + 4
+		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "fixed32"}}
-		entrySize += utils.TagSize(2, utils.WireType32bit) + 4
+		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "fixed64"}}
-		entrySize += utils.TagSize(2, utils.WireType64bit) + 8
+		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else if eq .MapVal "sfixed32"}}
-		entrySize += utils.TagSize(2, utils.WireType32bit) + 4
+		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "sfixed64"}}
-		entrySize += utils.TagSize(2, utils.WireType64bit) + 8
+		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else}}
-		entrySize += utils.TagSize(2, utils.WireTypeVarint) + utils.VarintSize(uint64(v))
+		entrySize += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + utils.VarintSize(uint64(v))
 		{{- end}}
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(entrySize)) + entrySize
+		size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(entrySize)) + entrySize
 	}
 {{- else if .Repeated}}
 {{- if isPackable .Type}}
@@ -169,23 +169,23 @@ func (m *{{$goName}}) ProtobufSize() int {
 			packed += utils.VarintSize(uint64(v))
 			{{- end}}
 		}
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(packed)) + packed
+		size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(packed)) + packed
 	}
 {{- else if eq .Type "string"}}
 	for _, v := range m.{{.Name}} {
 		n := len(v)
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
+		size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(n)) + n
 	}
 {{- else if eq .Type "bytes"}}
 	for _, v := range m.{{.Name}} {
 		n := len(v)
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
+		size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(n)) + n
 	}
 {{- else}}
 	for i := range m.{{.Name}} {
 		sub := m.{{.Name}}[i].ProtobufSize()
 		if sub > 0 {
-			size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
+			size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(sub)) + sub
 		}
 	}
 {{- end}}
@@ -194,66 +194,66 @@ func (m *{{$goName}}) ProtobufSize() int {
 	if m.{{.Name}} != nil {
 		sub := m.{{.Name}}.ProtobufSize()
 		if sub > 0 {
-			size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
+			size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(sub)) + sub
 		}
 	}
 {{- else}}
 	{
 		sub := m.{{.Name}}.ProtobufSize()
 		if sub > 0 {
-			size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(sub)) + sub
+			size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(sub)) + sub
 		}
 	}
 {{- end}}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType64bit) + 8
+		size += {{tagSize .Number 1}} /* TagSize({{$goName}}{{.Name}}Tag, 64bit=1) */ + 8
 	}
 {{- else if eq .Type "float"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType32bit) + 4
+		size += {{tagSize .Number 5}} /* TagSize({{$goName}}{{.Name}}Tag, 32bit=5) */ + 4
 	}
 {{- else if eq .Type "fixed32"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType32bit) + 4
+		size += {{tagSize .Number 5}} /* TagSize({{$goName}}{{.Name}}Tag, 32bit=5) */ + 4
 	}
 {{- else if eq .Type "fixed64"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType64bit) + 8
+		size += {{tagSize .Number 1}} /* TagSize({{$goName}}{{.Name}}Tag, 64bit=1) */ + 8
 	}
 {{- else if eq .Type "sfixed32"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType32bit) + 4
+		size += {{tagSize .Number 5}} /* TagSize({{$goName}}{{.Name}}Tag, 32bit=5) */ + 4
 	}
 {{- else if eq .Type "sfixed64"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireType64bit) + 8
+		size += {{tagSize .Number 1}} /* TagSize({{$goName}}{{.Name}}Tag, 64bit=1) */ + 8
 	}
 {{- else if eq .Type "sint32"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeVarint) + utils.VarintSize(uint64((uint32(m.{{.Name}}) << 1) ^ uint32(m.{{.Name}}>>31)))
+		size += {{tagSize .Number 0}} /* TagSize({{$goName}}{{.Name}}Tag, Varint=0) */ + utils.VarintSize(uint64((uint32(m.{{.Name}}) << 1) ^ uint32(m.{{.Name}}>>31)))
 	}
 {{- else if eq .Type "sint64"}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeVarint) + utils.VarintSize((uint64(m.{{.Name}}) << 1) ^ uint64(m.{{.Name}}>>63))
+		size += {{tagSize .Number 0}} /* TagSize({{$goName}}{{.Name}}Tag, Varint=0) */ + utils.VarintSize((uint64(m.{{.Name}}) << 1) ^ uint64(m.{{.Name}}>>63))
 	}
 {{- else if eq .Type "bool"}}
 	if m.{{.Name}} {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeVarint) + 1
+		size += {{tagSize .Number 0}} /* TagSize({{$goName}}{{.Name}}Tag, Varint=0) */ + 1
 	}
 {{- else if eq .Type "string"}}
 	if m.{{.Name}} != "" {
 		n := len(m.{{.Name}})
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
+		size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(n)) + n
 	}
 {{- else if eq .Type "bytes"}}
 	if len(m.{{.Name}}) > 0 {
 		n := len(m.{{.Name}})
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim) + utils.VarintSize(uint64(n)) + n
+		size += {{tagSize .Number 2}} /* TagSize({{$goName}}{{.Name}}Tag, LenDelim=2) */ + utils.VarintSize(uint64(n)) + n
 	}
 {{- else}}
 	if m.{{.Name}} != 0 {
-		size += utils.TagSize({{$goName}}{{.Name}}Tag, utils.WireTypeVarint) + utils.VarintSize(uint64(m.{{.Name}}))
+		size += {{tagSize .Number 0}} /* TagSize({{$goName}}{{.Name}}Tag, Varint=0) */ + utils.VarintSize(uint64(m.{{.Name}}))
 	}
 {{- end}}
 {{- end}}
@@ -266,45 +266,45 @@ func (m *{{$goName}}) ToProtobuf(in []byte) []byte {
 	for k, v := range m.{{.Name}} {
 		entrySize := 0
 		{{- if eq .MapKey "string"}}
-		{ kn := len(k); entrySize += utils.TagSize(1, utils.WireTypeLenDelim) + utils.VarintSize(uint64(kn)) + kn }
+		{ kn := len(k); entrySize += {{tagSize 1 2}} /* TagSize(1, LenDelim=2) */ + utils.VarintSize(uint64(kn)) + kn }
 		{{- else if eq .MapKey "bool"}}
-		{ var bk uint64; if k { bk = 1 }; entrySize += utils.TagSize(1, utils.WireTypeVarint) + utils.VarintSize(bk) }
+		{ var bk uint64; if k { bk = 1 }; entrySize += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + utils.VarintSize(bk) }
 		{{- else if eq .MapKey "fixed32"}}
-		entrySize += utils.TagSize(1, utils.WireType32bit) + 4
+		entrySize += {{tagSize 1 5}} /* TagSize(1, 32bit=5) */ + 4
 		{{- else if eq .MapKey "sfixed32"}}
-		entrySize += utils.TagSize(1, utils.WireType32bit) + 4
+		entrySize += {{tagSize 1 5}} /* TagSize(1, 32bit=5) */ + 4
 		{{- else if eq .MapKey "fixed64"}}
-		entrySize += utils.TagSize(1, utils.WireType64bit) + 8
+		entrySize += {{tagSize 1 1}} /* TagSize(1, 64bit=1) */ + 8
 		{{- else if eq .MapKey "sfixed64"}}
-		entrySize += utils.TagSize(1, utils.WireType64bit) + 8
+		entrySize += {{tagSize 1 1}} /* TagSize(1, 64bit=1) */ + 8
 		{{- else if eq .MapKey "sint32"}}
-		entrySize += utils.TagSize(1, utils.WireTypeVarint) + utils.VarintSize(uint64((uint32(k)<<1)^uint32(k>>31)))
+		entrySize += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + utils.VarintSize(uint64((uint32(k)<<1)^uint32(k>>31)))
 		{{- else if eq .MapKey "sint64"}}
-		entrySize += utils.TagSize(1, utils.WireTypeVarint) + utils.VarintSize((uint64(k)<<1)^uint64(k>>63))
+		entrySize += {{tagSize 1 0}} /* TagSize(1, Varint=0) */ + utils.VarintSize((uint64(k)<<1)^uint64(k>>63))
 		{{- else}}
-		entrySize += utils.TagSize(1, {{protoWireType .MapKey}}) + utils.VarintSize(uint64(k))
+		entrySize += {{tagSize 1 (protoWireTypeInt .MapKey)}} /* TagSize(1, {{protoWireType .MapKey}}) */ + utils.VarintSize(uint64(k))
 		{{- end}}
 		{{- if eq .MapVal "string"}}
-		{ vn := len(v); entrySize += utils.TagSize(2, utils.WireTypeLenDelim) + utils.VarintSize(uint64(vn)) + vn }
+		{ vn := len(v); entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + utils.VarintSize(uint64(vn)) + vn }
 		{{- else if eq .MapVal "bytes"}}
-		{ vn := len(v); entrySize += utils.TagSize(2, utils.WireTypeLenDelim) + utils.VarintSize(uint64(vn)) + vn }
+		{ vn := len(v); entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + utils.VarintSize(uint64(vn)) + vn }
 		{{- else if (mapValIsMsg .MapVal)}}
 		valMsgSize := v.ProtobufSize()
-		entrySize += utils.TagSize(2, utils.WireTypeLenDelim) + utils.VarintSize(uint64(valMsgSize)) + valMsgSize
+		entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + utils.VarintSize(uint64(valMsgSize)) + valMsgSize
 		{{- else if eq .MapVal "double"}}
-		entrySize += utils.TagSize(2, utils.WireType64bit) + 8
+		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else if eq .MapVal "float"}}
-		entrySize += utils.TagSize(2, utils.WireType32bit) + 4
+		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "fixed32"}}
-		entrySize += utils.TagSize(2, utils.WireType32bit) + 4
+		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "fixed64"}}
-		entrySize += utils.TagSize(2, utils.WireType64bit) + 8
+		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else if eq .MapVal "sfixed32"}}
-		entrySize += utils.TagSize(2, utils.WireType32bit) + 4
+		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "sfixed64"}}
-		entrySize += utils.TagSize(2, utils.WireType64bit) + 8
+		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else}}
-		entrySize += utils.TagSize(2, utils.WireTypeVarint) + utils.VarintSize(uint64(v))
+		entrySize += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + utils.VarintSize(uint64(v))
 		{{- end}}
 		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireTypeLenDelim)
 		in = utils.AppendVarint(in, uint64(entrySize))

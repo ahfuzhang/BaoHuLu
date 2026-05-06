@@ -3,6 +3,7 @@ package golang
 import (
 	_ "embed"
 	"fmt"
+	"math/bits"
 	"os"
 	"strings"
 	"text/template"
@@ -529,6 +530,16 @@ func (g *Generator) Render(out *os.File) error {
 				}
 			}
 			return false
+		},
+		// tagSize computes utils.TagSize(fieldNum, wireType) at template generation time,
+		// so the generated code contains the literal integer instead of a runtime call.
+		"tagSize": func(fieldNum, wireType int) int {
+			tag := uint64(fieldNum<<3 | wireType)
+			return (bits.Len64(tag|1) + 6) / 7
+		},
+		// protoWireTypeInt returns the integer wire-type value for a proto scalar type name.
+		"protoWireTypeInt": func(pt string) int {
+			return int(ProtoWireType(pt))
 		},
 	}
 

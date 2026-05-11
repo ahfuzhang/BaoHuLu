@@ -27,6 +27,16 @@
 
 message 上存在此扩展信息时，相当于没有这个 message，生成代码时跳过此 message.
 
+### @from-post-form
+
+当存在这个标签时， Readonly${message_name} 这个类型上，新增 FromPostForm() 方法，可以解析通过 `application/x-www-form-urlencoded` 编码提交的数据。
+* 对数据进行 url decode
+* 逐个字段赋值到 Readonly${message_name} 中的字段中
+* 对于数组类型，把 key 存在重复的数据，作为数组处理
+* 对于 map 类型：对 value 部分进行 url decode，然后按照 key-value 的格式写入
+* 对子嵌入的 message 类型：把 value 部分作为子类型的 FromPostForm() 方法的输入。
+
+
 ## field 扩展语法
 
 ### @Deprecated
@@ -84,6 +94,11 @@ message Child{
 * 语法为： `// @tag=${Name}:${value}`
 * 对于 golang:
   - 每个 struct 后的成员，在 json 这个 tag 之后增加 `json:"${XX},omitempty", ${Name}:"${Value}"`
+
+### #formName
+
+* 此扩展用于定义使用 `application/x-www-form-urlencoded` 进行编码的表单的名字
+
 
 ## method 扩展语法
 

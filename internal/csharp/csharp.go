@@ -168,6 +168,7 @@ type CsFieldTpl struct {
 	// identity
 	Name     string // PascalCase name
 	JsonName string // original proto name (JSON key)
+	FormName string // form key for FromPostForm (@formName > @jsonName > proto field name)
 	Number   int    // proto field number
 	// type classification
 	IsMap      bool
@@ -214,6 +215,7 @@ type CsMsgTpl struct {
 	GoName       string // stripped name (used as C# type name)
 	Fields       []CsFieldTpl
 	NeedsWrapper bool // true when this message type needs Wrapper classes generated
+	FromPostForm bool // true when this message needs FromPostForm / FromPostFormString methods
 }
 
 // ─── generator ────────────────────────────────────────────────────────────────
@@ -230,6 +232,7 @@ func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 	f := CsFieldTpl{
 		Name:               fd.Name,
 		JsonName:           fd.JsonName,
+		FormName:           fd.FormName,
 		Number:             fd.Number,
 		IsMap:              fd.Map,
 		IsRepeated:         fd.Repeated,
@@ -374,6 +377,43 @@ func (g *Generator) buildMsgTpls() ([]CsMsgTpl, map[string]protofile.MsgLayoutIn
 		}
 	}
 
+	// Third pass: propagate @from-post-form annotation infectiously.
+	// If message A has FromPostForm and contains embedded message B, B also gets it.
+	// This includes plain fields, repeated message fields, and map fields with message values.
+	fromPostFormSet := make(map[string]bool)
+	for _, name := range g.Order {
+		if g.Messages[name].FromPostForm {
+			fromPostFormSet[name] = true
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, name := range g.Order {
+			if !fromPostFormSet[name] {
+				continue
+			}
+			md := g.Messages[name]
+			for _, fd := range md.Fields {
+				if !fd.IsMsg {
+					continue
+				}
+				msgType := fd.Type
+				if fd.Map {
+					msgType = fd.MapVal
+				}
+				if !fromPostFormSet[msgType] {
+					if _, exists := g.Messages[msgType]; exists {
+						fromPostFormSet[msgType] = true
+						changed = true
+					}
+				}
+			}
+		}
+	}
+	for i := range msgs {
+		msgs[i].FromPostForm = fromPostFormSet[msgs[i].Name]
+	}
+
 	return msgs, writerLayouts
 }
 
@@ -446,6 +486,20 @@ func (g *Generator) RenderCSFiles(outDir, baseFileName, namespace string) error 
 		rf.Close()
 		if err != nil {
 			return fmt.Errorf("render %s: %w", readonlyPath, err)
+		}
+
+		// ReadonlyXx.FromPostForm — only when the message carries @from-post-form
+		if mt.FromPostForm {
+			fpfPath := filepath.Join(outDir, baseFileName+".Readonly"+mt.GoName+".FromPostForm.cs")
+			fpf, err := os.Create(fpfPath)
+			if err != nil {
+				return fmt.Errorf("create %s: %w", fpfPath, err)
+			}
+			err = renderCSFromPostForm(fpf, data)
+			fpf.Close()
+			if err != nil {
+				return fmt.Errorf("render %s: %w", fpfPath, err)
+			}
 		}
 	}
 	return nil
@@ -767,6 +821,15 @@ func (g *Generator) RenderCSBench(out *os.File, namespace string) error {
 	return tmpl.Execute(out, data)
 }
 
+// renderCSFromPostForm executes the frompostform template with the given message data into w.
+func renderCSFromPostForm(w io.Writer, data CsOneTypeData) error {
+	tmpl, err := template.New("frompostform").Parse(csFromPostFormTemplate)
+	if err != nil {
+		return fmt.Errorf("parse frompostform template: %w", err)
+	}
+	return tmpl.Execute(w, data)
+}
+
 // ─── C# code template ─────────────────────────────────────────────────────────
 
 //go:embed cs.tpl
@@ -777,3 +840,6 @@ var csTestCodeTemplate string
 
 //go:embed cs_bench.tpl
 var csBenchCodeTemplate string
+
+//go:embed frompostform.cs.tpl
+var csFromPostFormTemplate string

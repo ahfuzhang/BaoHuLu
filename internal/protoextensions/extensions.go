@@ -25,6 +25,9 @@ type FieldExtensions struct {
 	VarName string
 	// JsonName overrides the json tag key (and the JSON name constant value).
 	JsonName string
+	// FormName overrides the form key constant used in FromPostForm. Falls back to JsonName,
+	// then to the original proto field name when absent.
+	FormName string
 	// YamlName, when non-empty, adds a yaml struct tag and a YAML name constant.
 	YamlName string
 	// Tags holds arbitrary extra struct tags produced by @tag=Name:Value.
@@ -35,6 +38,11 @@ type FieldExtensions struct {
 type MessageExtensions struct {
 	// When true (@Deprecated annotation present), the message is omitted from generated code.
 	Deprecated bool
+	// FromPostForm, when true (@from-post-form annotation present), causes a
+	// FromPostForm(ReadOnlySpan<byte>) method to be generated on the C# readonly struct.
+	// This annotation is infectious: any message type embedded in an annotated message
+	// also gets the method generated.
+	FromPostForm bool
 }
 
 // ParseAndStripField scans comment lines for extension annotations, removes
@@ -57,6 +65,8 @@ func ParseAndStripField(lines []string) (FieldExtensions, []string) {
 			ext.VarName = value
 		case "jsonname":
 			ext.JsonName = value
+		case "formname":
+			ext.FormName = value
 		case "yamlname":
 			ext.YamlName = value
 		case "tag":
@@ -75,8 +85,9 @@ func ParseAndStripField(lines []string) (FieldExtensions, []string) {
 
 // RpcExtensions collects all extension annotations found on a proto RPC method.
 type RpcExtensions struct {
-	// Path, when non-empty, specifies an additional HTTP path alias (@path=xxx).
-	Path string
+	// Paths holds zero or more additional HTTP path aliases (@path=xxx); multiple
+	// @path annotations on the same RPC are all collected.
+	Paths []string
 }
 
 // ParseAndStripRpc scans comment lines for RPC-level extension annotations,
@@ -93,7 +104,7 @@ func ParseAndStripRpc(lines []string) (RpcExtensions, []string) {
 		}
 		key, value := splitKeyValue(trimmed[1:])
 		if key == "path" {
-			ext.Path = value
+			ext.Paths = append(ext.Paths, value)
 		}
 		// Unknown RPC-level annotations are silently dropped.
 	}
@@ -113,8 +124,11 @@ func ParseAndStripMessage(lines []string) (MessageExtensions, []string) {
 			continue
 		}
 		key, _ := splitKeyValue(trimmed[1:])
-		if key == "deprecated" {
+		switch key {
+		case "deprecated":
 			ext.Deprecated = true
+		case "from-post-form":
+			ext.FromPostForm = true
 		}
 		// Unknown message-level annotations are silently dropped (not added to clean).
 	}

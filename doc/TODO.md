@@ -1,5 +1,5 @@
 * proto 文件中， import 一个 public.proto
-  - 命令行参数支持 -include=
+  - 命令行参数支持 -include=   => 计划不支持 ❌
 * csharp 的代码所依赖的公共库，放在哪儿？
   - 是否需要先把 QiWa.framework 先发布出去?   ✅
 * 代码覆盖率测试
@@ -9,7 +9,7 @@
   - protobuf 对比 ✅
   - csharp 对比 ✅
 * 是否要支持批量输入多个 proto 文件?
-  - 是否要支持按照文件夹输入?
+  - 是否要支持按照文件夹输入?   => 计划不支持 ❌
 * 各个语言的 namespace 如何处理？
   - golang 的 package 名字； golang 的 go.mod ✅
   - csharp 的 namespace  ✅
@@ -39,7 +39,7 @@
     ```
   - ToJSON() 只序列化有效字段 ✅
   - Clone 方法中: 整数的数组类型，是否按照字节对齐了? ✅
-  - 与 golang 1.26 的 json/v2 做性能对比
+  - 与 golang 1.26 的 json/v2 做性能对比 ✅
   - 把 FromProtobufVT() 做出来 ✅
   - vtprotobuf
     - 增加单元测试
@@ -87,20 +87,20 @@
     - 实现一个 hashbrwon, 来实现只读 map 的高性能查询
   - 对于 json 反序列化
     - 实现 avx 版本的 fastjson
+    - 实现无拷贝版本的 fastjson =>   ❌ 负优化，性能轻微下降
   - 对于 map 类型，要能够数出来 key 的数量
   - 对于 数组类型，要能够数出来 item 的数量
   - json 序列化：
-    - 提前计算长度，然后使用数组从后往前赋值的方法来提升性能
+    - 提前计算长度，然后使用数组从后往前赋值的方法来提升性能  =>  ❌ 负优化，无提升
 * csharp 性能优化
   - 实现 fastjson.cs，代替 json utf8 reader
 * 类型扩展
   - 支持 decimal 数据类型 => 无意义 ❌
 * 扩展语法：
-  - @path 支持多次使用
+  - @path 支持多次使用  ✅
 * csharp
-  - 支持 form 提交的解析
-* 没有考虑 key 里面有特殊字符的情况
-* check 功能里：检查 key 不能有特殊字符
+  - 支持 form 提交的解析  ✅
+* check 功能里：检查 key 不能有特殊字符  ✅
 * 修改 test 程序：
-  - 运行一个 test 以后，自动按照我期望的格式输出 benchmark 的结果
+  - 运行一个 test 以后，自动按照我期望的格式输出 benchmark 的结果  ✅
 

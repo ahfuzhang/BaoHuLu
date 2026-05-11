@@ -94,8 +94,8 @@ public class {{.ServiceName}}  // 这里是 service 的名字
         {
 {{- range .Methods}}
             case "/{{$.ServiceName}}/{{.MethodName}}":
-{{- if .Path}}
-            case "{{.Path}}":
+{{- range .Paths}}
+            case "{{.}}":
 {{- end}}
                 {
                     Interlocked.Increment(ref Counters.{{.MethodName}}RequestTotal);

@@ -200,7 +200,7 @@ ok      github.com/ahfuzhang/BaoHuLu/examples/Demo      1008.093s
 | pb encode | 770.90 MB/s<br>0 allocs/op | 798.64 MB/s<br>0 allocs/op<br><span style="color:green">-3.5%</span> |
 | pb decode | 722.04 MB/s<br>156 allocs/op | 512.73 MB/s<br>155 allocs/op<br><span style="color:red">+40.8%</span> |
 
-# 优化 FromJSON
+# 2026-05-11 15:00, 优化 FromJSON(轻微性能下降)
 
 ### JSON Performance
 
@@ -215,4 +215,20 @@ ok      github.com/ahfuzhang/BaoHuLu/examples/Demo      1008.093s
 |:----------|:---------------------:|:-------:|
 | pb encode | 772.13 MB/s<br>0 allocs/op | 796.72 MB/s<br>0 allocs/op<br><span style="color:green">-3.1%</span> |
 | pb decode | 726.75 MB/s<br>156 allocs/op | 503.09 MB/s<br>155 allocs/op<br><span style="color:red">+44.5%</span> |
+
+# 2026-05-11 16:00,  简单的值类型的性能
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 1.88 GB/s<br>0 allocs/op | 344.68 MB/s<br>3 allocs/op<br><span style="color:red">+445.9%</span> | 352.95 MB/s<br>3 allocs/op<br><span style="color:red">+433.1%</span> | 432.80 MB/s<br>3 allocs/op<br><span style="color:red">+334.8%</span> |
+| json decode | 530.36 MB/s<br>0 allocs/op | 173.36 MB/s<br>1 allocs/op<br><span style="color:red">+205.9%</span> | 222.42 MB/s<br>1 allocs/op<br><span style="color:red">+138.4%</span> | 403.26 MB/s<br>4 allocs/op<br><span style="color:red">+31.5%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu VT (baseline) | BaoHuLu |
+|:----------|:---------------------:|:-------:|
+| pb encode | 1.85 GB/s<br>0 allocs/op | 1.20 GB/s<br>0 allocs/op<br><span style="color:red">+53.6%</span> |
+| pb decode | 1.16 GB/s<br>0 allocs/op | 717.28 MB/s<br>0 allocs/op<br><span style="color:red">+61.7%</span> |
 

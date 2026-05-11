@@ -19,12 +19,15 @@ message NotUse {
   int64 a = 1;
 }
 
+// @from-post-form
 message Child {
   // @varName=ChildID
   // @jsonName=childid
   // @yamlName=child_id_
   // @tag=gorm:"column:child_id;type:int;not null"
   int32 child_id = 1;
+
+  // @formName=child_name
   string ChildName = 2;
 
   // @deprecated
@@ -82,6 +85,7 @@ message AllTypes {
   map<uint64, AllTypes> children = 1012;
 }
 
+// @from-post-form
 message ValueTypes {
   double DoubleValue = 1;
   float FloatValue = 2;
@@ -111,6 +115,8 @@ message HelloResponse {
 
 service Demo {
   //option (google.api.api_version) = "v1";
+  // @path=/api/v1/hello
+  // @path=/api/v2/hello
   rpc Hello(HelloRequest) returns (HelloResponse) {
     // todo: 未来可以定义很多自己的 option，然后把这个作为元数据，去做代码生成
     //option (google.api.http) = {get: "/v1/hello"};

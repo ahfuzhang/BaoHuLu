@@ -3,9 +3,31 @@ package protocheck
 import (
 	"fmt"
 	"os"
+	"unicode"
 
+	"github.com/ahfuzhang/BaoHuLu/internal/protoextensions"
 	"github.com/emicklei/proto"
 )
+
+// isValidIdent reports whether s is a valid identifier (letter or _ start,
+// followed by letters, digits, or underscores).
+func isValidIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if i == 0 {
+			if !unicode.IsLetter(r) && r != '_' {
+				return false
+			}
+		} else {
+			if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+				return false
+			}
+		}
+	}
+	return true
+}
 
 // Check opens the given .proto file, parses it, and reports any syntax errors.
 // It returns nil if the file is valid.
@@ -49,6 +71,25 @@ func Check(srcFile string) error {
 				return
 			} else if nf.Required {
 				checkErr = fmt.Errorf("%s:%d: required field modifier is not supported", srcFile, nf.Position.Line)
+				return
+			}
+			// field name must be a valid identifier
+			if !isValidIdent(nf.Name) {
+				checkErr = fmt.Errorf("%s:%d: field name %q is not a valid identifier", srcFile, nf.Position.Line, nf.Name)
+				return
+			}
+			// @varName and @jsonName values must also be valid identifiers
+			var commentLines []string
+			if nf.Comment != nil {
+				commentLines = nf.Comment.Lines
+			}
+			ext, _ := protoextensions.ParseAndStripField(commentLines)
+			if ext.VarName != "" && !isValidIdent(ext.VarName) {
+				checkErr = fmt.Errorf("%s:%d: @varName value %q is not a valid identifier", srcFile, nf.Position.Line, ext.VarName)
+				return
+			}
+			if ext.JsonName != "" && !isValidIdent(ext.JsonName) {
+				checkErr = fmt.Errorf("%s:%d: @jsonName value %q is not a valid identifier", srcFile, nf.Position.Line, ext.JsonName)
 				return
 			}
 			// warn on duplicate field names across all messages

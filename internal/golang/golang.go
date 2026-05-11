@@ -217,6 +217,311 @@ func JsonScalarClass(protoType string) string {
 	}
 }
 
+// ─── alignment helpers ────────────────────────────────────────────────────────
+
+// padRight pads s on the right with spaces so its total length is w.
+// If len(s) >= w, s is returned unchanged.
+func padRight(s string, w int) string {
+	if len(s) >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-len(s))
+}
+
+// maxTagLen returns the max length of "{goName}{field.Name}Tag" across all fields.
+func maxTagLen(goName string, fields []FieldTpl) int {
+	max := 0
+	for _, f := range fields {
+		n := len(goName) + len(f.Name) + 3 // "Tag"
+		if n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// maxNameOfLen returns the max length of "NameOf{goName}{field.Name}" across all fields.
+func maxNameOfLen(goName string, fields []FieldTpl) int {
+	max := 0
+	for _, f := range fields {
+		n := 6 + len(goName) + len(f.Name) // "NameOf"
+		if n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// maxEnumValLen returns the max length of EnumValueGoName(val.Name) across all enum values.
+func maxEnumValLen(vals []protofile.EnumValue) int {
+	max := 0
+	for _, v := range vals {
+		n := len(EnumValueGoName(v.Name))
+		if n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// writerFieldNameMax returns the max length of all field names in a writer struct,
+// including hidden _nameArr and arena fields.
+func writerFieldNameMax(fields []FieldTpl) int {
+	max := len("arena")
+	for _, f := range fields {
+		if n := len(f.Name); n > max {
+			max = n
+		}
+		if f.Map && f.MapValIsMsg {
+			if n := 1 + len(f.Name) + 3; n > max { // "_" + name + "Arr"
+				max = n
+			}
+		}
+	}
+	return max
+}
+
+// readerFieldNameMax returns the max length of all field names in a reader struct,
+// including hidden _nameArr, _hasName, and rawBuffer fields.
+func readerFieldNameMax(fields []FieldTpl) int {
+	max := len("rawBuffer")
+	for _, f := range fields {
+		if f.IsRawBuf {
+			continue
+		}
+		if n := len(f.Name); n > max {
+			max = n
+		}
+		if f.Map && f.MapValIsMsg {
+			if n := 1 + len(f.Name) + 3; n > max { // "_" + name + "Arr"
+				max = n
+			}
+		}
+		if f.IsMsg && f.IsRecursive {
+			if n := 4 + len(f.Name); n > max { // "_has" + name
+				max = n
+			}
+		}
+	}
+	return max
+}
+
+// writerFieldType returns the Go type string for a writer struct field,
+// matching what go.tpl generates.
+func (g *Generator) writerFieldType(f FieldTpl) string {
+	if f.Map && f.MapValIsMsg {
+		kgt, _, _ := g.ProtoTypeToGo(f.MapKey, false)
+		vgt, _, _ := g.ProtoTypeToGo(f.MapVal, false)
+		return "map[" + kgt + "]*" + vgt
+	}
+	if f.IsMsg && f.IsRecursive {
+		return "*" + f.GoType
+	}
+	return f.GoType
+}
+
+// readerFieldType returns the Go type string for a reader struct field,
+// matching what go.tpl generates.
+func (g *Generator) readerFieldType(f FieldTpl) string {
+	if f.IsRawBuf {
+		return "[]byte"
+	}
+	if f.Map && f.MapValIsMsg {
+		kgt, _, _ := g.ProtoTypeToGo(f.MapKey, false)
+		vgt := protofile.ReadonlyGoTypeName(f.MapVal)
+		return "map[" + kgt + "]*" + vgt
+	}
+	if f.IsMsg && f.IsRecursive {
+		return "*" + f.ReaderType
+	}
+	return f.ReaderType
+}
+
+// writerFieldTypeMax returns the max type-string length for tagged writer struct fields.
+func (g *Generator) writerFieldTypeMax(fields []FieldTpl) int {
+	max := 0
+	for _, f := range fields {
+		if f.StructTag == "" {
+			continue
+		}
+		if n := len(g.writerFieldType(f)); n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// readerFieldTypeMax returns the max type-string length for tagged reader struct fields.
+func (g *Generator) readerFieldTypeMax(fields []FieldTpl) int {
+	max := 0
+	for _, f := range fields {
+		if f.IsRawBuf || f.StructTag == "" {
+			continue
+		}
+		if n := len(g.readerFieldType(f)); n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// ─── per-group struct-field alignment ────────────────────────────────────────
+
+// alignLine is an intermediate field-line descriptor used by computeAlignedFields.
+type alignLine struct {
+	comment   []string
+	name      string
+	typeStr   string
+	structTag string
+}
+
+// AlignedField is a pre-computed struct-field descriptor with per-group column widths.
+// The flat list produced by writerAlignedFields / readerAlignedFields contains one element
+// per rendered struct line (including hidden _nameArr / _hasName lines and the terminal
+// arena field).  NameW and TypeW match what go/printer's tabwriter would compute, so
+// the generated code needs no additional gofmt pass.
+type AlignedField struct {
+	Comment   []string
+	Name      string
+	TypeStr   string
+	StructTag string // empty for untagged fields
+	NameW     int    // max name len in this name-column group
+	TypeW     int    // max type len in this type-column sub-group (0 for untagged)
+}
+
+// computeAlignedFields assigns NameW and TypeW to each line following tabwriter rules:
+//   - Name-column groups break when a line has a non-empty comment (the comment line
+//     precedes the field and emits a 1-column line that resets tabwriter alignment).
+//   - Within each name group, type-column sub-groups break at untagged lines
+//     (StructTag == ""), mirroring how gofmt breaks the type-column alignment group
+//     at fields with no struct tag.
+func computeAlignedFields(lines []alignLine) []AlignedField {
+	n := len(lines)
+	nameW := make([]int, n)
+	typeW := make([]int, n)
+
+	// Pass 1: name-column groups.
+	groupStart := 0
+	for i := 1; i <= n; i++ {
+		if i == n || len(lines[i].comment) > 0 {
+			maxLen := 0
+			for j := groupStart; j < i; j++ {
+				if l := len(lines[j].name); l > maxLen {
+					maxLen = l
+				}
+			}
+			for j := groupStart; j < i; j++ {
+				nameW[j] = maxLen
+			}
+			groupStart = i
+		}
+	}
+
+	// Pass 2: type-column sub-groups within each name group.
+	groupStart = 0
+	for i := 1; i <= n; i++ {
+		if i == n || len(lines[i].comment) > 0 {
+			alignTypeSubgroups(lines, typeW, groupStart, i)
+			groupStart = i
+		}
+	}
+
+	out := make([]AlignedField, n)
+	for i, l := range lines {
+		out[i] = AlignedField{
+			Comment:   l.comment,
+			Name:      l.name,
+			TypeStr:   l.typeStr,
+			StructTag: l.structTag,
+			NameW:     nameW[i],
+			TypeW:     typeW[i],
+		}
+	}
+	return out
+}
+
+// alignTypeSubgroups fills typeW[start:end] for the lines in a single name-column group.
+func alignTypeSubgroups(lines []alignLine, typeW []int, start, end int) {
+	sgStart := start
+	for i := start; i <= end; i++ {
+		if i == end || lines[i].structTag == "" {
+			if i > sgStart {
+				maxLen := 0
+				for j := sgStart; j < i; j++ {
+					if l := len(lines[j].typeStr); l > maxLen {
+						maxLen = l
+					}
+				}
+				for j := sgStart; j < i; j++ {
+					typeW[j] = maxLen
+				}
+			}
+			if i < end {
+				typeW[i] = 0 // untagged
+			}
+			sgStart = i + 1
+		}
+	}
+}
+
+// writerAlignedFields returns a flat AlignedField list for all lines in the writer struct
+// body: visible fields, hidden _nameArr lines (for map-of-msg fields), and the terminal
+// arena field.  NameW and TypeW are computed per tabwriter alignment group.
+func (g *Generator) writerAlignedFields(fields []FieldTpl) []AlignedField {
+	var lines []alignLine
+	for _, f := range fields {
+		lines = append(lines, alignLine{
+			comment:   f.Comment,
+			name:      f.Name,
+			typeStr:   g.writerFieldType(f),
+			structTag: f.StructTag,
+		})
+		if f.Map && f.MapValIsMsg {
+			valGt, _, _ := g.ProtoTypeToGo(f.MapVal, false)
+			lines = append(lines, alignLine{
+				name:    "_" + f.Name + "Arr",
+				typeStr: "[]" + valGt,
+			})
+		}
+	}
+	lines = append(lines, alignLine{name: "arena", typeStr: "[]byte"})
+	return computeAlignedFields(lines)
+}
+
+// readerAlignedFields returns a flat AlignedField list for all lines in the reader
+// (Readonly) struct body: rawBuffer, visible fields, hidden _nameArr / _hasName lines.
+// It processes .ReaderFields which already includes the synthetic rawBuffer entry.
+func (g *Generator) readerAlignedFields(fields []FieldTpl) []AlignedField {
+	var lines []alignLine
+	for _, f := range fields {
+		if f.IsRawBuf {
+			lines = append(lines, alignLine{name: "rawBuffer", typeStr: "[]byte"})
+			continue
+		}
+		tag := "`json:\"" + f.JsonName + ",omitempty\"`"
+		lines = append(lines, alignLine{
+			comment:   f.Comment,
+			name:      f.Name,
+			typeStr:   g.readerFieldType(f),
+			structTag: tag,
+		})
+		if f.Map && f.MapValIsMsg {
+			valGt := protofile.ReadonlyGoTypeName(f.MapVal)
+			lines = append(lines, alignLine{
+				name:    "_" + f.Name + "Arr",
+				typeStr: "[]" + valGt,
+			})
+		}
+		if f.IsMsg && f.IsRecursive {
+			lines = append(lines, alignLine{
+				name:    "_has" + f.Name,
+				typeStr: "bool",
+			})
+		}
+	}
+	return computeAlignedFields(lines)
+}
+
 // ─── template data types ──────────────────────────────────────────────────────
 
 type FieldTpl struct {
@@ -514,6 +819,18 @@ func (g *Generator) Render(out *os.File) error {
 		"mapValIsMsg":     func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
 		"upperFirst":      protofile.UpperFirst,
 		"enumValueGoName": EnumValueGoName,
+		"padRight":             padRight,
+		"maxTagLen":            maxTagLen,
+		"maxNameOfLen":         maxNameOfLen,
+		"maxEnumValLen":        maxEnumValLen,
+		"writerFieldNameMax":   writerFieldNameMax,
+		"readerFieldNameMax":   readerFieldNameMax,
+		"writerFieldType":       g.writerFieldType,
+		"readerFieldType":       g.readerFieldType,
+		"writerFieldTypeMax":    g.writerFieldTypeMax,
+		"readerFieldTypeMax":    g.readerFieldTypeMax,
+		"writerAlignedFields":   g.writerAlignedFields,
+		"readerAlignedFields":   g.readerAlignedFields,
 		"readerElemType": func(fd protofile.FieldDef) string {
 			return protofile.ReadonlyGoTypeName(fd.Type)
 		},

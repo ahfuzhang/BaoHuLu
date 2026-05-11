@@ -361,6 +361,29 @@ func UnsafeBytesFromString(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
+// AppendJSONKey appends `"key":` to dst using a single capacity check.
+// It pre-grows dst by len(key)+3 bytes, then writes the bytes from tail to head
+// to reduce bounds checks.
+func AppendJSONKey(dst []byte, key string) []byte {
+	nameLen := len(key)
+	n := nameLen + 3
+	base := len(dst)
+	if cap(dst)-base < n {
+		tmp := make([]byte, base, base+n+256)
+		copy(tmp, dst)
+		dst = tmp
+	}
+	dst = dst[:base+n]
+	pos := base + n
+	dst[pos-1] = ':'
+	pos--
+	dst[pos-1] = '"'
+	pos -= nameLen
+	copy(dst[pos-1:], key)
+	dst[pos-2] = '"'
+	return dst
+}
+
 // EncodeJSONString appends a JSON-safe escaped version of s into dst.
 // No heap allocations are performed.
 func EncodeJSONString(s string, dst []byte) []byte {

@@ -4,6 +4,7 @@ package {{.Package}}
 
 import (
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"runtime"
 	"testing"
@@ -23,8 +24,8 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 	const minDuration = 30 * time.Second
 
 	type metrics struct {
-		bytesPerSec     float64
-		allocBytesPerOp int64
+		bytesPerSec float64
+		allocsPerOp int64
 	}
 
 	runBench := func(fn func() int) metrics {
@@ -47,13 +48,13 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 		runtime.GC()
 		runtime.ReadMemStats(&m2)
 
-		var allocBytesPerOp int64
+		var allocsPerOp int64
 		if count > 0 {
-			allocBytesPerOp = int64(m2.TotalAlloc-m1.TotalAlloc) / count
+			allocsPerOp = int64(m2.Mallocs-m1.Mallocs) / count
 		}
 		return metrics{
-			bytesPerSec:     float64(totalBytes) / elapsed.Seconds(),
-			allocBytesPerOp: allocBytesPerOp,
+			bytesPerSec: float64(totalBytes) / elapsed.Seconds(),
+			allocsPerOp: allocsPerOp,
 		}
 	}
 
@@ -97,8 +98,8 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 {{- end}}
 
 	var (
-		mJEncBHL, mJEncStd, mJEncSonic metrics
-		mJDecBHL, mJDecStd, mJDecSonic metrics
+		mJEncBHL, mJEncStd, mJEncJV2, mJEncSonic metrics
+		mJDecBHL, mJDecStd, mJDecJV2, mJDecSonic metrics
 		mPbEncReg                       metrics
 		mPbDecReg                       metrics
 {{- if $.WithVtprotobuf}}
@@ -122,17 +123,23 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			j, _ := json.Marshal(src)
 			return len(j)
 		})
+		mJEncJV2 = runBench(func() int {
+			j, _ := jsonv2.Marshal(src)
+			return len(j)
+		})
 		mJEncSonic = runBench(func() int {
 			j, _ := sonic.Marshal(src)
 			return len(j)
 		})
 		fmt.Printf(
-			"json encode:  [ToJSON] %s, %d B/op"+
-				" | [encoding/json] %s, %d B/op, %s"+
-				" | [bytedance/sonic] %s, %d B/op, %s\n",
-			fmtBPS(mJEncBHL.bytesPerSec), mJEncBHL.allocBytesPerOp,
-			fmtBPS(mJEncStd.bytesPerSec), mJEncStd.allocBytesPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncStd.bytesPerSec, "encoding/json"),
-			fmtBPS(mJEncSonic.bytesPerSec), mJEncSonic.allocBytesPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncSonic.bytesPerSec, "bytedance/sonic"),
+			"json encode:  [ToJSON] %s, %d allocs/op"+
+				" | [encoding/json] %s, %d allocs/op, %s"+
+				" | [encoding/json/v2] %s, %d allocs/op, %s"+
+				" | [bytedance/sonic] %s, %d allocs/op, %s\n",
+			fmtBPS(mJEncBHL.bytesPerSec), mJEncBHL.allocsPerOp,
+			fmtBPS(mJEncStd.bytesPerSec), mJEncStd.allocsPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncStd.bytesPerSec, "encoding/json"),
+			fmtBPS(mJEncJV2.bytesPerSec), mJEncJV2.allocsPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncJV2.bytesPerSec, "encoding/json/v2"),
+			fmtBPS(mJEncSonic.bytesPerSec), mJEncSonic.allocsPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncSonic.bytesPerSec, "bytedance/sonic"),
 		)
 	}
 
@@ -150,18 +157,25 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			_ = json.Unmarshal(jsonData, &w)
 			return len(jsonData)
 		})
+		mJDecJV2 = runBench(func() int {
+			var w {{$goName}}
+			_ = jsonv2.Unmarshal(jsonData, &w)
+			return len(jsonData)
+		})
 		mJDecSonic = runBench(func() int {
 			var w {{$goName}}
 			_ = sonic.Unmarshal(jsonData, &w)
 			return len(jsonData)
 		})
 		fmt.Printf(
-			"json decode:  [FromJSON] %s, %d B/op"+
-				" | [encoding/json] %s, %d B/op, %s"+
-				" | [bytedance/sonic] %s, %d B/op, %s\n",
-			fmtBPS(mJDecBHL.bytesPerSec), mJDecBHL.allocBytesPerOp,
-			fmtBPS(mJDecStd.bytesPerSec), mJDecStd.allocBytesPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecStd.bytesPerSec, "encoding/json"),
-			fmtBPS(mJDecSonic.bytesPerSec), mJDecSonic.allocBytesPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecSonic.bytesPerSec, "bytedance/sonic"),
+			"json decode:  [FromJSON] %s, %d allocs/op"+
+				" | [encoding/json] %s, %d allocs/op, %s"+
+				" | [encoding/json/v2] %s, %d allocs/op, %s"+
+				" | [bytedance/sonic] %s, %d allocs/op, %s\n",
+			fmtBPS(mJDecBHL.bytesPerSec), mJDecBHL.allocsPerOp,
+			fmtBPS(mJDecStd.bytesPerSec), mJDecStd.allocsPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecStd.bytesPerSec, "encoding/json"),
+			fmtBPS(mJDecJV2.bytesPerSec), mJDecJV2.allocsPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecJV2.bytesPerSec, "encoding/json/v2"),
+			fmtBPS(mJDecSonic.bytesPerSec), mJDecSonic.allocsPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecSonic.bytesPerSec, "bytedance/sonic"),
 		)
 	}
 
@@ -183,10 +197,10 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			return len(buf2)
 		})
 		fmt.Printf(
-			"pb encode:    [ToProtobufVT] %s, %d B/op"+
-				" | [ToProtobuf] %s, %d B/op, %s\n",
-			fmtBPS(mPbEncVT.bytesPerSec), mPbEncVT.allocBytesPerOp,
-			fmtBPS(mPbEncReg.bytesPerSec), mPbEncReg.allocBytesPerOp, fmtPct(mPbEncVT.bytesPerSec, mPbEncReg.bytesPerSec, "ToProtobuf"),
+			"pb encode:    [ToProtobufVT] %s, %d allocs/op"+
+				" | [ToProtobuf] %s, %d allocs/op, %s\n",
+			fmtBPS(mPbEncVT.bytesPerSec), mPbEncVT.allocsPerOp,
+			fmtBPS(mPbEncReg.bytesPerSec), mPbEncReg.allocsPerOp, fmtPct(mPbEncVT.bytesPerSec, mPbEncReg.bytesPerSec, "ToProtobuf"),
 		)
 	}
 
@@ -205,10 +219,10 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			return len(pbData)
 		})
 		fmt.Printf(
-			"pb decode:    [FromProtobufVT] %s, %d B/op"+
-				" | [FromProtobuf] %s, %d B/op, %s\n",
-			fmtBPS(mPbDecVT.bytesPerSec), mPbDecVT.allocBytesPerOp,
-			fmtBPS(mPbDecReg.bytesPerSec), mPbDecReg.allocBytesPerOp, fmtPct(mPbDecVT.bytesPerSec, mPbDecReg.bytesPerSec, "FromProtobuf"),
+			"pb decode:    [FromProtobufVT] %s, %d allocs/op"+
+				" | [FromProtobuf] %s, %d allocs/op, %s\n",
+			fmtBPS(mPbDecVT.bytesPerSec), mPbDecVT.allocsPerOp,
+			fmtBPS(mPbDecReg.bytesPerSec), mPbDecReg.allocsPerOp, fmtPct(mPbDecVT.bytesPerSec, mPbDecReg.bytesPerSec, "FromProtobuf"),
 		)
 	}
 {{- else}}
@@ -220,8 +234,8 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			return len(buf)
 		})
 		fmt.Printf(
-			"pb encode:    [ToProtobuf] %s, %d B/op\n",
-			fmtBPS(mPbEncReg.bytesPerSec), mPbEncReg.allocBytesPerOp,
+			"pb encode:    [ToProtobuf] %s, %d allocs/op\n",
+			fmtBPS(mPbEncReg.bytesPerSec), mPbEncReg.allocsPerOp,
 		)
 	}
 
@@ -234,18 +248,18 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			return len(pbData)
 		})
 		fmt.Printf(
-			"pb decode:    [FromProtobuf] %s, %d B/op\n",
-			fmtBPS(mPbDecReg.bytesPerSec), mPbDecReg.allocBytesPerOp,
+			"pb decode:    [FromProtobuf] %s, %d allocs/op\n",
+			fmtBPS(mPbDecReg.bytesPerSec), mPbDecReg.allocsPerOp,
 		)
 	}
 {{- end}}
 
 	mdBase := func(m metrics) string {
-		return fmt.Sprintf("%s<br>%d B/op", fmtBPS(m.bytesPerSec), m.allocBytesPerOp)
+		return fmt.Sprintf("%s<br>%d allocs/op", fmtBPS(m.bytesPerSec), m.allocsPerOp)
 	}
 	mdCmp := func(m, base metrics) string {
-		return fmt.Sprintf("%s<br>%d B/op<br>%s",
-			fmtBPS(m.bytesPerSec), m.allocBytesPerOp,
+		return fmt.Sprintf("%s<br>%d allocs/op<br>%s",
+			fmtBPS(m.bytesPerSec), m.allocsPerOp,
 			fmtPctMD(base.bytesPerSec, m.bytesPerSec),
 		)
 	}
@@ -256,16 +270,18 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 
 	fmt.Println("### JSON Performance")
 	fmt.Println()
-	fmt.Println("| Operation | BaoHuLu | encoding/json | bytedance/sonic |")
-	fmt.Println("|:----------|:-------:|:-------------:|:---------------:|")
-	fmt.Printf("| json encode | %s | %s | %s |\n",
+	fmt.Println("| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |")
+	fmt.Println("|:----------|:-------:|:-------------:|:----------------:|:---------------:|")
+	fmt.Printf("| json encode | %s | %s | %s | %s |\n",
 		mdBase(mJEncBHL),
 		mdCmp(mJEncStd, mJEncBHL),
+		mdCmp(mJEncJV2, mJEncBHL),
 		mdCmp(mJEncSonic, mJEncBHL),
 	)
-	fmt.Printf("| json decode | %s | %s | %s |\n",
+	fmt.Printf("| json decode | %s | %s | %s | %s |\n",
 		mdBase(mJDecBHL),
 		mdCmp(mJDecStd, mJDecBHL),
+		mdCmp(mJDecJV2, mJDecBHL),
 		mdCmp(mJDecSonic, mJDecBHL),
 	)
 

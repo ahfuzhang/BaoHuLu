@@ -129,3 +129,42 @@ ok      github.com/ahfuzhang/BaoHuLu/build/buf/golang/vtprotobuf        147.354s
 |:----------|:---------------------:|:-------:|
 | pb encode | 744.06 MB/s<br>0 B/op | 789.26 MB/s<br>0 B/op<br><span style="color:green">-5.7%</span> |
 | pb decode | 708.27 MB/s<br>86968 B/op | 510.56 MB/s<br>86840 B/op<br><span style="color:red">+38.7%</span> |
+
+# 2026-05-11
+
+```
+GOEXPERIMENT=jsonv2 go test -run=^$ -bench='.*AllTypes.*' -v  -benchtime=60s
+goos: darwin
+goarch: arm64
+pkg: github.com/ahfuzhang/BaoHuLu/examples/Demo
+cpu: Apple M2
+BenchmarkToJSON_AllTypes_Generated
+BenchmarkToJSON_AllTypes_Generated-8              480729            148988 ns/op         821.78 MB/s           0 B/op          0 allocs/op
+BenchmarkToJSON_AllTypes_EncodingJSON
+BenchmarkToJSON_AllTypes_EncodingJSON-8            92494            774092 ns/op         158.17 MB/s      411042 B/op       3260 allocs/op
+BenchmarkToJSON_AllTypes_Sonic
+BenchmarkToJSON_AllTypes_Sonic-8                  223558            321565 ns/op         380.75 MB/s      127172 B/op         40 allocs/op
+BenchmarkToJSON_AllTypes_EncodingJSONv2
+BenchmarkToJSON_AllTypes_EncodingJSONv2-8         201386            386256 ns/op         316.98 MB/s      124377 B/op         77 allocs/op
+BenchmarkFromJSON_AllTypes_Generated
+BenchmarkFromJSON_AllTypes_Generated-8            193580            314195 ns/op         389.68 MB/s       59698 B/op         59 allocs/op
+BenchmarkFromJSON_AllTypes_EncodingJSON
+BenchmarkFromJSON_AllTypes_EncodingJSON-8          78952            917291 ns/op         133.47 MB/s      226292 B/op       1363 allocs/op
+BenchmarkFromJSON_AllTypes_Sonic
+BenchmarkFromJSON_AllTypes_Sonic-8                261181            277900 ns/op         440.57 MB/s      275452 B/op        778 allocs/op
+BenchmarkFromJSON_AllTypes_EncodingJSONv2
+BenchmarkFromJSON_AllTypes_EncodingJSONv2-8        96312            757191 ns/op         161.70 MB/s      226290 B/op       1360 allocs/op
+BenchmarkToProtobuf_AllTypes
+BenchmarkToProtobuf_AllTypes-8                    756259             96790 ns/op         775.81 MB/s           0 B/op          0 allocs/op
+BenchmarkFromProtobuf_AllTypes
+BenchmarkFromProtobuf_AllTypes-8                  480618            150222 ns/op         499.87 MB/s       86841 B/op        155 allocs/op
+BenchmarkToProtobufVT_AllTypes
+BenchmarkToProtobufVT_AllTypes-8                  731880            100051 ns/op         750.53 MB/s           0 B/op          0 allocs/op
+BenchmarkFromProtobufVT_AllTypes
+BenchmarkFromProtobufVT_AllTypes-8                668502            111442 ns/op         673.81 MB/s       86968 B/op        156 allocs/op
+BenchmarkProtobufSizeVT_AllTypes
+BenchmarkProtobufSizeVT_AllTypes-8               2688649             26674 ns/op        2815.16 MB/s           0 B/op          0 allocs/op
+PASS
+ok      github.com/ahfuzhang/BaoHuLu/examples/Demo      1008.093s
+```
+

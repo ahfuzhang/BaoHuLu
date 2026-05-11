@@ -12,7 +12,7 @@ import (
 
 	"github.com/bytedance/sonic"
 
-	"github.com/valyala/fastjson"
+	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastjson"
 )
 
 {{range .Messages}}

@@ -9,7 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
-	"github.com/valyala/fastjson"
+	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastjson"
 )
 
 // for build time check
@@ -569,7 +569,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		{
 			dst = append(dst, '{')
 			_jsonFirst := true
@@ -660,7 +662,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		{
 			dst = append(dst, '[')
 			for _i, _v := range m.{{$f.Name}} {
@@ -735,7 +739,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		dst = m.{{$f.Name}}.ToJSON(dst)
 	}
 {{- else}}
@@ -743,7 +749,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 		dst = append(dst, ',')
 	}
 	_jsonFirstField = false
-	dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+	dst = append(dst, '"')
+	dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+	dst = append(dst, '"', ':')
 	dst = m.{{$f.Name}}.ToJSON(dst)
 {{- end}}
 {{- else if eq $f.Type "string"}}
@@ -752,7 +760,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		dst = append(dst, '"')
 		dst = utils.EncodeJSONString(m.{{$f.Name}}, dst)
 		dst = append(dst, '"')
@@ -763,7 +773,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		dst = append(dst, "true"...)
 	}
 {{- else if eq $f.Type "double"}}
@@ -772,7 +784,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		{
 			_fv := m.{{$f.Name}}
 			_iv := int64(_fv)
@@ -789,7 +803,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		{
 			_fv := float64(m.{{$f.Name}})
 			_iv := int64(_fv)
@@ -806,7 +822,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		dst = strconv.AppendUint(dst, uint64(m.{{$f.Name}}), 10)
 	}
 {{- else if or (eq $f.Type "uint64") (eq $f.Type "fixed64")}}
@@ -815,7 +833,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		if uint64(m.{{$f.Name}}) > 9007199254740991 {
 			dst = append(dst, '"')
 			dst = strconv.AppendUint(dst, uint64(m.{{$f.Name}}), 10)
@@ -830,7 +850,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		dst = append(dst, '"')
 		dst = base64.StdEncoding.AppendEncode(dst, m.{{$f.Name}})
 		dst = append(dst, '"')
@@ -841,7 +863,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		if int64(m.{{$f.Name}}) > 9007199254740991 || int64(m.{{$f.Name}}) < -9007199254740991 {
 			dst = append(dst, '"')
 			dst = strconv.AppendInt(dst, int64(m.{{$f.Name}}), 10)
@@ -856,7 +880,9 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 			dst = append(dst, ',')
 		}
 		_jsonFirstField = false
-		dst = utils.AppendJSONKey(dst, NameOf{{$goName}}{{$f.Name}})
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
 		dst = strconv.AppendInt(dst, int64(m.{{$f.Name}}), 10)
 	}
 {{- end}}
@@ -1362,7 +1388,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 	return nil
 }
 
-func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
+func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjson.Parser) error {
 	var visitErr error
 	obj.Visit(func(k []byte, v *fastjson.Value) {
 		if visitErr != nil {
@@ -1431,7 +1457,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 					visitErr = _eo
 					return
 				}
-				if _eo2 := r._{{.Name}}Arr[_mValIdx].fromJSONValue(_subObj); _eo2 != nil {
+				if _eo2 := r._{{.Name}}Arr[_mValIdx].fromJSONValue(_subObj, parser); _eo2 != nil {
 					visitErr = _eo2
 					return
 				}
@@ -1481,7 +1507,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 				mVal = {{mapValGoType .MapVal}}(_iv)
 {{- else if eq $vc "signed64"}}
 				var _iv int64
-				if mv.Type() == fastjson.TypeString {
+				if mv.Type(parser) == fastjson.TypeString {
 					_sb, _ev := mv.StringBytes()
 					if _ev != nil {
 						visitErr = _ev
@@ -1511,7 +1537,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 				mVal = {{mapValGoType .MapVal}}(_uv)
 {{- else if eq $vc "unsigned64"}}
 				var _uv uint64
-				if mv.Type() == fastjson.TypeString {
+				if mv.Type(parser) == fastjson.TypeString {
 					_sb, _ev := mv.StringBytes()
 					if _ev != nil {
 						visitErr = _ev
@@ -1535,7 +1561,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 {{- end}}
 				r.{{.Name}}[mKey] = mVal
 {{- end}}
-			})
+			}, parser)
 {{- else if .Repeated}}
 			_arr, _e := v.Array()
 			if _e != nil {
@@ -1555,7 +1581,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 					visitErr = _eo
 					return
 				}
-				if _eo2 := _elem.fromJSONValue(_subObj); _eo2 != nil {
+				if _eo2 := _elem.fromJSONValue(_subObj, parser); _eo2 != nil {
 					visitErr = _eo2
 					return
 				}
@@ -1617,7 +1643,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 				r.{{.Name}} = append(r.{{.Name}}, {{elemType .ReaderType}}(_iv))
 {{- else if eq $sc "signed64"}}
 				var _iv int64
-				if _item.Type() == fastjson.TypeString {
+				if _item.Type(parser) == fastjson.TypeString {
 					_sb, _ei := _item.StringBytes()
 					if _ei != nil {
 						visitErr = _ei
@@ -1647,7 +1673,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 				r.{{.Name}} = append(r.{{.Name}}, {{elemType .ReaderType}}(_uv))
 {{- else if eq $sc "unsigned64"}}
 				var _uv uint64
-				if _item.Type() == fastjson.TypeString {
+				if _item.Type(parser) == fastjson.TypeString {
 					_sb, _ei := _item.StringBytes()
 					if _ei != nil {
 						visitErr = _ei
@@ -1683,7 +1709,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 			}
 			r._has{{.Name}} = true
 {{- end}}
-			if _e2 := r.{{.Name}}.fromJSONValue(_subObj); _e2 != nil {
+			if _e2 := r.{{.Name}}.fromJSONValue(_subObj, parser); _e2 != nil {
 				visitErr = _e2
 			}
 {{- else if .IsEnum}}
@@ -1737,7 +1763,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 			r.{{.Name}} = {{.ReaderType}}(_iv)
 {{- else if eq $sc "signed64"}}
 			var _iv int64
-			if v.Type() == fastjson.TypeString {
+			if v.Type(parser) == fastjson.TypeString {
 				_sb, _e := v.StringBytes()
 				if _e != nil {
 					visitErr = _e
@@ -1767,7 +1793,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 			r.{{.Name}} = {{.ReaderType}}(_uv)
 {{- else if eq $sc "unsigned64"}}
 			var _uv uint64
-			if v.Type() == fastjson.TypeString {
+			if v.Type(parser) == fastjson.TypeString {
 				_sb, _e := v.StringBytes()
 				if _e != nil {
 					visitErr = _e
@@ -1792,7 +1818,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 {{- end}}
 {{- end}}
 		}
-	})
+	}, parser)
 	return visitErr
 }
 
@@ -1809,7 +1835,7 @@ func (r *Readonly{{$goName}}) FromJSON(src []byte, parser *fastjson.Parser) erro
 	if err != nil {
 		return err
 	}
-	return r.fromJSONValue(obj)
+	return r.fromJSONValue(obj, parser)
 }
 
 func (r *Readonly{{$goName}}) FromProtobufWithCopy(in []byte) error {

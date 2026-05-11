@@ -1616,6 +1616,39 @@ func (g *Generator) RenderVtprotobuf(out *os.File) error {
 	return tmpl.Execute(out, data)
 }
 
+// CompareRenderData is the template data for the compare test file.
+type CompareRenderData struct {
+	Package        string
+	Messages       []MsgTpl
+	WithVtprotobuf bool
+}
+
+// RenderCompare renders the performance-comparison test file to out.
+// It generates one Test_<Msg>_with_compare function per message, measuring
+// JSON and Protobuf encode/decode throughput against standard library alternatives.
+// When withVtprotobuf is true, VT-protobuf encode/decode measurements are included.
+// The generated file depends on the benchBuildXxx helpers from the _timing_test.go file.
+func (g *Generator) RenderCompare(out *os.File, withVtprotobuf bool) error {
+	var msgs []MsgTpl
+	for _, name := range g.Order {
+		md := g.Messages[name]
+		msgs = append(msgs, MsgTpl{
+			Name:   md.Name,
+			GoName: protofile.GoTypeName(md.Name),
+		})
+	}
+	data := CompareRenderData{
+		Package:        g.Pkg,
+		Messages:       msgs,
+		WithVtprotobuf: withVtprotobuf,
+	}
+	tmpl, err := template.New("compare_test").Parse(compareTemplate)
+	if err != nil {
+		return fmt.Errorf("parse compare template: %w", err)
+	}
+	return tmpl.Execute(out, data)
+}
+
 // ─── code template ────────────────────────────────────────────────────────────
 
 //go:embed go.tpl
@@ -1635,3 +1668,6 @@ var vtprotobufTestTemplate string
 
 //go:embed vtprotobuf_timing_test.go.tpl
 var vtprotobufBenchTemplate string
+
+//go:embed compare_test.go.tpl
+var compareTemplate string

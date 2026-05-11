@@ -74,3 +74,33 @@
   - 递归定义的情况  ✅
   - message 作为各种子类型的情况  ✅
   - map 类型中的 value  是 message 类型，并且 message 存在递归调用的情况  ✅
+
+* golang 性能优化
+  - 生成汇编代码
+  - 对于读(反序列化)：
+    - 当 map key 为 bool 类型时，分配为长度固定为 2 的数组
+    - 当 map 的 key 的数量小于 n 个时，所有的 key 放到一个数组中，使用顺序查找代替 hash 查找
+      - ? api 该如何设计
+      - 使用 simd 来加速查找
+    - 使用 arena 内存分配
+    - 所有的数组，都放到一大块 arena 当中
+    - 实现一个 hashbrwon, 来实现只读 map 的高性能查询
+  - 对于 json 反序列化
+    - 实现 avx 版本的 fastjson
+  - 对于 map 类型，要能够数出来 key 的数量
+  - 对于 数组类型，要能够数出来 item 的数量
+  - json 序列化：
+    - 提前计算长度，然后使用数组从后往前赋值的方法来提升性能
+* csharp 性能优化
+  - 实现 fastjson.cs，代替 json utf8 reader
+* 类型扩展
+  - 支持 decimal 数据类型 => 无意义 ❌
+* 扩展语法：
+  - @path 支持多次使用
+* csharp
+  - 支持 form 提交的解析
+* 没有考虑 key 里面有特殊字符的情况
+* check 功能里：检查 key 不能有特殊字符
+* 修改 test 程序：
+  - 运行一个 test 以后，自动按照我期望的格式输出 benchmark 的结果
+

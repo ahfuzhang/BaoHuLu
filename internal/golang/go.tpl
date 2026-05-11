@@ -858,6 +858,9 @@ type Readonly{{$goName}} struct {
 	_{{.Name}}Arr []{{readonlyTypeName .MapVal}}
 {{- else}}
 {{fieldCommentBlock .Comment}}	{{.Name}} {{if and .IsMsg .IsRecursive}}*{{end}}{{.ReaderType}} `json:"{{.JsonName}},omitempty"`
+{{- if and .IsMsg .IsRecursive}}
+	_has{{.Name}} bool
+{{- end}}
 {{- end}}
 {{- end}}
 }
@@ -1066,10 +1069,8 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 {{- end}}
 {{- else if .IsMsg}}
 {{- if .IsRecursive}}
-	if r.{{.Name}} != nil {
+	if r._has{{.Name}} && r.{{.Name}} != nil {
 		dst.{{.Name}} = r.{{.Name}}.Clone(dst.{{.Name}})
-	} else {
-		dst.{{.Name}} = nil
 	}
 {{- else}}
 	r.{{.Name}}.Clone(&dst.{{.Name}})
@@ -1111,7 +1112,8 @@ func (r *Readonly{{$goName}}) Reset() {
 	r.{{.Name}} = r.{{.Name}}[:0]
 {{- else if .IsMsg}}
 {{- if .IsRecursive}}
-	r.{{.Name}} = nil
+	r._has{{.Name}} = false
+	if r.{{.Name}} != nil { r.{{.Name}}.Reset() }
 {{- else}}
 	r.{{.Name}}.Reset()
 {{- end}}
@@ -1217,6 +1219,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if r.{{.Name}} == nil {
 				r.{{.Name}} = &{{.ReaderType}}{}
 			}
+			r._has{{.Name}} = true
 {{- end}}
 			if err = r.{{.Name}}.FromProtobuf(subData); err != nil { return err }
 {{- else if eq .Type "double"}}
@@ -1295,9 +1298,9 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 			if _e != nil { visitErr = _e; return }
 			if r.{{.Name}} == nil {
 				{{- if mapValIsMsg .MapVal}}
-				r.{{.Name}} = make(map[{{mapKeyGoType .MapKey}}]*{{readonlyTypeName .MapVal}})
+				r.{{.Name}} = make(map[{{mapKeyGoType .MapKey}}]*{{readonlyTypeName .MapVal}}, _mapObj.Len())
 				{{- else}}
-				r.{{.Name}} = make({{.ReaderType}})
+				r.{{.Name}} = make({{.ReaderType}}, _mapObj.Len())
 				{{- end}}
 			}
 			_mapObj.Visit(func(mk []byte, mv *fastjson.Value) {
@@ -1396,7 +1399,11 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 {{- else if .Repeated}}
 			_arr, _e := v.Array()
 			if _e != nil { visitErr = _e; return }
-			r.{{.Name}} = r.{{.Name}}[:0]
+			if cap(r.{{.Name}}) < len(_arr) {
+				r.{{.Name}} = make({{.ReaderType}}, 0, len(_arr))
+			} else {
+				r.{{.Name}} = r.{{.Name}}[:0]
+			}
 {{- if .IsMsg}}
 			for _, _item := range _arr {
 				var _elem {{elemType .ReaderType}}
@@ -1480,6 +1487,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object) error {
 			if r.{{.Name}} == nil {
 				r.{{.Name}} = &{{.ReaderType}}{}
 			}
+			r._has{{.Name}} = true
 {{- end}}
 			if _e2 := r.{{.Name}}.fromJSONValue(_subObj); _e2 != nil { visitErr = _e2 }
 {{- else if .IsEnum}}

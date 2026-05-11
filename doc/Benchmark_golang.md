@@ -80,3 +80,52 @@ ok      github.com/ahfuzhang/BaoHuLu/build/buf/golang/vtprotobuf        147.354s
 
 ```
 
+# 2026-05-10
+
+## 复杂类型
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | bytedance/sonic |
+|:----------|:-------:|:-------------:|:---------------:|
+| json encode | 797.14 MB/s<br>0 B/op | 196.69 MB/s<br>318306 B/op<br><span style="color:red">+305.3%</span> | 381.06 MB/s<br>127281 B/op<br><span style="color:red">+109.2%</span> |
+| json decode | 341.59 MB/s<br>174353 B/op | 83.80 MB/s<br>285073 B/op<br><span style="color:red">+307.6%</span> | 441.95 MB/s<br>275997 B/op<br><span style="color:green">-22.7%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu VT (baseline) | BaoHuLu |
+|:----------|:---------------------:|:-------:|
+| pb encode | 761.21 MB/s<br>0 B/op | 799.61 MB/s<br>0 B/op<br><span style="color:green">-4.8%</span> |
+| pb decode | 552.99 MB/s<br>174353 B/op | 418.86 MB/s<br>174097 B/op<br><span style="color:red">+32.0%</span> |
+
+## 简单类型
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | bytedance/sonic |
+|:----------|:-------:|:-------------:|:---------------:|
+| json encode | 1.81 GB/s<br>0 B/op | 485.76 MB/s<br>352 B/op<br><span style="color:red">+273.3%</span> | 427.58 MB/s<br>374 B/op<br><span style="color:red">+324.1%</span> |
+| json decode | 548.61 MB/s<br>0 B/op | 99.27 MB/s<br>328 B/op<br><span style="color:red">+452.7%</span> | 396.74 MB/s<br>571 B/op<br><span style="color:red">+38.3%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu VT (baseline) | BaoHuLu |
+|:----------|:---------------------:|:-------:|
+| pb encode | 1.83 GB/s<br>0 B/op | 1.15 GB/s<br>0 B/op<br><span style="color:red">+59.8%</span> |
+| pb decode | 1.13 GB/s<br>0 B/op | 693.28 MB/s<br>0 B/op<br><span style="color:red">+63.6%</span> |
+
+## AllTypes, 优化了自引用对象的缓存
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | bytedance/sonic |
+|:----------|:-------:|:-------------:|:---------------:|
+| json encode | 809.99 MB/s<br>0 B/op | 193.94 MB/s<br>318397 B/op<br><span style="color:red">+317.6%</span> | 361.65 MB/s<br>127442 B/op<br><span style="color:red">+124.0%</span> |
+| json decode | 411.54 MB/s<br>59680 B/op | 83.26 MB/s<br>285058 B/op<br><span style="color:red">+394.3%</span> | 438.22 MB/s<br>277483 B/op<br><span style="color:green">-6.1%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu VT (baseline) | BaoHuLu |
+|:----------|:---------------------:|:-------:|
+| pb encode | 744.06 MB/s<br>0 B/op | 789.26 MB/s<br>0 B/op<br><span style="color:green">-5.7%</span> |
+| pb decode | 708.27 MB/s<br>86968 B/op | 510.56 MB/s<br>86840 B/op<br><span style="color:red">+38.7%</span> |

@@ -171,6 +171,15 @@ func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, w
 		}
 	}
 
+	if withBench {
+		comparePath := filepath.Join(goOut, goBase+"_compare_test.go")
+		if err := renderGoFile(comparePath, func(f *os.File) error {
+			return gen.RenderCompare(f, withVtprotobuf)
+		}); err != nil {
+			return err
+		}
+	}
+
 	modPath := filepath.Join(goOut, "go.mod")
 	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, withVtprotobuf, withTest); err != nil {
 		return fmt.Errorf("write %s: %w", modPath, err)

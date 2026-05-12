@@ -9,8 +9,10 @@ import (
 	"math"
 {{- end}}
 	"testing"
+{{- if anyMsgHasBytesField .Messages}}
 
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
+{{- end}}
 )
 
 {{range .Messages}}

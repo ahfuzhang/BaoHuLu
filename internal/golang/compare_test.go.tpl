@@ -149,22 +149,30 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 		var p fastjson.Parser
 		mJDecBHL = runBench(func() int {
 			r.Reset()
-			_ = r.FromJSON(jsonData, &p)
+			if err := r.FromJSON(jsonData, &p); err != nil {
+				t.Fatal("FromJSON failed:", err)
+			}
 			return len(jsonData)
 		})
 		mJDecStd = runBench(func() int {
 			var w {{$goName}}
-			_ = json.Unmarshal(jsonData, &w)
+			if err := json.Unmarshal(jsonData, &w); err != nil {
+				t.Fatal("json.Unmarshal failed:", err)
+			}
 			return len(jsonData)
 		})
 		mJDecJV2 = runBench(func() int {
 			var w {{$goName}}
-			_ = jsonv2.Unmarshal(jsonData, &w)
+			if err := jsonv2.Unmarshal(jsonData, &w); err != nil {
+				t.Fatal("jsonv2.Unmarshal failed:", err)
+			}
 			return len(jsonData)
 		})
 		mJDecSonic = runBench(func() int {
 			var w {{$goName}}
-			_ = sonic.Unmarshal(jsonData, &w)
+			if err := sonic.Unmarshal(jsonData, &w); err != nil {
+				t.Fatal("sonic.Unmarshal failed:", err)
+			}
 			return len(jsonData)
 		})
 		fmt.Printf(
@@ -209,13 +217,17 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 		var rVT {{$roName}}
 		mPbDecVT = runBench(func() int {
 			rVT.Reset()
-			_ = rVT.FromProtobufVT(pbVTData)
+			if err := rVT.FromProtobufVT(pbVTData); err != nil {
+				t.Fatal("FromProtobufVT failed:", err)
+			}
 			return len(pbVTData)
 		})
 		var rPB {{$roName}}
 		mPbDecReg = runBench(func() int {
 			rPB.Reset()
-			_ = rPB.FromProtobuf(pbData)
+			if err := rPB.FromProtobuf(pbData); err != nil {
+				t.Fatal("FromProtobuf failed:", err)
+			}
 			return len(pbData)
 		})
 		fmt.Printf(
@@ -244,7 +256,9 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 		var rPB {{$roName}}
 		mPbDecReg = runBench(func() int {
 			rPB.Reset()
-			_ = rPB.FromProtobuf(pbData)
+			if err := rPB.FromProtobuf(pbData); err != nil {
+				t.Fatal("FromProtobuf failed:", err)
+			}
 			return len(pbData)
 		})
 		fmt.Printf(

@@ -411,7 +411,7 @@ func runTu(args []string) {
 			}
 			defer testCSF.Close()
 
-			if err := csharp.NewGenerator(pg).RenderCSTest(testCSF, ns); err != nil {
+			if err := csharp.NewGenerator(pg).RenderCSTest(testCSF, ns, csBase); err != nil {
 				fmt.Fprintf(os.Stderr, "renderCSTest: %v\n", err)
 				os.Exit(1)
 			}
@@ -441,7 +441,7 @@ func runTu(args []string) {
 			}
 			defer benchCSF.Close()
 
-			if err := csharp.NewGenerator(pg).RenderCSBench(benchCSF, ns); err != nil {
+			if err := csharp.NewGenerator(pg).RenderCSBench(benchCSF, ns, csBase); err != nil {
 				fmt.Fprintf(os.Stderr, "renderCSBench: %v\n", err)
 				os.Exit(1)
 			}

@@ -286,4 +286,34 @@ ok      github.com/ahfuzhang/BaoHuLu/examples/Demo      1008.093s
 | pb encode | 1.98 GB/s<br>0 allocs/op | 1.70 GB/s<br>0 allocs/op<br><span style="color:red">+16.6%</span> |
 | pb decode | 1.99 GB/s<br>0 allocs/op | 1.25 GB/s<br>0 allocs/op<br><span style="color:red">+58.6%</span> |
 
+# 2026-05-12， macos, arm64
+
+## 连续 4 个需要转移的 string 类型，导致 ToJSON() 的性能不佳
+
+GOEXPERIMENT=jsonv2 go test -v -run 'Test_CommonException_with_compare' ./...
+=== RUN   Test_CommonException_with_compare
+
+=== CommonException Performance Comparison (each benchmark runs ≥ 30 s) ===
+
+json encode:  [ToJSON] 462.96 MB/s, 0 allocs/op | [encoding/json] 803.62 MB/s, 3 allocs/op, 42.4% slower than encoding/json | [encoding/json/v2] 782.12 MB/s, 3 allocs/op, 40.8% slower than encoding/json/v2 | [bytedance/sonic] 1.37 GB/s, 3 allocs/op, 66.2% slower than bytedance/sonic
+json decode:  [FromJSON] 1.77 GB/s, 0 allocs/op | [encoding/json] 331.73 MB/s, 4 allocs/op, 435.0% faster than encoding/json | [encoding/json/v2] 455.04 MB/s, 4 allocs/op, 290.0% faster than encoding/json/v2 | [bytedance/sonic] 1.05 GB/s, 7 allocs/op, 69.7% faster than bytedance/sonic
+pb encode:    [ToProtobuf] 14.22 GB/s, 0 allocs/op
+pb decode:    [FromProtobuf] 12.69 GB/s, 0 allocs/op
+
+---
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 462.96 MB/s<br>0 allocs/op | 803.62 MB/s<br>3 allocs/op<br><span style="color:green">-42.4%</span> | 782.12 MB/s<br>3 allocs/op<br><span style="color:green">-40.8%</span> | 1.37 GB/s<br>3 allocs/op<br><span style="color:green">-66.2%</span> |
+| json decode | 1.77 GB/s<br>0 allocs/op | 331.73 MB/s<br>4 allocs/op<br><span style="color:red">+435.0%</span> | 455.04 MB/s<br>4 allocs/op<br><span style="color:red">+290.0%</span> | 1.05 GB/s<br>7 allocs/op<br><span style="color:red">+69.7%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 14.22 GB/s<br>0 allocs/op |
+| pb decode | 12.69 GB/s<br>0 allocs/op |
+
 

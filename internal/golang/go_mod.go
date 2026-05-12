@@ -29,14 +29,14 @@ func GoModContent(modulePath string, withVtprotobuf, withTest bool) string {
 	content := fmt.Sprintf(goModTemplate, modulePath)
 	if withVtprotobuf {
 		content = strings.Replace(content,
-			"\tgithub.com/ahfuzhang/BaoHuLu v0.4.4",
-			"\tgithub.com/ahfuzhang/BaoHuLu v0.4.4\n\tgithub.com/planetscale/vtprotobuf v0.6.0",
+			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.0",
+			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.0\n\tgithub.com/planetscale/vtprotobuf v0.6.0",
 			1)
 	}
 	if withTest {
 		content = strings.Replace(content,
-			"\tgithub.com/ahfuzhang/BaoHuLu v0.4.4",
-			"\tgithub.com/ahfuzhang/BaoHuLu v0.4.4\n\tgithub.com/bytedance/sonic v1.15.1",
+			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.0",
+			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.0\n\tgithub.com/bytedance/sonic v1.15.1",
 			1)
 		content += sonicIndirectDeps
 	}

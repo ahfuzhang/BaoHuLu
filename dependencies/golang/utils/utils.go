@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"strconv"
+	"strings"
 	"unsafe"
 )
 
@@ -386,7 +388,7 @@ func AppendJSONKey(dst []byte, key string) []byte {
 
 // EncodeJSONString appends a JSON-safe escaped version of s into dst.
 // No heap allocations are performed.
-func EncodeJSONString(s string, dst []byte) []byte {
+func EncodeJSONStringSlow(s string, dst []byte) []byte {
 	ptr := unsafe.StringData(s)
 	for i := 0; i < len(s); i++ {
 		c := *(*byte)(unsafe.Add(unsafe.Pointer(ptr), i))
@@ -415,6 +417,33 @@ func EncodeJSONString(s string, dst []byte) []byte {
 		}
 	}
 	return dst
+}
+
+// copy from fastjson
+func EncodeJSONString(s string, dst []byte) []byte {
+	if !hasSpecialChars(s) {
+		// Fast path - nothing to escape.
+		dst = append(dst, '"')
+		dst = append(dst, s...)
+		dst = append(dst, '"')
+		return dst
+	}
+
+	// Slow path.
+	return strconv.AppendQuote(dst, s)
+}
+
+// todo: 值得使用 avx2 加速
+func hasSpecialChars(s string) bool {
+	if strings.IndexByte(s, '"') >= 0 || strings.IndexByte(s, '\\') >= 0 {
+		return true
+	}
+	for i := range len(s) {
+		if s[i] < 0x20 {
+			return true
+		}
+	}
+	return false
 }
 
 func ConsumeVarint(b []byte) (uint64, []byte, int64) {

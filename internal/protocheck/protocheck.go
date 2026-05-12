@@ -49,11 +49,10 @@ func Check(srcFile string) error {
 	fieldNames := make(map[string]int)   // field name -> first occurrence line
 
 	proto.Walk(definition,
-		// 1. import 语句不支持
+		// 1. import 语句：打印警告但不报错，忽略后继续处理
 		proto.WithImport(func(i *proto.Import) {
-			if checkErr == nil {
-				checkErr = fmt.Errorf("%s:%d: import is not supported", srcFile, i.Position.Line)
-			}
+			fmt.Fprintf(os.Stderr, "warning: %s:%d: import is not supported and will be ignored\n",
+				srcFile, i.Position.Line)
 		}),
 		// 2. message 字段中的 oneof 不支持
 		proto.WithOneof(func(o *proto.Oneof) {
@@ -121,8 +120,26 @@ func Check(srcFile string) error {
 			if firstLine, exists := messageNames[m.Name]; exists {
 				checkErr = fmt.Errorf("%s:%d: duplicate message name %q (first defined at line %d)",
 					srcFile, m.Position.Line, m.Name, firstLine)
-			} else {
-				messageNames[m.Name] = m.Position.Line
+				return
+			}
+			messageNames[m.Name] = m.Position.Line
+			// field name must not be identical to the message name
+			for _, elem := range m.Elements {
+				var fieldName string
+				var fieldLine int
+				switch f := elem.(type) {
+				case *proto.NormalField:
+					fieldName = f.Name
+					fieldLine = f.Position.Line
+				case *proto.MapField:
+					fieldName = f.Name
+					fieldLine = f.Position.Line
+				}
+				if fieldName == m.Name {
+					checkErr = fmt.Errorf("%s:%d: field name %q must not be identical to its message name",
+						srcFile, fieldLine, fieldName)
+					return
+				}
 			}
 		}),
 		// 4. service method 中 stream 修饰符不支持

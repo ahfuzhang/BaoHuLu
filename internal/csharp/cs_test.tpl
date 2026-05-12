@@ -12,7 +12,7 @@ using {{.Namespace}};
 
 namespace {{.Namespace}}.Tests;
 
-internal static class TestValidate
+internal static class {{.BaseFileName}}TestValidate
 {
     internal static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
@@ -101,7 +101,7 @@ internal static class TestValidate
 {{end}}    }
 {{end}}
 }
-{{range .Messages}}
+{{$baseFileName := .BaseFileName}}{{range .Messages}}
 {{- $goName := .GoName}}
 {{- $roName := printf "Readonly%s" .GoName}}
 
@@ -208,10 +208,10 @@ public class {{$goName}}Tests
     public void StdlibJSONRoundtrip_PreservesAllFields()
     {
         var expected = MakeSample{{$goName}}();
-        var json = JsonSerializer.Serialize(expected, TestValidate.JsonOptions);
-        var actual = JsonSerializer.Deserialize<{{$goName}}>(json, TestValidate.JsonOptions);
+        var json = JsonSerializer.Serialize(expected, {{$baseFileName}}TestValidate.JsonOptions);
+        var actual = JsonSerializer.Deserialize<{{$goName}}>(json, {{$baseFileName}}TestValidate.JsonOptions);
 
-        TestValidate.Compare{{$goName}}(expected, actual);
+        {{$baseFileName}}TestValidate.Compare{{$goName}}(expected, actual);
     }
 
     // ── Scalar-only coverage ────────────────────────────────────────────────
@@ -331,14 +331,13 @@ public class {{$goName}}Tests
 
     // Serialises a populated {{$goName}}, then appends unknown fields of every
     // wire type that a proto3 parser must be able to skip.  Covers the
-    // skip-unknown-field branches for all four live wire types:
-    //   wire 0 (varint)    – field 100: tag [0xA0,0x06], value 1    → [0x01]
-    //   wire 1 (64-bit)    – field 101: tag [0xA9,0x06]             + 8 bytes
-    //   wire 2 (len-delim) – field 102: tag [0xB2,0x06], length 3   + "abc"
-    //   wire 5 (32-bit)    – field 103: tag [0xBD,0x06]             + 4 bytes
+    // skip-unknown-field branches for all four live wire types.
+    // The field number is chosen above the highest defined field to guarantee
+    // it is unknown to the parser.
     [Fact]
     public void FromProtobuf_UnknownTrailingFields_AllWireTypes_Ignored()
     {
+{{- $uf := safeUnknownFieldNum .Fields}}
         var w = MakeSample{{$goName}}();
         var buf = new RentedBuffer(w.ProtobufSize() + 4);
         w.ToProtobuf(ref buf);
@@ -347,10 +346,10 @@ public class {{$goName}}Tests
 
         var cases = new[]
         {
-            valid.Concat(new byte[] { 0xA0, 0x06, 0x01 }).ToArray(),                                             // wire 0: varint
-            valid.Concat(new byte[] { 0xA9, 0x06, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 }).ToArray(), // wire 1: 64-bit
-            valid.Concat(new byte[] { 0xB2, 0x06, 0x03, 0x61, 0x62, 0x63 }).ToArray(),                          // wire 2: len-delim
-            valid.Concat(new byte[] { 0xBD, 0x06, 0x01, 0x02, 0x03, 0x04 }).ToArray(),                          // wire 5: 32-bit
+            valid.Concat({{csTagByteArray $uf 0}}.Concat(new byte[] { 0x01 })).ToArray(),                                             // wire 0: varint
+            valid.Concat({{csTagByteArray $uf 1}}.Concat(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 })).ToArray(), // wire 1: 64-bit
+            valid.Concat({{csTagByteArray $uf 2}}.Concat(new byte[] { 0x03, 0x61, 0x62, 0x63 })).ToArray(),                          // wire 2: len-delim
+            valid.Concat({{csTagByteArray $uf 5}}.Concat(new byte[] { 0x01, 0x02, 0x03, 0x04 })).ToArray(),                          // wire 5: 32-bit
         };
         foreach (var data in cases)
         {

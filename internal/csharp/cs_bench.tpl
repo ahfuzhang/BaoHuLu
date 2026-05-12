@@ -47,7 +47,7 @@ namespace {{.Namespace}}.Benchmarks;
 //   • Bytes fields    — UTF-8 encoding of the same string
 //   • Scalar fields   — representative non-zero values
 
-internal static class BenchBuild
+internal static class {{.BaseFileName}}BenchBuild
 {
     /// <summary>
     /// Benchmark string payload: ≥100 bytes, contains all four required C# escape
@@ -97,7 +97,7 @@ internal static class BenchBuild
 {{end}}
 }
 
-internal static class BenchValidate
+internal static class {{.BaseFileName}}BenchValidate
 {
     internal static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
@@ -285,7 +285,7 @@ public sealed class BenchConfig : ManualConfig
 // Every class has exactly two [Benchmark] methods:
 //   [Baseline = true]  BaoHuLu generated code  (zero-allocation via Reset())
 //   [Compare]          Standard library / Grpc.Tools reference
-{{range .Messages}}
+{{$baseFileName := .BaseFileName}}{{range .Messages}}
 {{- $goName := .GoName}}
 {{- $roName := printf "Readonly%s" .GoName}}
 {{- $grpcType := printf "GrpcProto.%s" .GoName}}
@@ -311,7 +311,7 @@ public class JsonEncode_{{$goName}}
     /// Called once per type by <see cref="ThroughputColumn"/> in the host process.</summary>
     public static long GetDataSizeBytes()
     {
-        var w = BenchBuild.Build{{$goName}}();
+        var w = {{$baseFileName}}BenchBuild.Build{{$goName}}();
         var b = new RentedBuffer(4096);
         w.ToJSON(ref b);
         var size = (long)b.Length;
@@ -322,7 +322,7 @@ public class JsonEncode_{{$goName}}
     [GlobalSetup]
     public void Setup()
     {
-        _writer = BenchBuild.Build{{$goName}}();
+        _writer = {{$baseFileName}}BenchBuild.Build{{$goName}}();
         buf.Length = 0;
         _writer.ToJSON(ref buf);
         _expectedJsonLen = buf.Length;
@@ -348,7 +348,7 @@ public class JsonEncode_{{$goName}}
     [Benchmark(Description = "System.Text.Json.Serialize")]
     public string SystemTextJson_Serialize()
     {
-        return JsonSerializer.Serialize(_writer, BenchValidate.JsonOptions);
+        return JsonSerializer.Serialize(_writer, {{$baseFileName}}BenchValidate.JsonOptions);
     }
 }
 
@@ -373,7 +373,7 @@ public class JsonDecode_{{$goName}}
     /// Called once per type by <see cref="ThroughputColumn"/> in the host process.</summary>
     public static long GetDataSizeBytes()
     {
-        var w = BenchBuild.Build{{$goName}}();
+        var w = {{$baseFileName}}BenchBuild.Build{{$goName}}();
         var b = new RentedBuffer(4096);
         w.ToJSON(ref b);
         var size = (long)b.Length;
@@ -384,7 +384,7 @@ public class JsonDecode_{{$goName}}
     [GlobalSetup]
     public void Setup()
     {
-        var w = BenchBuild.Build{{$goName}}();
+        var w = {{$baseFileName}}BenchBuild.Build{{$goName}}();
 
         // BaoHuLu JSON (proto field names, camelCase keys)
         var jBuf = new RentedBuffer(4096);
@@ -393,7 +393,7 @@ public class JsonDecode_{{$goName}}
         jBuf.Dispose();
 
         // System.Text.Json format (PascalCase property names)
-        _stdJsonBytes = JsonSerializer.SerializeToUtf8Bytes(w, BenchValidate.JsonOptions);
+        _stdJsonBytes = JsonSerializer.SerializeToUtf8Bytes(w, {{$baseFileName}}BenchValidate.JsonOptions);
     }
 
     /// <summary>
@@ -414,7 +414,7 @@ public class JsonDecode_{{$goName}}
     [Benchmark(Description = "System.Text.Json.Deserialize")]
     public {{$goName}}? SystemTextJson_Deserialize()
     {
-        return JsonSerializer.Deserialize<{{$goName}}>(_stdJsonBytes, BenchValidate.JsonOptions);
+        return JsonSerializer.Deserialize<{{$goName}}>(_stdJsonBytes, {{$baseFileName}}BenchValidate.JsonOptions);
     }
 }
 
@@ -441,7 +441,7 @@ public class ProtoEncode_{{$goName}}
     /// Called once per type by <see cref="ThroughputColumn"/> in the host process.</summary>
     public static long GetDataSizeBytes()
     {
-        var w = BenchBuild.Build{{$goName}}();
+        var w = {{$baseFileName}}BenchBuild.Build{{$goName}}();
         var b = new RentedBuffer(4096);
         w.ToProtobuf(ref b);
         var size = (long)b.Length;
@@ -452,7 +452,7 @@ public class ProtoEncode_{{$goName}}
     [GlobalSetup]
     public void Setup()
     {
-        _writer = BenchBuild.Build{{$goName}}();
+        _writer = {{$baseFileName}}BenchBuild.Build{{$goName}}();
         buf.Length = 0;
         _writer.ToProtobuf(ref buf);
         _expectedProtoLen = buf.Length;
@@ -501,7 +501,7 @@ public class ProtoDecode_{{$goName}}
     /// Called once per type by <see cref="ThroughputColumn"/> in the host process.</summary>
     public static long GetDataSizeBytes()
     {
-        var w = BenchBuild.Build{{$goName}}();
+        var w = {{$baseFileName}}BenchBuild.Build{{$goName}}();
         var b = new RentedBuffer(4096);
         w.ToProtobuf(ref b);
         var size = (long)b.Length;
@@ -512,7 +512,7 @@ public class ProtoDecode_{{$goName}}
     [GlobalSetup]
     public void Setup()
     {
-        var w = BenchBuild.Build{{$goName}}();
+        var w = {{$baseFileName}}BenchBuild.Build{{$goName}}();
         var buf = new RentedBuffer(4096);
         w.ToProtobuf(ref buf);
         _protoBytes = buf.AsSpan().ToArray();

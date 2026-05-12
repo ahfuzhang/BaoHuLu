@@ -326,7 +326,7 @@ func (c *cache) unescapeStringBestEffort(s string) string {
 	}
 
 	// Slow path - unescape string.
-	if cap(c.arena) > len(c.arena) {
+	if cap(c.arena)-len(c.arena) >= len(s) {
 		c.arena = c.arena[:len(c.arena)+len(s)]
 		copy(c.arena[len(c.arena)-len(s):], s)
 	} else {

@@ -26,7 +26,7 @@ import (
 func benchBuild{{$goName}}Base() {{$goName}} {
 	w := {{$goName}}{}
 {{- range .Fields}}
-{{- if .IsMsg}}
+{{- if and .IsMsg (not .Repeated)}}
 {{- if or .IsRecursive .ElemIsRecursive}}
 	// Skip: recursive field; populated by benchBuild{{$goName}} using the base builder.
 {{- else}}
@@ -102,7 +102,7 @@ func benchBuild{{$goName}}() {{$goName}} {
 func benchBuild{{$goName}}() {{$goName}} {
 	w := {{$goName}}{}
 {{- range .Fields}}
-{{- if .IsMsg}}
+{{- if and .IsMsg (not .Repeated)}}
 	w.{{.Name}} = benchBuild{{.GoType}}()
 {{- else if .Map}}
 {{- if eq .MapKey "bool"}}

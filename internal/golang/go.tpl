@@ -149,16 +149,22 @@ func (m *{{$goName}}) ProtobufSize() int {
 			entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + utils.VarintSize(uint64(sub)) + sub
 		}
 		{{- else if eq .MapVal "double"}}
+		_ = v
 		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else if eq .MapVal "float"}}
+		_ = v
 		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "fixed32"}}
+		_ = v
 		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "fixed64"}}
+		_ = v
 		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else if eq .MapVal "sfixed32"}}
+		_ = v
 		entrySize += {{tagSize 2 5}} /* TagSize(2, 32bit=5) */ + 4
 		{{- else if eq .MapVal "sfixed64"}}
+		_ = v
 		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
 		{{- else}}
 		entrySize += {{tagSize 2 0}} /* TagSize(2, Varint=0) */ + utils.VarintSize(uint64(v))
@@ -1466,6 +1472,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				var mVal {{mapValGoType .MapVal}}
 {{- $vc := jsonScalarClass .MapVal}}
 {{- if eq $vc "string"}}
+				_ = mv.Type(parser)
 				_b, _ev := mv.StringBytes()
 				if _ev != nil {
 					visitErr = _ev
@@ -1600,6 +1607,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- $sc := jsonScalarClass .Type}}
 			for _, _item := range _arr {
 {{- if eq $sc "string"}}
+				_ = _item.Type(parser)
 				_b, _ei := _item.StringBytes()
 				if _ei != nil {
 					visitErr = _ei
@@ -1722,6 +1730,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- else}}
 {{- $sc := jsonScalarClass .Type}}
 {{- if eq $sc "string"}}
+			_ = v.Type(parser)
 			_b, _e := v.StringBytes()
 			if _e != nil {
 				visitErr = _e

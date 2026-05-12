@@ -151,9 +151,10 @@ func csIsPackable(t string) bool {
 // ─── template data types ──────────────────────────────────────────────────────
 
 type CsRenderData struct {
-	Namespace string
-	Enums     []protofile.EnumDef
-	Messages  []CsMsgTpl
+	Namespace    string
+	BaseFileName string
+	Enums        []protofile.EnumDef
+	Messages     []CsMsgTpl
 }
 
 // CsOneTypeData is passed to the per-type named templates (CsTagsWriterFile,
@@ -625,9 +626,36 @@ func firstCsStringField(fields []CsFieldTpl) *CsFieldTpl {
 	return nil
 }
 
+// safeUnknownFieldNum returns a field number guaranteed to be above any field
+// defined in the message, suitable for use as an "unknown field" in tests.
+func safeUnknownFieldNum(fields []CsFieldTpl) int {
+	max := 0
+	for _, f := range fields {
+		if f.Number > max {
+			max = f.Number
+		}
+	}
+	return max + 100
+}
+
+// csTagByteArray encodes the protobuf tag (fieldNum<<3)|wireType as a varint
+// and returns a C# byte-array literal, e.g. "new byte[] { 0xD8, 0x0D }".
+func csTagByteArray(fieldNum, wireType int) string {
+	tag := uint64(fieldNum<<3 | wireType)
+	var hexBytes []string
+	for tag >= 0x80 {
+		hexBytes = append(hexBytes, fmt.Sprintf("0x%02X", byte(tag)|0x80))
+		tag >>= 7
+	}
+	hexBytes = append(hexBytes, fmt.Sprintf("0x%02X", byte(tag)))
+	return "new byte[] { " + strings.Join(hexBytes, ", ") + " }"
+}
+
 // RenderCSTest renders the unit-test source file for the parsed proto into out.
 // namespace is the proto namespace (same as used for the main C# file).
-func (g *Generator) RenderCSTest(out *os.File, namespace string) error {
+// baseFileName is the PascalCase proto base name (e.g. "DemoServer") used to
+// disambiguate generated helper class names when multiple protos share a directory.
+func (g *Generator) RenderCSTest(out *os.File, namespace, baseFileName string) error {
 	var enums []protofile.EnumDef
 	for _, name := range g.EnumOrder() {
 		ed := g.Enums[name]
@@ -637,17 +665,20 @@ func (g *Generator) RenderCSTest(out *os.File, namespace string) error {
 	msgs, _ := g.buildMsgTpls()
 
 	data := CsRenderData{
-		Namespace: namespace,
-		Enums:     enums,
-		Messages:  msgs,
+		Namespace:    namespace,
+		BaseFileName: baseFileName,
+		Enums:        enums,
+		Messages:     msgs,
 	}
 
 	fnMap := template.FuncMap{
-		"csDefault":          csDefaultValue,
-		"upperFirst":         protofile.UpperFirst,
-		"goTypeName":         protofile.GoTypeName,
-		"csSampleLit":        csSampleLit,
-		"firstCsStringField": firstCsStringField,
+		"csDefault":            csDefaultValue,
+		"upperFirst":           protofile.UpperFirst,
+		"goTypeName":           protofile.GoTypeName,
+		"csSampleLit":          csSampleLit,
+		"firstCsStringField":   firstCsStringField,
+		"safeUnknownFieldNum":  safeUnknownFieldNum,
+		"csTagByteArray":       csTagByteArray,
 	}
 
 	tmpl, err := template.New("cs_test").Funcs(fnMap).Parse(csTestCodeTemplate)
@@ -813,12 +844,15 @@ func benchCsScalarLit(f CsFieldTpl) string {
 
 // RenderCSBench renders the benchmark source file for the parsed proto into out.
 // namespace is the C# namespace (same as used for the main and test files).
-func (g *Generator) RenderCSBench(out *os.File, namespace string) error {
+// baseFileName is the PascalCase proto base name used to disambiguate static
+// helper class names when multiple protos share a benchmark directory.
+func (g *Generator) RenderCSBench(out *os.File, namespace, baseFileName string) error {
 	msgs, _ := g.buildMsgTpls()
 
 	data := CsRenderData{
-		Namespace: namespace,
-		Messages:  msgs,
+		Namespace:    namespace,
+		BaseFileName: baseFileName,
+		Messages:     msgs,
 	}
 
 	fnMap := template.FuncMap{

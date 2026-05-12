@@ -955,6 +955,10 @@ func SampleFieldLiteral(ft FieldTpl) string {
 		if ft.IsMsg && ft.ElemIsRecursive {
 			return "nil" // recursive repeated elem; populated by makeSampleXxx using Base
 		}
+		if ft.IsMsg {
+			elemType := strings.TrimPrefix(ft.GoType, "[]")
+			return fmt.Sprintf("%s{makeSample%s()}", ft.GoType, elemType)
+		}
 		elemLit := SampleScalarLiteral(ft.Type, strings.TrimPrefix(ft.GoType, "[]"))
 		return fmt.Sprintf("%s{%s}", ft.GoType, elemLit)
 	}
@@ -1354,6 +1358,22 @@ func AnyMsgHasNumericBoundary(msgs []MsgTpl) bool {
 	return false
 }
 
+// AnyMsgHasBytesField returns true if any message contains a field whose sample
+// literal requires the utils package (i.e. bytes fields).
+func AnyMsgHasBytesField(msgs []MsgTpl) bool {
+	for _, msg := range msgs {
+		for _, f := range msg.Fields {
+			if f.Type == "bytes" {
+				return true
+			}
+			if f.Map && f.MapVal == "bytes" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ─── benchmark template helpers ──────────────────────────────────────────────
 
 // benchScalarMapValLit returns a Go literal for the given proto map-value type.
@@ -1647,6 +1667,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 		"numericBoundaryCases":     NumericBoundaryCases,
 		"firstStringScalarField":   FirstStringScalarField,
 		"anyMsgHasNumericBoundary": AnyMsgHasNumericBoundary,
+		"anyMsgHasBytesField":      AnyMsgHasBytesField,
 		"hasFloatFields":           HasFloatFields,
 		"floatFields":              FloatFields,
 		"floatIntLit":              FloatIntLit,

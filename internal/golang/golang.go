@@ -831,7 +831,7 @@ func (g *Generator) Render(out *os.File) error {
 		"readerFieldTypeMax":    g.readerFieldTypeMax,
 		"writerAlignedFields":   g.writerAlignedFields,
 		"readerAlignedFields":   g.readerAlignedFields,
-		"readerElemType": func(fd protofile.FieldDef) string {
+		"readerElemType": func(fd FieldTpl) string {
 			return protofile.ReadonlyGoTypeName(fd.Type)
 		},
 		"readonlyTypeName": protofile.ReadonlyGoTypeName,
@@ -1873,7 +1873,7 @@ func (g *Generator) RenderVtprotobuf(out *os.File) error {
 		"mapValGoType": func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
 		"mapValIsMsg":  func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
 		"readonlyTypeName": protofile.ReadonlyGoTypeName,
-		"readerElemType": func(fd protofile.FieldDef) string {
+		"readerElemType": func(fd FieldTpl) string {
 			return protofile.ReadonlyGoTypeName(fd.Type)
 		},
 		"elemType":    func(s string) string { return strings.TrimPrefix(s, "[]") },

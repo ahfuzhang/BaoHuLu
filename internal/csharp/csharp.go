@@ -502,7 +502,24 @@ func (g *Generator) RenderCSFiles(outDir, baseFileName, namespace string) error 
 			}
 		}
 	}
-	return nil
+	return writeCSGitignore(outDir)
+}
+
+const csGitignoreContent = `/bin/
+/obj/
+/Tests/bin/
+/Tests/obj/
+/Benchmarks/bin/
+/Benchmarks/obj/
+`
+
+// writeCSGitignore writes a .gitignore to outDir if one does not already exist.
+func writeCSGitignore(outDir string) error {
+	p := filepath.Join(outDir, ".gitignore")
+	if _, err := os.Stat(p); err == nil {
+		return nil // already exists
+	}
+	return os.WriteFile(p, []byte(csGitignoreContent), 0o644)
 }
 
 // ─── C# test helpers ──────────────────────────────────────────────────────────

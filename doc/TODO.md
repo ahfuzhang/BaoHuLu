@@ -103,4 +103,6 @@
 * check 功能里：检查 key 不能有特殊字符  ✅
 * 修改 test 程序：
   - 运行一个 test 以后，自动按照我期望的格式输出 benchmark 的结果  ✅
-
+* 支持查看版本号
+  - hulu --version
+  

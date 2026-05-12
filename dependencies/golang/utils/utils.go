@@ -388,7 +388,43 @@ func AppendJSONKey(dst []byte, key string) []byte {
 
 // EncodeJSONString appends a JSON-safe escaped version of s into dst.
 // No heap allocations are performed.
-func EncodeJSONStringSlow(s string, dst []byte) []byte {
+func EncodeJSONString(s string, dst []byte) []byte {
+	b := unsafe.Slice(unsafe.StringData(s), len(s))
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		if (escapeTable[c/8] & (1 << (c % 8))) == 0 {
+			// fast path
+			dst = append(dst, c)
+			continue
+		}
+		switch c {
+		case '"':
+			dst = append(dst, '\\', '"')
+		case '\n':
+			dst = append(dst, '\\', 'n')
+		case '\t':
+			dst = append(dst, '\\', 't')
+		case '\r':
+			dst = append(dst, '\\', 'r')
+		case '\\':
+			dst = append(dst, '\\', '\\')
+		case '\f':
+			dst = append(dst, '\\', 'f')
+		case '\b':
+			dst = append(dst, '\\', 'b')
+		default:
+			// control characters must be escaped as \uXXXX per JSON spec
+			dst = append(dst,
+				'\\', 'u', '0', '0',
+				hex[c>>4],
+				hex[c&0xf],
+			)
+		}
+	}
+	return dst
+}
+
+func EncodeJSONStringV0(s string, dst []byte) []byte {
 	ptr := unsafe.StringData(s)
 	for i := 0; i < len(s); i++ {
 		c := *(*byte)(unsafe.Add(unsafe.Pointer(ptr), i))
@@ -419,8 +455,136 @@ func EncodeJSONStringSlow(s string, dst []byte) []byte {
 	return dst
 }
 
+const hex = "0123456789abcdef"
+
+func EncodeJSONStringV2(s string, dst []byte) []byte {
+	b := unsafe.Slice(unsafe.StringData(s), len(s))
+	for i := 0; i < len(b); i++ {
+		switch b[i] {
+		case '"':
+			dst = append(dst, '\\', '"')
+		case '\n':
+			dst = append(dst, '\\', 'n')
+		case '\t':
+			dst = append(dst, '\\', 't')
+		case '\r':
+			dst = append(dst, '\\', 'r')
+		case '\\':
+			dst = append(dst, '\\', '\\')
+		case '\f':
+			dst = append(dst, '\\', 'f')
+		case '\b':
+			dst = append(dst, '\\', 'b')
+		default:
+			if b[i] >= 0x20 {
+				dst = append(dst, b[i])
+				continue
+			}
+			// control characters must be escaped as \uXXXX per JSON spec
+			dst = append(dst,
+				'\\', 'u', '0', '0',
+				hex[b[i]>>4],
+				hex[b[i]&0xf],
+			)
+		}
+	}
+	return dst
+}
+
+var escapeTable [256 / 8]byte = func() [256 / 8]byte {
+	var table [256 / 8]byte
+	for i := 0; i < 256; i++ {
+		if i < 0x20 || i == '"' || i == '\\' {
+			table[i/8] |= 1 << (i % 8)
+		}
+	}
+	return table
+}()
+
+func EncodeJSONStringV3(s string, dst []byte) []byte {
+	b := unsafe.Slice(unsafe.StringData(s), len(s))
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		if (escapeTable[c/8] & (1 << (c % 8))) == 0 {
+			// fast path
+			dst = append(dst, c)
+			continue
+		}
+		switch c {
+		case '"':
+			dst = append(dst, '\\', '"')
+		case '\n':
+			dst = append(dst, '\\', 'n')
+		case '\t':
+			dst = append(dst, '\\', 't')
+		case '\r':
+			dst = append(dst, '\\', 'r')
+		case '\\':
+			dst = append(dst, '\\', '\\')
+		case '\f':
+			dst = append(dst, '\\', 'f')
+		case '\b':
+			dst = append(dst, '\\', 'b')
+		default:
+			// control characters must be escaped as \uXXXX per JSON spec
+			dst = append(dst,
+				'\\', 'u', '0', '0',
+				hex[c>>4],
+				hex[c&0xf],
+			)
+		}
+	}
+	return dst
+}
+
+var escapeTable2 [256]bool = func() [256]bool {
+	var table [256]bool
+	for i := 0; i < 256; i++ {
+		if i < 0x20 || i == '"' || i == '\\' {
+			table[i] = true
+		}
+	}
+	return table
+}()
+
+func EncodeJSONStringV4(s string, dst []byte) []byte {
+	b := unsafe.Slice(unsafe.StringData(s), len(s))
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		if !escapeTable2[c] {
+			// fast path
+			dst = append(dst, c)
+			continue
+		}
+		switch c {
+		case '"':
+			dst = append(dst, '\\', '"')
+		case '\n':
+			dst = append(dst, '\\', 'n')
+		case '\t':
+			dst = append(dst, '\\', 't')
+		case '\r':
+			dst = append(dst, '\\', 'r')
+		case '\\':
+			dst = append(dst, '\\', '\\')
+		case '\f':
+			dst = append(dst, '\\', 'f')
+		case '\b':
+			dst = append(dst, '\\', 'b')
+		default:
+			// control characters must be escaped as \uXXXX per JSON spec
+			dst = append(dst,
+				'\\', 'u', '0', '0',
+				hex[c>>4],
+				hex[c&0xf],
+			)
+		}
+	}
+	return dst
+}
+
 // copy from fastjson
-func EncodeJSONString(s string, dst []byte) []byte {
+func EncodeJSONStringSlow(s string, dst []byte) []byte {
 	if !hasSpecialChars(s) {
 		// Fast path - nothing to escape.
 		dst = append(dst, '"')

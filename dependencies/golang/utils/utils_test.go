@@ -517,3 +517,72 @@ func TestAppendVarint_ExistingBuffer(t *testing.T) {
 		t.Errorf("unexpected length %d", len(b))
 	}
 }
+
+var benchmarkInput = "benchmark payload with escape chars:\n newline \t tab \" double-quote \\ backslash; " +
+	"padding to ensure length exceeds one hundred bytes: 0123456789abcdef0123456789abcdef"
+
+// 449.89 MB/s
+func BenchmarkEncodeJSONString(b *testing.B) {
+	dst := make([]byte, 0, 256)
+	b.SetBytes(int64(len(benchmarkInput)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dst = EncodeJSONString(benchmarkInput, dst[:0])
+	}
+	_ = dst
+}
+
+// 219.86 MB/s
+func BenchmarkEncodeJSONStringSlow(b *testing.B) {
+	dst := make([]byte, 0, 256)
+	b.SetBytes(int64(len(benchmarkInput)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dst = EncodeJSONStringSlow(benchmarkInput, dst[:0])
+	}
+	_ = dst
+}
+
+// 459.45 MB/s
+// 535.41 MB/s
+func BenchmarkEncodeJSONStringV2(b *testing.B) {
+	dst := make([]byte, 0, 256)
+	b.SetBytes(int64(len(benchmarkInput)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dst = EncodeJSONStringV2(benchmarkInput, dst[:0])
+	}
+	_ = dst
+}
+
+// 955.13 MB/s  983.88 MB/s
+func BenchmarkEncodeJSONStringV3(b *testing.B) {
+	dst := make([]byte, 0, 256)
+	dst = EncodeJSONStringV3(benchmarkInput, dst[:0])
+	dst2 := EncodeJSONString(benchmarkInput, make([]byte, 0, 256))
+	if string(dst) != string(dst2) {
+		b.Fatal("fail")
+	}
+	b.SetBytes(int64(len(benchmarkInput)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dst = EncodeJSONStringV3(benchmarkInput, dst[:0])
+	}
+	_ = dst
+}
+
+// 972.06 MB/s
+func BenchmarkEncodeJSONStringV4(b *testing.B) {
+	dst := make([]byte, 0, 256)
+	dst = EncodeJSONStringV4(benchmarkInput, dst[:0])
+	dst2 := EncodeJSONString(benchmarkInput, make([]byte, 0, 256))
+	if string(dst) != string(dst2) {
+		b.Fatal("fail")
+	}
+	b.SetBytes(int64(len(benchmarkInput)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dst = EncodeJSONStringV4(benchmarkInput, dst[:0])
+	}
+	_ = dst
+}

@@ -586,10 +586,11 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 					dst = append(dst, ',')
 				}
 				_jsonFirst = false
-				dst = append(dst, '"')
 {{- if eq $f.MapKey "string"}}
 				dst = utils.EncodeJSONString(_k, dst)
-{{- else if eq $f.MapKey "bool"}}
+{{- else}}
+				dst = append(dst, '"')
+{{- if eq $f.MapKey "bool"}}
 				if _k {
 					dst = append(dst, "true"...)
 				} else {
@@ -600,11 +601,11 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 {{- else}}
 				dst = strconv.AppendInt(dst, int64(_k), 10)
 {{- end}}
-				dst = append(dst, '"', ':')
+				dst = append(dst, '"')
+{{- end}}
+				dst = append(dst, ':')
 {{- if eq $f.MapVal "string"}}
-				dst = append(dst, '"')
 				dst = utils.EncodeJSONString(_v, dst)
-				dst = append(dst, '"')
 {{- else if eq $f.MapVal "bool"}}
 				if _v {
 					dst = append(dst, "true"...)
@@ -680,9 +681,7 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 {{- if $f.IsMsg}}
 				dst = _v.ToJSON(dst)
 {{- else if eq $f.Type "string"}}
-				dst = append(dst, '"')
 				dst = utils.EncodeJSONString(_v, dst)
-				dst = append(dst, '"')
 {{- else if eq $f.Type "bool"}}
 				if _v {
 					dst = append(dst, "true"...)
@@ -769,9 +768,7 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 		dst = append(dst, '"')
 		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
 		dst = append(dst, '"', ':')
-		dst = append(dst, '"')
 		dst = utils.EncodeJSONString(m.{{$f.Name}}, dst)
-		dst = append(dst, '"')
 	}
 {{- else if eq $f.Type "bool"}}
 	if m.{{$f.Name}} {

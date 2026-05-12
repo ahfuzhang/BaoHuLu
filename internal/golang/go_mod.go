@@ -13,7 +13,7 @@ var goModTemplate string
 // Pinned versions match the go.sum produced by `go mod tidy` with that release.
 const sonicIndirectDeps = "\nrequire (\n" +
 	"\tgithub.com/bytedance/gopkg v0.1.3 // indirect\n" +
-	"\tgithub.com/bytedance/sonic/loader v0.5.1 // indirect\n" +
+	"\tgithub.com/bytedance/sonic/loader v0.5.2 // indirect\n" +
 	"\tgithub.com/cloudwego/base64x v0.1.6 // indirect\n" +
 	"\tgithub.com/klauspost/cpuid/v2 v2.2.9 // indirect\n" +
 	"\tgithub.com/twitchyliquid64/golang-asm v0.15.1 // indirect\n" +
@@ -29,14 +29,14 @@ func GoModContent(modulePath string, withVtprotobuf, withTest bool) string {
 	content := fmt.Sprintf(goModTemplate, modulePath)
 	if withVtprotobuf {
 		content = strings.Replace(content,
-			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.0",
-			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.0\n\tgithub.com/planetscale/vtprotobuf v0.6.0",
+			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.2",
+			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.2\n\tgithub.com/planetscale/vtprotobuf v0.6.0",
 			1)
 	}
 	if withTest {
 		content = strings.Replace(content,
-			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.0",
-			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.0\n\tgithub.com/bytedance/sonic v1.15.1",
+			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.2",
+			"\tgithub.com/ahfuzhang/BaoHuLu v0.5.2\n\tgithub.com/bytedance/sonic v1.15.1",
 			1)
 		content += sonicIndirectDeps
 	}

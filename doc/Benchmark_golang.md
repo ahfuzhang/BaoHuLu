@@ -309,11 +309,24 @@ pb decode:    [FromProtobuf] 12.69 GB/s, 0 allocs/op
 | json encode | 462.96 MB/s<br>0 allocs/op | 803.62 MB/s<br>3 allocs/op<br><span style="color:green">-42.4%</span> | 782.12 MB/s<br>3 allocs/op<br><span style="color:green">-40.8%</span> | 1.37 GB/s<br>3 allocs/op<br><span style="color:green">-66.2%</span> |
 | json decode | 1.77 GB/s<br>0 allocs/op | 331.73 MB/s<br>4 allocs/op<br><span style="color:red">+435.0%</span> | 455.04 MB/s<br>4 allocs/op<br><span style="color:red">+290.0%</span> | 1.05 GB/s<br>7 allocs/op<br><span style="color:red">+69.7%</span> |
 
-### Protobuf Performance
 
-| Operation | BaoHuLu |
-|:----------|:-------:|
-| pb encode | 14.22 GB/s<br>0 allocs/op |
-| pb decode | 12.69 GB/s<br>0 allocs/op |
+## 优化了 string 的 json 转义的性能
 
+GOEXPERIMENT=jsonv2 go test -v -run 'Test_CommonException_with_compare'
+=== RUN   Test_CommonException_with_compare
 
+=== CommonException Performance Comparison (each benchmark runs ≥ 30 s) ===
+
+json encode:  [ToJSON] 999.50 MB/s, 0 allocs/op | [encoding/json] 808.42 MB/s, 3 allocs/op, 23.6% faster than encoding/json | [encoding/json/v2] 796.40 MB/s, 3 allocs/op, 25.5% faster than encoding/json/v2 | [bytedance/sonic] 1.29 GB/s, 3 allocs/op, 22.3% slower than bytedance/sonic
+json decode:  [FromJSON] 1.81 GB/s, 0 allocs/op | [encoding/json] 328.21 MB/s, 4 allocs/op, 451.8% faster than encoding/json | [encoding/json/v2] 456.90 MB/s, 4 allocs/op, 296.4% faster than encoding/json/v2 | [bytedance/sonic] 1.04 GB/s, 7 allocs/op, 74.3% faster than bytedance/sonic
+pb encode:    [ToProtobuf] 14.17 GB/s, 0 allocs/op
+pb decode:    [FromProtobuf] 12.75 GB/s, 0 allocs/op
+
+---
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 999.50 MB/s<br>0 allocs/op | 808.42 MB/s<br>3 allocs/op<br><span style="color:red">+23.6%</span> | 796.40 MB/s<br>3 allocs/op<br><span style="color:red">+25.5%</span> | 1.29 GB/s<br>3 allocs/op<br><span style="color:green">-22.3%</span> |
+| json decode | 1.81 GB/s<br>0 allocs/op | 328.21 MB/s<br>4 allocs/op<br><span style="color:red">+451.8%</span> | 456.90 MB/s<br>4 allocs/op<br><span style="color:red">+296.4%</span> | 1.04 GB/s<br>7 allocs/op<br><span style="color:red">+74.3%</span> |

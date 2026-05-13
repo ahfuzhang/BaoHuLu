@@ -36,10 +36,12 @@ func consumeVarintError(code int64) error {
 type WireType int
 
 const (
-	WireTypeVarint   WireType = 0 // int32, int64, uint32, uint64, sint32, sint64, bool, enum
-	WireType64bit    WireType = 1 // fixed64, sfixed64, double
-	WireTypeLenDelim WireType = 2 // string, bytes, embedded messages, packed repeated, map
-	WireType32bit    WireType = 5 // fixed32, sfixed32, float
+	WireTypeVarint     WireType = 0 // int32, int64, uint32, uint64, sint32, sint64, bool, enum
+	WireType64bit      WireType = 1 // fixed64, sfixed64, double
+	WireTypeLenDelim   WireType = 2 // string, bytes, embedded messages, packed repeated, map
+	WireTypeStartGroup WireType = 3 // deprecated group start
+	WireTypeEndGroup   WireType = 4 // deprecated group end
+	WireType32bit      WireType = 5 // fixed32, sfixed32, float
 )
 
 // ─── Varint write ─────────────────────────────────────────────────────────────

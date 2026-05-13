@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/bits"
 	"unsafe"
 
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
@@ -18,7 +19,8 @@ var _ = math.Float32bits
 var _ = fmt.Sprintf
 var _ = io.EOF
 var _ = unsafe.Pointer(nil)
-var _ = protohelpers.SizeOfVarint
+var _ = bits.Len64
+var _ = protohelpers.EncodeVarint
 
 // ─── vtprotobuf-compatible methods ───────────────────────────────────────────
 {{range .Messages}}
@@ -41,9 +43,9 @@ func (m *{{$goName}}) ProtobufSizeVT() (n int) {
 		entrySize := 0
 		{{- $kPending := false}}
 		{{- if eq .MapKey "string"}}
-		{ kn := len(k); entrySize += 1 + protohelpers.SizeOfVarint(uint64(kn)) + kn }
+		{ kn := len(k); entrySize += 1 + ((bits.Len64(uint64(kn)|1) + 6) / 7) + kn }
 		{{- else if eq .MapKey "bool"}}
-		{ var bk uint64; if k { bk = 1 }; entrySize += 1 + protohelpers.SizeOfVarint(bk) }
+		{ var bk uint64; if k { bk = 1 }; entrySize += 1 + ((bits.Len64(bk|1) + 6) / 7) }
 		{{- else if eq .MapKey "fixed32"}}
 		_ = k; entrySize += 1 + 4
 		{{- else if eq .MapKey "sfixed32"}}
@@ -53,66 +55,66 @@ func (m *{{$goName}}) ProtobufSizeVT() (n int) {
 		{{- else if eq .MapKey "sfixed64"}}
 		_ = k; entrySize += 1 + 8
 		{{- else if eq .MapKey "sint32"}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64((uint32(k)<<1)^uint32(k>>31)))
+		entrySize += 1 + ((bits.Len64(uint64((uint32(k)<<1)^uint32(k>>31))|1) + 6) / 7)
 		{{- else if eq .MapKey "sint64"}}
-		entrySize += 1 + protohelpers.SizeOfVarint((uint64(k)<<1)^uint64(k>>63))
+		entrySize += 1 + ((bits.Len64((uint64(k)<<1)^uint64(k>>63)|1) + 6) / 7)
 		{{- else}}
 		{{- $kPending = true}}
 		{{- end}}
 		{{- if eq .MapVal "string"}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
-		{ vn := len(v); entrySize += 1 + protohelpers.SizeOfVarint(uint64(vn)) + vn }
+		{ vn := len(v); entrySize += 1 + ((bits.Len64(uint64(vn)|1) + 6) / 7) + vn }
 		{{- else if eq .MapVal "bytes"}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
-		{ vn := len(v); entrySize += 1 + protohelpers.SizeOfVarint(uint64(vn)) + vn }
+		{ vn := len(v); entrySize += 1 + ((bits.Len64(uint64(vn)|1) + 6) / 7) + vn }
 		{{- else if mapValIsMsg .MapVal}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
-		{ sub := v.ProtobufSizeVT(); entrySize += 1 + protohelpers.SizeOfVarint(uint64(sub)) + sub }
+		{ sub := v.ProtobufSizeVT(); entrySize += 1 + ((bits.Len64(uint64(sub)|1) + 6) / 7) + sub }
 		{{- else if eq .MapVal "double"}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
 		_ = v; entrySize += 1 + 8
 		{{- else if eq .MapVal "float"}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
 		_ = v; entrySize += 1 + 4
 		{{- else if eq .MapVal "fixed32"}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
 		_ = v; entrySize += 1 + 4
 		{{- else if eq .MapVal "fixed64"}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
 		_ = v; entrySize += 1 + 8
 		{{- else if eq .MapVal "sfixed32"}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
 		_ = v; entrySize += 1 + 4
 		{{- else if eq .MapVal "sfixed64"}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7)
 		{{- end}}
 		_ = v; entrySize += 1 + 8
 		{{- else}}
 		{{- if $kPending}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(k)) +
-			1 + protohelpers.SizeOfVarint(uint64(v))
+		entrySize += 1 + ((bits.Len64(uint64(k)|1) + 6) / 7) +
+			1 + ((bits.Len64(uint64(v)|1) + 6) / 7)
 		{{- else}}
-		entrySize += 1 + protohelpers.SizeOfVarint(uint64(v))
+		entrySize += 1 + ((bits.Len64(uint64(v)|1) + 6) / 7)
 		{{- end}}
 		{{- end}}
-		n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(entrySize)) + entrySize
+		n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(entrySize)|1) + 6) / 7) + entrySize
 	}
 {{- else if .Repeated}}
 {{- if isPackable .Type}}
@@ -120,9 +122,9 @@ func (m *{{$goName}}) ProtobufSizeVT() (n int) {
 		packed := 0
 		for _, v := range m.{{.Name}} {
 			{{- if eq .Type "sint32"}}
-			packed += protohelpers.SizeOfVarint(uint64((uint32(v)<<1)^uint32(v>>31)))
+			packed += ((bits.Len64(uint64((uint32(v)<<1)^uint32(v>>31))|1) + 6) / 7)
 			{{- else if eq .Type "sint64"}}
-			packed += protohelpers.SizeOfVarint((uint64(v)<<1)^uint64(v>>63))
+			packed += ((bits.Len64((uint64(v)<<1)^uint64(v>>63)|1) + 6) / 7)
 			{{- else if eq .Type "fixed32"}}
 			_ = v; packed += 4
 			{{- else if eq .Type "fixed64"}}
@@ -138,26 +140,26 @@ func (m *{{$goName}}) ProtobufSizeVT() (n int) {
 			{{- else if eq .Type "bool"}}
 			_ = v; packed += 1
 			{{- else}}
-			packed += protohelpers.SizeOfVarint(uint64(v))
+			packed += ((bits.Len64(uint64(v)|1) + 6) / 7)
 			{{- end}}
 		}
-		n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(packed)) + packed
+		n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(packed)|1) + 6) / 7) + packed
 	}
 {{- else if eq .Type "string"}}
 	for _, v := range m.{{.Name}} {
 		l = len(v)
-		n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(l)) + l
+		n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(l)|1) + 6) / 7) + l
 	}
 {{- else if eq .Type "bytes"}}
 	for _, v := range m.{{.Name}} {
 		l = len(v)
-		n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(l)) + l
+		n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(l)|1) + 6) / 7) + l
 	}
 {{- else}}
 	for i := range m.{{.Name}} {
 		sub := m.{{.Name}}[i].ProtobufSizeVT()
 		if sub > 0 {
-			n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(sub)) + sub
+			n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(sub)|1) + 6) / 7) + sub
 		}
 	}
 {{- end}}
@@ -166,14 +168,14 @@ func (m *{{$goName}}) ProtobufSizeVT() (n int) {
 	if m.{{.Name}} != nil {
 		sub := m.{{.Name}}.ProtobufSizeVT()
 		if sub > 0 {
-			n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(sub)) + sub
+			n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(sub)|1) + 6) / 7) + sub
 		}
 	}
 {{- else}}
 	{
 		sub := m.{{.Name}}.ProtobufSizeVT()
 		if sub > 0 {
-			n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(sub)) + sub
+			n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(sub)|1) + 6) / 7) + sub
 		}
 	}
 {{- end}}
@@ -190,23 +192,23 @@ func (m *{{$goName}}) ProtobufSizeVT() (n int) {
 {{- else if eq .Type "sfixed64"}}
 	if m.{{.Name}} != 0 { n += {{sizeofTag .Number 1}} + 8 }
 {{- else if eq .Type "sint32"}}
-	if m.{{.Name}} != 0 { n += {{sizeofTag .Number 0}} + protohelpers.SizeOfVarint(uint64((uint32(m.{{.Name}})<<1)^uint32(m.{{.Name}}>>31))) }
+	if m.{{.Name}} != 0 { n += {{sizeofTag .Number 0}} + ((bits.Len64(uint64((uint32(m.{{.Name}})<<1)^uint32(m.{{.Name}}>>31))|1) + 6) / 7) }
 {{- else if eq .Type "sint64"}}
-	if m.{{.Name}} != 0 { n += {{sizeofTag .Number 0}} + protohelpers.SizeOfVarint((uint64(m.{{.Name}})<<1)^uint64(m.{{.Name}}>>63)) }
+	if m.{{.Name}} != 0 { n += {{sizeofTag .Number 0}} + ((bits.Len64((uint64(m.{{.Name}})<<1)^uint64(m.{{.Name}}>>63)|1) + 6) / 7) }
 {{- else if eq .Type "bool"}}
 	if m.{{.Name}} { n += {{sizeofTag .Number 0}} + 1 }
 {{- else if eq .Type "string"}}
 	if m.{{.Name}} != "" {
 		l = len(m.{{.Name}})
-		n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(l)) + l
+		n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(l)|1) + 6) / 7) + l
 	}
 {{- else if eq .Type "bytes"}}
 	if len(m.{{.Name}}) > 0 {
 		l = len(m.{{.Name}})
-		n += {{sizeofTag .Number 2}} + protohelpers.SizeOfVarint(uint64(l)) + l
+		n += {{sizeofTag .Number 2}} + ((bits.Len64(uint64(l)|1) + 6) / 7) + l
 	}
 {{- else}}
-	if m.{{.Name}} != 0 { n += {{sizeofTag .Number 0}} + protohelpers.SizeOfVarint(uint64(m.{{.Name}})) }
+	if m.{{.Name}} != 0 { n += {{sizeofTag .Number 0}} + ((bits.Len64(uint64(m.{{.Name}})|1) + 6) / 7) }
 {{- end}}
 {{- end}}
 	return n
@@ -347,9 +349,9 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		pksize := 0
 		for _, v := range m.{{.Name}} {
 			{{- if eq .Type "sint32"}}
-			pksize += protohelpers.SizeOfVarint(uint64((uint32(v)<<1)^uint32(v>>31)))
+			pksize += ((bits.Len64(uint64((uint32(v)<<1)^uint32(v>>31))|1) + 6) / 7)
 			{{- else if eq .Type "sint64"}}
-			pksize += protohelpers.SizeOfVarint((uint64(v)<<1)^uint64(v>>63))
+			pksize += ((bits.Len64((uint64(v)<<1)^uint64(v>>63)|1) + 6) / 7)
 			{{- else if eq .Type "fixed32"}}
 			_ = v; pksize += 4
 			{{- else if eq .Type "fixed64"}}
@@ -365,7 +367,7 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 			{{- else if eq .Type "bool"}}
 			_ = v; pksize += 1
 			{{- else}}
-			pksize += protohelpers.SizeOfVarint(uint64(v))
+			pksize += ((bits.Len64(uint64(v)|1) + 6) / 7)
 			{{- end}}
 		}
 		i -= pksize
@@ -570,8 +572,8 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			}
 		}
 		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
+		wireType := utils.WireType(wire & 0x7)
+		if wireType == utils.WireTypeEndGroup {
 			return fmt.Errorf("proto: {{$goName}}: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
@@ -581,7 +583,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 {{- range .Fields}}
 		case {{$goName}}{{.Name}}Tag: // {{.Name}}
 {{- if .Map}}
-			if wireType != 2 {
+			if wireType != utils.WireTypeLenDelim {
 				return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType)
 			}
 			var msglen int
@@ -812,7 +814,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			iNdEx = postIndex
 {{- else if .Repeated}}
 {{- if isPackable .Type}}
-			if wireType == 2 {
+			if wireType == utils.WireTypeLenDelim {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
 					if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -894,7 +896,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 				}
 				{{- end}}
 			{{- if or (eq .Type "float") (eq .Type "fixed32") (eq .Type "sfixed32")}}
-			} else if wireType == 5 {
+			} else if wireType == utils.WireType32bit {
 				if iNdEx+4 > l { return io.ErrUnexpectedEOF }
 				{{- if eq .Type "float"}}
 				r.{{.Name}} = append(r.{{.Name}}, math.Float32frombits(binary.LittleEndian.Uint32(dAtA[iNdEx:])))
@@ -903,7 +905,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 				{{- end}}
 				iNdEx += 4
 			{{- else if or (eq .Type "double") (eq .Type "fixed64") (eq .Type "sfixed64")}}
-			} else if wireType == 1 {
+			} else if wireType == utils.WireType64bit {
 				if iNdEx+8 > l { return io.ErrUnexpectedEOF }
 				{{- if eq .Type "double"}}
 				r.{{.Name}} = append(r.{{.Name}}, math.Float64frombits(binary.LittleEndian.Uint64(dAtA[iNdEx:])))
@@ -912,7 +914,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 				{{- end}}
 				iNdEx += 8
 			{{- else}}
-			} else if wireType == 0 {
+			} else if wireType == utils.WireTypeVarint {
 				{{- if eq .Type "sint32"}}
 				var rv uint32
 				for shift := uint(0); ; shift += 7 {
@@ -959,7 +961,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 				return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType)
 			}
 {{- else if eq .Type "string"}}
-			if wireType != 2 {
+			if wireType != utils.WireTypeLenDelim {
 				return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType)
 			}
 			var slen uint64
@@ -975,7 +977,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			r.{{.Name}} = append(r.{{.Name}}, unsafe.String(unsafe.SliceData(dAtA[iNdEx:end]), int(slen)))
 			iNdEx = end
 {{- else if eq .Type "bytes"}}
-			if wireType != 2 {
+			if wireType != utils.WireTypeLenDelim {
 				return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType)
 			}
 			var blen int
@@ -992,7 +994,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			r.{{.Name}} = append(r.{{.Name}}, dAtA[iNdEx:end])
 			iNdEx = end
 {{- else}}
-			if wireType != 2 {
+			if wireType != utils.WireTypeLenDelim {
 				return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType)
 			}
 			var sublen int
@@ -1012,7 +1014,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			iNdEx = subEnd
 {{- end}}
 {{- else if .IsMsg}}
-			if wireType != 2 {
+			if wireType != utils.WireTypeLenDelim {
 				return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType)
 			}
 			var sublen int
@@ -1030,41 +1032,42 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			if r.{{.Name}} == nil {
 				r.{{.Name}} = &{{.ReaderType}}{}
 			}
+			r._has{{.Name}} = true
 {{- end}}
 			if err := r.{{.Name}}.FromProtobufVT(dAtA[iNdEx:subEnd]); err != nil { return err }
 			iNdEx = subEnd
 {{- else if eq .Type "double"}}
-			if wireType != 1 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireType64bit { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			if iNdEx+8 > l { return io.ErrUnexpectedEOF }
 			r.{{.Name}} = math.Float64frombits(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 {{- else if eq .Type "float"}}
-			if wireType != 5 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireType32bit { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			if iNdEx+4 > l { return io.ErrUnexpectedEOF }
 			r.{{.Name}} = math.Float32frombits(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
 			iNdEx += 4
 {{- else if eq .Type "fixed32"}}
-			if wireType != 5 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireType32bit { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			if iNdEx+4 > l { return io.ErrUnexpectedEOF }
 			r.{{.Name}} = uint32(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
 			iNdEx += 4
 {{- else if eq .Type "fixed64"}}
-			if wireType != 1 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireType64bit { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			if iNdEx+8 > l { return io.ErrUnexpectedEOF }
 			r.{{.Name}} = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 {{- else if eq .Type "sfixed32"}}
-			if wireType != 5 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireType32bit { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			if iNdEx+4 > l { return io.ErrUnexpectedEOF }
 			r.{{.Name}} = int32(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
 			iNdEx += 4
 {{- else if eq .Type "sfixed64"}}
-			if wireType != 1 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireType64bit { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			if iNdEx+8 > l { return io.ErrUnexpectedEOF }
 			r.{{.Name}} = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 {{- else if eq .Type "sint32"}}
-			if wireType != 0 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeVarint { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			var v int32
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1075,7 +1078,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			}
 			r.{{.Name}} = int32((uint32(v)>>1) ^ uint32(((v&1)<<31)>>31))
 {{- else if eq .Type "sint64"}}
-			if wireType != 0 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeVarint { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			var v uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1086,7 +1089,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			}
 			r.{{.Name}} = int64((v>>1) ^ uint64((int64(v&1)<<63)>>63))
 {{- else if eq .Type "bool"}}
-			if wireType != 0 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeVarint { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			var v int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1097,7 +1100,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			}
 			r.{{.Name}} = v != 0
 {{- else if eq .Type "string"}}
-			if wireType != 2 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeLenDelim { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			var slen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1111,7 +1114,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			r.{{.Name}} = unsafe.String(unsafe.SliceData(dAtA[iNdEx:end]), int(slen))
 			iNdEx = end
 {{- else if eq .Type "bytes"}}
-			if wireType != 2 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeLenDelim { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			var blen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1127,7 +1130,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			if r.{{.Name}} == nil { r.{{.Name}} = []byte{} }
 			iNdEx = end
 {{- else if eq .Type "int32"}}
-			if wireType != 0 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeVarint { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			r.{{.Name}} = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1137,7 +1140,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 				if b < 0x80 { break }
 			}
 {{- else if eq .Type "int64"}}
-			if wireType != 0 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeVarint { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			r.{{.Name}} = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1147,7 +1150,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 				if b < 0x80 { break }
 			}
 {{- else if eq .Type "uint32"}}
-			if wireType != 0 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeVarint { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			r.{{.Name}} = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1157,7 +1160,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 				if b < 0x80 { break }
 			}
 {{- else if eq .Type "uint64"}}
-			if wireType != 0 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeVarint { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			r.{{.Name}} = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1168,7 +1171,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			}
 {{- else}}
 			// enum or unknown scalar
-			if wireType != 0 { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
+			if wireType != utils.WireTypeVarint { return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wireType) }
 			r.{{.Name}} = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
@@ -1180,7 +1183,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 {{- end}}
 {{- end}}
 		default:
-			rest, err2 := utils.SkipField(utils.WireType(wireType), dAtA[iNdEx:])
+			rest, err2 := utils.SkipField(wireType, dAtA[iNdEx:])
 			if err2 != nil { return err2 }
 			iNdEx = l - len(rest)
 		}

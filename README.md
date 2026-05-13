@@ -279,7 +279,7 @@ Apple M2, 1 CPU, 8 logical and 8 physical cores
 ## How to use, 命令行说明
 
 * 安装
-  - `go install github.com/ahfuzhang/BaoHuLu/cmd/hulu@v0.5.2`
+  - `go install github.com/ahfuzhang/BaoHuLu/cmd/hulu@v0.5.4`
 
 * 语法检查
   * `hulu xi ./xx.proto`

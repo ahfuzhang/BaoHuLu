@@ -91,6 +91,44 @@ func Test{{$goName}}ProtobufRoundtrip(t *testing.T) {
 	}
 }
 
+// Test{{$goName}}ToProtobufAppendsToExistingBuffer verifies that ToProtobuf
+// appends to a non-empty caller buffer without overwriting existing bytes.
+func Test{{$goName}}ToProtobufAppendsToExistingBuffer(t *testing.T) {
+	w := makeSample{{$goName}}()
+	prefix := []byte("existing-prefix:")
+	sz := w.ProtobufSize()
+	fresh := w.ToProtobuf(nil)
+	cases := []struct {
+		name string
+		buf  []byte
+	}{
+		{name: "reuse-capacity", buf: make([]byte, len(prefix), len(prefix)+sz)},
+		{name: "grow-capacity", buf: make([]byte, len(prefix))},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			copy(tc.buf, prefix)
+
+			out := w.ToProtobuf(tc.buf)
+			if len(out) != len(prefix)+sz {
+				t.Fatalf("ToProtobuf produced %d bytes, want %d", len(out), len(prefix)+sz)
+			}
+			if !bytes.Equal(tc.buf, prefix) {
+				t.Fatalf("ToProtobuf modified the original input buffer:\n  want %q\n  got  %q", prefix, tc.buf)
+			}
+			if !bytes.Equal(out[:len(prefix)], prefix) {
+				t.Fatalf("ToProtobuf output lost existing prefix:\n  want %q\n  got  %q", prefix, out[:len(prefix)])
+			}
+
+			payload := out[len(prefix):]
+			if !bytes.Equal(payload, fresh) {
+				t.Fatalf("ToProtobuf appended payload mismatch:\n  want %v\n  got  %v", fresh, payload)
+			}
+		})
+	}
+}
+
 // Test{{$goName}}JSONRoundtrip checks two things:
 //  1. encoding/json (stdlib) can parse the output of ToJSON() and produce a
 //     struct whose re-serialisation via ToJSON() is byte-identical.
@@ -133,6 +171,41 @@ func Test{{$goName}}JSONRoundtrip(t *testing.T) {
 	j2 := w2.ToJSON(nil)
 	if !bytes.Equal(j, j2) {
 		t.Fatalf("JSON roundtrip (FromJSON+Clone) mismatch:\n  want: %s\n  got:  %s", j, j2)
+	}
+}
+
+// Test{{$goName}}ToJSONAppendsToExistingBuffer verifies that ToJSON appends to
+// a non-empty caller buffer without overwriting existing bytes.
+func Test{{$goName}}ToJSONAppendsToExistingBuffer(t *testing.T) {
+	w := makeSample{{$goName}}()
+	prefix := []byte("existing-prefix:")
+	fresh := w.ToJSON(nil)
+	cases := []struct {
+		name string
+		buf  []byte
+	}{
+		{name: "reuse-capacity", buf: make([]byte, len(prefix), len(prefix)+len(fresh))},
+		{name: "grow-capacity", buf: make([]byte, len(prefix))},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			copy(tc.buf, prefix)
+
+			out := w.ToJSON(tc.buf)
+			if len(out) != len(prefix)+len(fresh) {
+				t.Fatalf("ToJSON produced %d bytes, want %d", len(out), len(prefix)+len(fresh))
+			}
+			if !bytes.Equal(tc.buf, prefix) {
+				t.Fatalf("ToJSON modified the original input buffer:\n  want %q\n  got  %q", prefix, tc.buf)
+			}
+			if !bytes.Equal(out[:len(prefix)], prefix) {
+				t.Fatalf("ToJSON output lost existing prefix:\n  want %q\n  got  %q", prefix, out[:len(prefix)])
+			}
+			if !bytes.Equal(out[len(prefix):], fresh) {
+				t.Fatalf("ToJSON appended payload mismatch:\n  want %s\n  got  %s", fresh, out[len(prefix):])
+			}
+		})
 	}
 }
 {{if hasLargeIntFields .Fields}}

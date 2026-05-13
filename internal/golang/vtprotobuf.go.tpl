@@ -530,16 +530,19 @@ func (m *{{$goName}}) ToProtobufVT(dst []byte) ([]byte, error) {
 		return nil, nil
 	}
 	size := m.ProtobufSizeVT()
-	if cap(dst) < size {
-		dst = make([]byte, size)
+	oldLen := len(dst)
+	if cap(dst)-oldLen < size {
+		next := make([]byte, oldLen+size)
+		copy(next, dst)
+		dst = next
 	} else {
-		dst = dst[:size]
+		dst = dst[:oldLen+size]
 	}
-	n, err := m.marshalToSizedBufferVT(dst)
+	n, err := m.marshalToSizedBufferVT(dst[oldLen:])
 	if err != nil {
 		return nil, err
 	}
-	return dst[:n], nil
+	return dst[:oldLen+n], nil
 }
 
 // FromProtobufVT deserializes dAtA into r.

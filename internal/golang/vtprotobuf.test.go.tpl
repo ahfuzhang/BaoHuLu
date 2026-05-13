@@ -81,6 +81,50 @@ func Test{{$goName}}VTRoundtrip(t *testing.T) {
 	}
 }
 
+// Test{{$goName}}ToProtobufVTAppendsToExistingBuffer verifies that ToProtobufVT
+// appends to a non-empty caller buffer without overwriting existing bytes.
+func Test{{$goName}}ToProtobufVTAppendsToExistingBuffer(t *testing.T) {
+	w := makeSample{{$goName}}()
+	prefix := []byte("existing-prefix:")
+	sz := w.ProtobufSizeVT()
+	fresh, err := w.ToProtobufVT(nil)
+	if err != nil {
+		t.Fatalf("ToProtobufVT(nil) error: %v", err)
+	}
+	cases := []struct {
+		name string
+		buf  []byte
+	}{
+		{name: "reuse-capacity", buf: make([]byte, len(prefix), len(prefix)+sz)},
+		{name: "grow-capacity", buf: make([]byte, len(prefix))},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			copy(tc.buf, prefix)
+
+			out, err := w.ToProtobufVT(tc.buf)
+			if err != nil {
+				t.Fatalf("ToProtobufVT error: %v", err)
+			}
+			if len(out) != len(prefix)+sz {
+				t.Fatalf("ToProtobufVT produced %d bytes, want %d", len(out), len(prefix)+sz)
+			}
+			if !bytes.Equal(tc.buf, prefix) {
+				t.Fatalf("ToProtobufVT modified the original input buffer:\n  want %q\n  got  %q", prefix, tc.buf)
+			}
+			if !bytes.Equal(out[:len(prefix)], prefix) {
+				t.Fatalf("ToProtobufVT output lost existing prefix:\n  want %q\n  got  %q", prefix, out[:len(prefix)])
+			}
+
+			payload := out[len(prefix):]
+			if !bytes.Equal(payload, fresh) {
+				t.Fatalf("ToProtobufVT appended payload mismatch:\n  want %v\n  got  %v", fresh, payload)
+			}
+		})
+	}
+}
+
 // Test{{$goName}}ToProtobufVTBufferReuse verifies that ToProtobufVT reuses
 // the caller's buffer when its capacity is sufficient, and allocates a fresh
 // one when the buffer is too small — both paths must produce identical bytes.

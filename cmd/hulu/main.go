@@ -82,7 +82,7 @@ func writeGoMod(modPath, goPackage, packageName string, withVtprotobuf, withTest
 	if modulePath == "" {
 		modulePath = "generated"
 	}
-	content := gogen.GoModContent(modulePath, withVtprotobuf, withTest)
+	content := gogen.GoModContent(modulePath, Version, withVtprotobuf, withTest)
 	return os.WriteFile(modPath, utils.UnsafeBytesFromString(content), 0644)
 }
 

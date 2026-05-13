@@ -330,3 +330,14 @@ pb decode:    [FromProtobuf] 12.75 GB/s, 0 allocs/op
 |:----------|:-------:|:-------------:|:----------------:|:---------------:|
 | json encode | 999.50 MB/s<br>0 allocs/op | 808.42 MB/s<br>3 allocs/op<br><span style="color:red">+23.6%</span> | 796.40 MB/s<br>3 allocs/op<br><span style="color:red">+25.5%</span> | 1.29 GB/s<br>3 allocs/op<br><span style="color:green">-22.3%</span> |
 | json decode | 1.81 GB/s<br>0 allocs/op | 328.21 MB/s<br>4 allocs/op<br><span style="color:red">+451.8%</span> | 456.90 MB/s<br>4 allocs/op<br><span style="color:red">+296.4%</span> | 1.04 GB/s<br>7 allocs/op<br><span style="color:red">+74.3%</span> |
+
+# 2026-05-13
+
+## json 字符串序列化， macos, arm64, m2
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 1.32 GB/s<br>0 allocs/op | 792.26 MB/s<br>3 allocs/op<br><span style="color:red">+66.0%</span> | 604.65 MB/s<br>3 allocs/op<br><span style="color:red">+117.5%</span> | 1.32 GB/s<br>3 allocs/op<br><span style="color:green">-0.3%</span> |
+| json decode | 1.79 GB/s<br>0 allocs/op | 329.96 MB/s<br>4 allocs/op<br><span style="color:red">+443.6%</span> | 454.44 MB/s<br>4 allocs/op<br><span style="color:red">+294.7%</span> | 1.07 GB/s<br>7 allocs/op<br><span style="color:red">+68.3%</span> |

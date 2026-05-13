@@ -18,12 +18,15 @@ import (
 const usage = `hulu <command> [flags]
 
 Commands:
+  --version   Show version
   xi/check    Check a .proto file for syntax errors
   tu/generate Generate code from a .proto file
   help        Show this help message
 
 Run "hulu <command> -help" for command-specific flags.
 `
+
+var Version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -37,6 +40,8 @@ func main() {
 	switch cmd {
 	case "help", "-help", "--help", "-h":
 		fmt.Print(usage)
+	case "--version":
+		fmt.Println(Version)
 	case "xi", "check":
 		runXi(args)
 	case "tu", "generate":

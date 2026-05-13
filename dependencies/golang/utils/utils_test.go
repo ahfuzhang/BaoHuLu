@@ -522,6 +522,8 @@ var benchmarkInput = "benchmark payload with escape chars:\n newline \t tab \" d
 	"padding to ensure length exceeds one hundred bytes: 0123456789abcdef0123456789abcdef"
 
 // 449.89 MB/s
+// 优化后： 964.47 MB/s
+// v5 版本优化后: 1285.23 MB/s
 func BenchmarkEncodeJSONString(b *testing.B) {
 	dst := make([]byte, 0, 256)
 	b.SetBytes(int64(len(benchmarkInput)))
@@ -583,6 +585,22 @@ func BenchmarkEncodeJSONStringV4(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dst = EncodeJSONStringV4(benchmarkInput, dst[:0])
+	}
+	_ = dst
+}
+
+// 1218.97 MB/s
+func BenchmarkEncodeJSONStringV5(b *testing.B) {
+	dst := make([]byte, 0, 256)
+	dst = EncodeJSONStringV5(benchmarkInput, dst[:0])
+	dst2 := EncodeJSONString(benchmarkInput, make([]byte, 0, 256))
+	if string(dst) != string(dst2) {
+		b.Fatal("fail")
+	}
+	b.SetBytes(int64(len(benchmarkInput)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dst = EncodeJSONStringV5(benchmarkInput, dst[:0])
 	}
 	_ = dst
 }

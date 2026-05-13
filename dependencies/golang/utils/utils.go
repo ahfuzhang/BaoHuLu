@@ -390,38 +390,126 @@ func AppendJSONKey(dst []byte, key string) []byte {
 // No heap allocations are performed.
 func EncodeJSONString(s string, dst []byte) []byte {
 	b := unsafe.Slice(unsafe.StringData(s), len(s))
+	needed := len(s) * 6
+	if cap(dst)-len(dst) < needed {
+		tmp := make([]byte, len(dst), len(dst)+needed+256)
+		copy(tmp, dst)
+		dst = tmp
+	}
+	offset := len(dst)
+	d := dst[offset : offset+needed]
+	ii := 0
 	for i := 0; i < len(b); i++ {
 		c := b[i]
 		if (escapeTable[c/8] & (1 << (c % 8))) == 0 {
 			// fast path
-			dst = append(dst, c)
+			d[ii] = c
+			ii++
 			continue
 		}
 		switch c {
 		case '"':
-			dst = append(dst, '\\', '"')
+			d[ii+1] = '"'
+			d[ii] = '\\'
+			ii += 2
 		case '\n':
-			dst = append(dst, '\\', 'n')
+			d[ii+1] = 'n'
+			d[ii] = '\\'
+			ii += 2
 		case '\t':
-			dst = append(dst, '\\', 't')
+			d[ii+1] = 't'
+			d[ii] = '\\'
+			ii += 2
 		case '\r':
-			dst = append(dst, '\\', 'r')
+			d[ii+1] = 'r'
+			d[ii] = '\\'
+			ii += 2
 		case '\\':
-			dst = append(dst, '\\', '\\')
+			d[ii+1] = '\\'
+			d[ii] = '\\'
+			ii += 2
 		case '\f':
-			dst = append(dst, '\\', 'f')
+			d[ii+1] = 'f'
+			d[ii] = '\\'
+			ii += 2
 		case '\b':
-			dst = append(dst, '\\', 'b')
+			d[ii+1] = 'b'
+			d[ii] = '\\'
+			ii += 2
 		default:
 			// control characters must be escaped as \uXXXX per JSON spec
-			dst = append(dst,
-				'\\', 'u', '0', '0',
-				hex[c>>4],
-				hex[c&0xf],
-			)
+			d[ii+5] = hex[c&0xf]
+			d[ii+4] = hex[(c>>4)&0xf]
+			d[ii+3] = '0'
+			d[ii+2] = '0'
+			d[ii+1] = 'u'
+			d[ii] = '\\'
+			ii += 6
 		}
 	}
-	return dst
+	return dst[:offset+ii]
+}
+
+func EncodeJSONStringV5(s string, dst []byte) []byte {
+	b := unsafe.Slice(unsafe.StringData(s), len(s))
+	needed := len(s) * 6
+	if cap(dst)-len(dst) < needed {
+		tmp := make([]byte, len(dst), len(dst)+needed+256)
+		copy(tmp, dst)
+		dst = tmp
+	}
+	offset := len(dst)
+	d := dst[offset : offset+needed]
+	ii := 0
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		if (escapeTable[c/8] & (1 << (c % 8))) == 0 {
+			// fast path
+			d[ii] = c
+			ii++
+			continue
+		}
+		switch c {
+		case '"':
+			d[ii+1] = '"'
+			d[ii] = '\\'
+			ii += 2
+		case '\n':
+			d[ii+1] = 'n'
+			d[ii] = '\\'
+			ii += 2
+		case '\t':
+			d[ii+1] = 't'
+			d[ii] = '\\'
+			ii += 2
+		case '\r':
+			d[ii+1] = 'r'
+			d[ii] = '\\'
+			ii += 2
+		case '\\':
+			d[ii+1] = '\\'
+			d[ii] = '\\'
+			ii += 2
+		case '\f':
+			d[ii+1] = 'f'
+			d[ii] = '\\'
+			ii += 2
+		case '\b':
+			d[ii+1] = 'b'
+			d[ii] = '\\'
+			ii += 2
+		default:
+			// control characters must be escaped as \uXXXX per JSON spec
+			d[ii+5] = hex[c&0xf]
+			d[ii+4] = hex[(c>>4)&0xf]
+			d[ii+3] = '0'
+			d[ii+2] = '0'
+			d[ii+1] = 'u'
+			d[ii] = '\\'
+			ii += 6
+		}
+	}
+	return dst[:offset+ii]
 }
 
 func EncodeJSONStringV0(s string, dst []byte) []byte {

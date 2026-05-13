@@ -1,7 +1,9 @@
+Version ?= v0.5.2
+
 .PHONY: build run test check check-bce
 
 build:
-	go build -o ./build/hulu ./cmd/hulu/
+	go build -ldflags "-X main.Version=$(Version)" -o ./build/hulu ./cmd/hulu/
 
 test: run
 	go test -v ./... -coverprofile=./build/coverage.out
@@ -33,4 +35,3 @@ QiWa.rpc:
 	  -csharp_out.with.bench \
 	  -src.csharp_template.dir=./templates/csharp/QiWa.rpc/ \
 	  -dst.csharp_template.out_dir=./build/csharp/QiWa.rpc/
-

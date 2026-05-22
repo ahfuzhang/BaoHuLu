@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"fmt"
+	"os"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,11 +19,17 @@ import (
 {{range .Messages}}
 {{- $goName := .GoName}}
 {{- $roName := printf "Readonly%s" $goName}}
-// Test_{{$goName}}_with_compare runs sub-benchmarks (each ≥ 30 s) and prints a
+// Test_{{$goName}}_with_compare runs sub-benchmarks (duration from env benchmark_seconds, default 30 s) and prints a
 // formatted comparison table covering JSON encode/decode and Protobuf encode/decode,
 // followed by two copy-pasteable Markdown tables.
 func Test_{{$goName}}_with_compare(t *testing.T) {
-	const minDuration = 30 * time.Second
+	benchSeconds := 30
+	if s := os.Getenv("benchmark_seconds"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			benchSeconds = n
+		}
+	}
+	minDuration := time.Duration(benchSeconds) * time.Second
 
 	type metrics struct {
 		bytesPerSec float64
@@ -109,10 +117,14 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 	)
 
 	fmt.Println()
-	fmt.Println("=== {{$goName}} Performance Comparison (each benchmark runs ≥ 30 s) ===")
+	fmt.Printf("=== {{$goName}} Performance Comparison (each benchmark runs ≥ %d s) ===\n", benchSeconds)
 	fmt.Println()
 
 	// JSON encode
+	if os.Getenv("no_json_encode") != "" {
+		fmt.Println("skip json encode tests (no_json_encode is set)")
+		goto skipJSONEncode
+	}
 	{
 		buf := make([]byte, 0, len(jsonData))
 		mJEncBHL = runBench(func() int {
@@ -142,8 +154,13 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			fmtBPS(mJEncSonic.bytesPerSec), mJEncSonic.allocsPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncSonic.bytesPerSec, "bytedance/sonic"),
 		)
 	}
+skipJSONEncode:
 
 	// JSON decode
+	if os.Getenv("no_json_decode") != "" {
+		fmt.Println("skip json decode tests (no_json_decode is set)")
+		goto skipJSONDecode
+	}
 	{
 		var r {{$roName}}
 		var p fastjson.Parser
@@ -186,6 +203,7 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			fmtBPS(mJDecSonic.bytesPerSec), mJDecSonic.allocsPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecSonic.bytesPerSec, "bytedance/sonic"),
 		)
 	}
+skipJSONDecode:
 
 {{- if $.WithVtprotobuf}}
 	// Protobuf encode

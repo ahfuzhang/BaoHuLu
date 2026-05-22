@@ -249,32 +249,64 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		dAtA[i] = 18 /*(2<<3)|2=18, field=2, wireType=LenDelim*/
 		{{- else if eq .MapVal "double"}}
 		i -= 8
-		binary.LittleEndian.PutUint64(dAtA[i:], math.Float64bits(v))
+		_dv := math.Float64bits(v)
+		dAtA[i+7] = uint8(_dv >> 56)
+		dAtA[i+6] = uint8(_dv >> 48)
+		dAtA[i+5] = uint8(_dv >> 40)
+		dAtA[i+4] = uint8(_dv >> 32)
+		dAtA[i+3] = uint8(_dv >> 24)
+		dAtA[i+2] = uint8(_dv >> 16)
+		dAtA[i+1] = uint8(_dv >> 8)
+		dAtA[i+0] = uint8(_dv)
 		i--
 		dAtA[i] = 17 /*(2<<3)|1=17, field=2, wireType=64bit*/
 		{{- else if eq .MapVal "float"}}
 		i -= 4
-		binary.LittleEndian.PutUint32(dAtA[i:], math.Float32bits(v))
+		_fv := math.Float32bits(v)
+		dAtA[i+3] = uint8(_fv >> 24)
+		dAtA[i+2] = uint8(_fv >> 16)
+		dAtA[i+1] = uint8(_fv >> 8)
+		dAtA[i+0] = uint8(_fv)
 		i--
 		dAtA[i] = 21 /*(2<<3)|5=21, field=2, wireType=32bit*/
 		{{- else if eq .MapVal "fixed32"}}
 		i -= 4
-		binary.LittleEndian.PutUint32(dAtA[i:], uint32(v))
+		dAtA[i+3] = uint8(uint32(v) >> 24)
+		dAtA[i+2] = uint8(uint32(v) >> 16)
+		dAtA[i+1] = uint8(uint32(v) >> 8)
+		dAtA[i+0] = uint8(uint32(v))
 		i--
 		dAtA[i] = 21 /*(2<<3)|5=21, field=2, wireType=32bit*/
 		{{- else if eq .MapVal "sfixed32"}}
 		i -= 4
-		binary.LittleEndian.PutUint32(dAtA[i:], uint32(v))
+		dAtA[i+3] = uint8(uint32(v) >> 24)
+		dAtA[i+2] = uint8(uint32(v) >> 16)
+		dAtA[i+1] = uint8(uint32(v) >> 8)
+		dAtA[i+0] = uint8(uint32(v))
 		i--
 		dAtA[i] = 21 /*(2<<3)|5=21, field=2, wireType=32bit*/
 		{{- else if eq .MapVal "fixed64"}}
 		i -= 8
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(v))
+		dAtA[i+7] = uint8(uint64(v) >> 56)
+		dAtA[i+6] = uint8(uint64(v) >> 48)
+		dAtA[i+5] = uint8(uint64(v) >> 40)
+		dAtA[i+4] = uint8(uint64(v) >> 32)
+		dAtA[i+3] = uint8(uint64(v) >> 24)
+		dAtA[i+2] = uint8(uint64(v) >> 16)
+		dAtA[i+1] = uint8(uint64(v) >> 8)
+		dAtA[i+0] = uint8(uint64(v))
 		i--
 		dAtA[i] = 17 /*(2<<3)|1=17, field=2, wireType=64bit*/
 		{{- else if eq .MapVal "sfixed64"}}
 		i -= 8
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(v))
+		dAtA[i+7] = uint8(uint64(v) >> 56)
+		dAtA[i+6] = uint8(uint64(v) >> 48)
+		dAtA[i+5] = uint8(uint64(v) >> 40)
+		dAtA[i+4] = uint8(uint64(v) >> 32)
+		dAtA[i+3] = uint8(uint64(v) >> 24)
+		dAtA[i+2] = uint8(uint64(v) >> 16)
+		dAtA[i+1] = uint8(uint64(v) >> 8)
+		dAtA[i+0] = uint8(uint64(v))
 		i--
 		dAtA[i] = 17 /*(2<<3)|1=17, field=2, wireType=64bit*/
 		{{- else if eq .MapVal "sint32"}}
@@ -308,22 +340,42 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		dAtA[i] = 8 /*(1<<3)|0=8, field=1, wireType=Varint*/
 		{{- else if eq .MapKey "fixed32"}}
 		i -= 4
-		binary.LittleEndian.PutUint32(dAtA[i:], uint32(k))
+		dAtA[i+3] = uint8(uint32(k) >> 24)
+		dAtA[i+2] = uint8(uint32(k) >> 16)
+		dAtA[i+1] = uint8(uint32(k) >> 8)
+		dAtA[i+0] = uint8(uint32(k))
 		i--
 		dAtA[i] = 13 /*(1<<3)|5=13, field=1, wireType=32bit*/
 		{{- else if eq .MapKey "sfixed32"}}
 		i -= 4
-		binary.LittleEndian.PutUint32(dAtA[i:], uint32(k))
+		dAtA[i+3] = uint8(uint32(k) >> 24)
+		dAtA[i+2] = uint8(uint32(k) >> 16)
+		dAtA[i+1] = uint8(uint32(k) >> 8)
+		dAtA[i+0] = uint8(uint32(k))
 		i--
 		dAtA[i] = 13 /*(1<<3)|5=13, field=1, wireType=32bit*/
 		{{- else if eq .MapKey "fixed64"}}
 		i -= 8
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(k))
+		dAtA[i+7] = uint8(uint64(k) >> 56)
+		dAtA[i+6] = uint8(uint64(k) >> 48)
+		dAtA[i+5] = uint8(uint64(k) >> 40)
+		dAtA[i+4] = uint8(uint64(k) >> 32)
+		dAtA[i+3] = uint8(uint64(k) >> 24)
+		dAtA[i+2] = uint8(uint64(k) >> 16)
+		dAtA[i+1] = uint8(uint64(k) >> 8)
+		dAtA[i+0] = uint8(uint64(k))
 		i--
 		dAtA[i] = 9 /*(1<<3)|1=9, field=1, wireType=64bit*/
 		{{- else if eq .MapKey "sfixed64"}}
 		i -= 8
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(k))
+		dAtA[i+7] = uint8(uint64(k) >> 56)
+		dAtA[i+6] = uint8(uint64(k) >> 48)
+		dAtA[i+5] = uint8(uint64(k) >> 40)
+		dAtA[i+4] = uint8(uint64(k) >> 32)
+		dAtA[i+3] = uint8(uint64(k) >> 24)
+		dAtA[i+2] = uint8(uint64(k) >> 16)
+		dAtA[i+1] = uint8(uint64(k) >> 8)
+		dAtA[i+0] = uint8(uint64(k))
 		i--
 		dAtA[i] = 9 /*(1<<3)|1=9, field=1, wireType=64bit*/
 		{{- else if eq .MapKey "sint32"}}
@@ -382,17 +434,55 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 			for uv >= 0x80 { dAtA[j] = byte(uv)|0x80; uv >>= 7; j++ }
 			dAtA[j] = byte(uv); j++
 			{{- else if eq .Type "fixed32"}}
-			binary.LittleEndian.PutUint32(dAtA[j:], uint32(v)); j += 4
+			dAtA[j+3] = uint8(uint32(v) >> 24)
+			dAtA[j+2] = uint8(uint32(v) >> 16)
+			dAtA[j+1] = uint8(uint32(v) >> 8)
+			dAtA[j+0] = uint8(uint32(v))
+			j += 4
 			{{- else if eq .Type "fixed64"}}
-			binary.LittleEndian.PutUint64(dAtA[j:], uint64(v)); j += 8
+			dAtA[j+7] = uint8(uint64(v) >> 56)
+			dAtA[j+6] = uint8(uint64(v) >> 48)
+			dAtA[j+5] = uint8(uint64(v) >> 40)
+			dAtA[j+4] = uint8(uint64(v) >> 32)
+			dAtA[j+3] = uint8(uint64(v) >> 24)
+			dAtA[j+2] = uint8(uint64(v) >> 16)
+			dAtA[j+1] = uint8(uint64(v) >> 8)
+			dAtA[j+0] = uint8(uint64(v))
+			j += 8
 			{{- else if eq .Type "sfixed32"}}
-			binary.LittleEndian.PutUint32(dAtA[j:], uint32(v)); j += 4
+			dAtA[j+3] = uint8(uint32(v) >> 24)
+			dAtA[j+2] = uint8(uint32(v) >> 16)
+			dAtA[j+1] = uint8(uint32(v) >> 8)
+			dAtA[j+0] = uint8(uint32(v))
+			j += 4
 			{{- else if eq .Type "sfixed64"}}
-			binary.LittleEndian.PutUint64(dAtA[j:], uint64(v)); j += 8
+			dAtA[j+7] = uint8(uint64(v) >> 56)
+			dAtA[j+6] = uint8(uint64(v) >> 48)
+			dAtA[j+5] = uint8(uint64(v) >> 40)
+			dAtA[j+4] = uint8(uint64(v) >> 32)
+			dAtA[j+3] = uint8(uint64(v) >> 24)
+			dAtA[j+2] = uint8(uint64(v) >> 16)
+			dAtA[j+1] = uint8(uint64(v) >> 8)
+			dAtA[j+0] = uint8(uint64(v))
+			j += 8
 			{{- else if eq .Type "float"}}
-			binary.LittleEndian.PutUint32(dAtA[j:], math.Float32bits(v)); j += 4
+			_fv := math.Float32bits(v)
+			dAtA[j+3] = uint8(_fv >> 24)
+			dAtA[j+2] = uint8(_fv >> 16)
+			dAtA[j+1] = uint8(_fv >> 8)
+			dAtA[j+0] = uint8(_fv)
+			j += 4
 			{{- else if eq .Type "double"}}
-			binary.LittleEndian.PutUint64(dAtA[j:], math.Float64bits(v)); j += 8
+			_dv := math.Float64bits(v)
+			dAtA[j+7] = uint8(_dv >> 56)
+			dAtA[j+6] = uint8(_dv >> 48)
+			dAtA[j+5] = uint8(_dv >> 40)
+			dAtA[j+4] = uint8(_dv >> 32)
+			dAtA[j+3] = uint8(_dv >> 24)
+			dAtA[j+2] = uint8(_dv >> 16)
+			dAtA[j+1] = uint8(_dv >> 8)
+			dAtA[j+0] = uint8(_dv)
+			j += 8
 			{{- else if eq .Type "bool"}}
 			if v { dAtA[j] = 1 } else { dAtA[j] = 0 }; j++
 			{{- else}}
@@ -452,37 +542,69 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
 		i -= 8
-		binary.LittleEndian.PutUint64(dAtA[i:], math.Float64bits(m.{{.Name}}))
+		_dv := math.Float64bits(m.{{.Name}})
+		dAtA[i+7] = uint8(_dv >> 56)
+		dAtA[i+6] = uint8(_dv >> 48)
+		dAtA[i+5] = uint8(_dv >> 40)
+		dAtA[i+4] = uint8(_dv >> 32)
+		dAtA[i+3] = uint8(_dv >> 24)
+		dAtA[i+2] = uint8(_dv >> 16)
+		dAtA[i+1] = uint8(_dv >> 8)
+		dAtA[i+0] = uint8(_dv)
 		{{writeTagBytes .Number 1}}
 	}
 {{- else if eq .Type "float"}}
 	if m.{{.Name}} != 0 {
 		i -= 4
-		binary.LittleEndian.PutUint32(dAtA[i:], math.Float32bits(m.{{.Name}}))
+		_fv := math.Float32bits(m.{{.Name}})
+		dAtA[i+3] = uint8(_fv >> 24)
+		dAtA[i+2] = uint8(_fv >> 16)
+		dAtA[i+1] = uint8(_fv >> 8)
+		dAtA[i+0] = uint8(_fv)
 		{{writeTagBytes .Number 5}}
 	}
 {{- else if eq .Type "fixed32"}}
 	if m.{{.Name}} != 0 {
 		i -= 4
-		binary.LittleEndian.PutUint32(dAtA[i:], m.{{.Name}})
+		dAtA[i+3] = uint8(m.{{.Name}} >> 24)
+		dAtA[i+2] = uint8(m.{{.Name}} >> 16)
+		dAtA[i+1] = uint8(m.{{.Name}} >> 8)
+		dAtA[i+0] = uint8(m.{{.Name}})
 		{{writeTagBytes .Number 5}}
 	}
 {{- else if eq .Type "fixed64"}}
 	if m.{{.Name}} != 0 {
 		i -= 8
-		binary.LittleEndian.PutUint64(dAtA[i:], m.{{.Name}})
+		dAtA[i+7] = uint8(m.{{.Name}} >> 56)
+		dAtA[i+6] = uint8(m.{{.Name}} >> 48)
+		dAtA[i+5] = uint8(m.{{.Name}} >> 40)
+		dAtA[i+4] = uint8(m.{{.Name}} >> 32)
+		dAtA[i+3] = uint8(m.{{.Name}} >> 24)
+		dAtA[i+2] = uint8(m.{{.Name}} >> 16)
+		dAtA[i+1] = uint8(m.{{.Name}} >> 8)
+		dAtA[i+0] = uint8(m.{{.Name}})
 		{{writeTagBytes .Number 1}}
 	}
 {{- else if eq .Type "sfixed32"}}
 	if m.{{.Name}} != 0 {
 		i -= 4
-		binary.LittleEndian.PutUint32(dAtA[i:], uint32(m.{{.Name}}))
+		dAtA[i+3] = uint8(uint32(m.{{.Name}}) >> 24)
+		dAtA[i+2] = uint8(uint32(m.{{.Name}}) >> 16)
+		dAtA[i+1] = uint8(uint32(m.{{.Name}}) >> 8)
+		dAtA[i+0] = uint8(uint32(m.{{.Name}}))
 		{{writeTagBytes .Number 5}}
 	}
 {{- else if eq .Type "sfixed64"}}
 	if m.{{.Name}} != 0 {
 		i -= 8
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.{{.Name}}))
+		dAtA[i+7] = uint8(uint64(m.{{.Name}}) >> 56)
+		dAtA[i+6] = uint8(uint64(m.{{.Name}}) >> 48)
+		dAtA[i+5] = uint8(uint64(m.{{.Name}}) >> 40)
+		dAtA[i+4] = uint8(uint64(m.{{.Name}}) >> 32)
+		dAtA[i+3] = uint8(uint64(m.{{.Name}}) >> 24)
+		dAtA[i+2] = uint8(uint64(m.{{.Name}}) >> 16)
+		dAtA[i+1] = uint8(uint64(m.{{.Name}}) >> 8)
+		dAtA[i+0] = uint8(uint64(m.{{.Name}}))
 		{{writeTagBytes .Number 1}}
 	}
 {{- else if eq .Type "sint32"}}

@@ -128,6 +128,100 @@ func AppendVarint(b []byte, v uint64) []byte {
 	}
 }
 
+func EncodeVarintV1(dAtA []byte, offset int, v uint64) int {
+	offset -= SizeOfVarint(v)
+	base := offset
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return base
+}
+
+// EncodeVarint encodes v into dAtA using varint encoding, writing backwards from offset.
+// offset is the position after the last byte; returns the new start offset.
+// SizeOfVarint is inlined via bits.Len64; array indices written high-to-low for BCE.
+// todo: 对这个函数做 benchmark
+func EncodeVarint(dAtA []byte, offset int, v uint64) int {
+	n := (bits.Len64(v|1) + 6) / 7
+	offset -= n
+	switch n {
+	case 1:
+		dAtA[offset] = uint8(v)
+	case 2:
+		dAtA[offset+1] = uint8(v >> 7)
+		dAtA[offset] = uint8(v) | 0x80
+	case 3:
+		dAtA[offset+2] = uint8(v >> 14)
+		dAtA[offset+1] = uint8(v>>7) | 0x80
+		dAtA[offset] = uint8(v) | 0x80
+	case 4:
+		dAtA[offset+3] = uint8(v >> 21)
+		dAtA[offset+2] = uint8(v>>14) | 0x80
+		dAtA[offset+1] = uint8(v>>7) | 0x80
+		dAtA[offset] = uint8(v) | 0x80
+	case 5:
+		dAtA[offset+4] = uint8(v >> 28)
+		dAtA[offset+3] = uint8(v>>21) | 0x80
+		dAtA[offset+2] = uint8(v>>14) | 0x80
+		dAtA[offset+1] = uint8(v>>7) | 0x80
+		dAtA[offset] = uint8(v) | 0x80
+	case 6:
+		dAtA[offset+5] = uint8(v >> 35)
+		dAtA[offset+4] = uint8(v>>28) | 0x80
+		dAtA[offset+3] = uint8(v>>21) | 0x80
+		dAtA[offset+2] = uint8(v>>14) | 0x80
+		dAtA[offset+1] = uint8(v>>7) | 0x80
+		dAtA[offset] = uint8(v) | 0x80
+	case 7:
+		dAtA[offset+6] = uint8(v >> 42)
+		dAtA[offset+5] = uint8(v>>35) | 0x80
+		dAtA[offset+4] = uint8(v>>28) | 0x80
+		dAtA[offset+3] = uint8(v>>21) | 0x80
+		dAtA[offset+2] = uint8(v>>14) | 0x80
+		dAtA[offset+1] = uint8(v>>7) | 0x80
+		dAtA[offset] = uint8(v) | 0x80
+	case 8:
+		dAtA[offset+7] = uint8(v >> 49)
+		dAtA[offset+6] = uint8(v>>42) | 0x80
+		dAtA[offset+5] = uint8(v>>35) | 0x80
+		dAtA[offset+4] = uint8(v>>28) | 0x80
+		dAtA[offset+3] = uint8(v>>21) | 0x80
+		dAtA[offset+2] = uint8(v>>14) | 0x80
+		dAtA[offset+1] = uint8(v>>7) | 0x80
+		dAtA[offset] = uint8(v) | 0x80
+	case 9:
+		dAtA[offset+8] = uint8(v >> 56)
+		dAtA[offset+7] = uint8(v>>49) | 0x80
+		dAtA[offset+6] = uint8(v>>42) | 0x80
+		dAtA[offset+5] = uint8(v>>35) | 0x80
+		dAtA[offset+4] = uint8(v>>28) | 0x80
+		dAtA[offset+3] = uint8(v>>21) | 0x80
+		dAtA[offset+2] = uint8(v>>14) | 0x80
+		dAtA[offset+1] = uint8(v>>7) | 0x80
+		dAtA[offset] = uint8(v) | 0x80
+	default: // case 10: bit 63 set
+		dAtA[offset+9] = 0x01
+		dAtA[offset+8] = uint8(v>>56) | 0x80
+		dAtA[offset+7] = uint8(v>>49) | 0x80
+		dAtA[offset+6] = uint8(v>>42) | 0x80
+		dAtA[offset+5] = uint8(v>>35) | 0x80
+		dAtA[offset+4] = uint8(v>>28) | 0x80
+		dAtA[offset+3] = uint8(v>>21) | 0x80
+		dAtA[offset+2] = uint8(v>>14) | 0x80
+		dAtA[offset+1] = uint8(v>>7) | 0x80
+		dAtA[offset] = uint8(v) | 0x80
+	}
+	return offset
+}
+
+// SizeOfVarint returns the size of the varint-encoded value.
+func SizeOfVarint(x uint64) (n int) {
+	return (bits.Len64(x|1) + 6) / 7
+}
+
 // AppendTag encodes a protobuf field tag (field number + wire type) and appends it to b.
 func AppendTag(b []byte, fieldNum int, wt WireType) []byte {
 	return AppendVarint(b, uint64(fieldNum)<<3|uint64(wt))

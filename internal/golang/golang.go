@@ -1931,19 +1931,22 @@ func (g *Generator) RenderVtprotobuf(out *os.File) error {
 			}
 			tag := uint64(fieldNum<<3 | wireType)
 			if tag < 0x80 {
-				return fmt.Sprintf("i--\n\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d=%d*/",
+				return fmt.Sprintf("i--\n\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d (%d)*/",
 					byte(tag), fieldNum, wtName, fieldNum, wireType, tag)
 			}
 			if tag < 0x4000 {
 				lo := byte(tag&0x7f | 0x80) // LSB with continuation bit
 				hi := byte(tag >> 7)        // MSB without continuation bit
 				return fmt.Sprintf(
-					"i--\n\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d=%d, byte[1]=%d>>7=%d*/\n\t\ti--\n\t\tdAtA[i] = %d /*byte[0]=%d&0x7f|0x80=%d*/",
+					"i--\n"+
+						"\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d=%d, byte[1]=%d>>7 (%d)*/\n"+
+						"\t\ti--\n"+
+						"\t\tdAtA[i] = %d /*byte[0]=%d&0x7f|0x80 (%d)*/",
 					hi, fieldNum, wtName, fieldNum, wireType, tag, tag, hi,
 					lo, tag, lo)
 			}
 			// Field number >= 2048: 3-byte tag, keep as EncodeVarint call
-			return fmt.Sprintf("i = protohelpers.EncodeVarint(dAtA, i, %d) /*field=%d, wireType=%s, (%d<<3)|%d=%d*/",
+			return fmt.Sprintf("i = protohelpers.EncodeVarint(dAtA, i, %d) /*field=%d, wireType=%s, (%d<<3)|%d (%d)*/",
 				tag, fieldNum, wtName, fieldNum, wireType, tag)
 		},
 	}

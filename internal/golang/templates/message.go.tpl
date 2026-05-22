@@ -4,6 +4,7 @@ package {{.Package}}
 
 import (
 	"encoding/base64"
+	"fmt"
 	"math"
 	"strconv"
 	"unsafe"
@@ -1195,6 +1196,9 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 		switch fieldNum {
 {{- range .Fields}}
 		case {{$goName}}{{.Name}}Tag: // {{.Name}}
+			if wt != {{if or .Map .Repeated .IsMsg (eq .Type "string") (eq .Type "bytes")}}utils.WireTypeLenDelim{{else if or (eq .Type "double") (eq .Type "fixed64") (eq .Type "sfixed64")}}utils.WireType64bit{{else if or (eq .Type "float") (eq .Type "fixed32") (eq .Type "sfixed32")}}utils.WireType32bit{{else}}utils.WireTypeVarint{{end}} {
+				return fmt.Errorf("proto: wrong wireType = %d for field {{.Name}}", wt)
+			}
 {{- if .Map}}
 			var entryData []byte
 			entryData, in, err = utils.ConsumeBytes(in)
@@ -1386,7 +1390,6 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			}
 			r.{{.Name}} = {{.ReaderType}}(ev)
 {{- end}}
-			_ = wt
 {{- end}}
 		default:
 			var err2 error

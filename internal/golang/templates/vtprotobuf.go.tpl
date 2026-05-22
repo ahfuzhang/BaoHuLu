@@ -556,6 +556,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
+		// decode fieldNum and wireType
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
 			if shift >= 64 {
@@ -612,16 +613,11 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 			var mapVal {{mapValGoType .MapVal}}
 			{{- end}}
 			for iNdEx < postIndex {
-				var entryTag uint64
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 { return fmt.Errorf("proto: integer overflow") }
-					if iNdEx >= l { return io.ErrUnexpectedEOF }
-					b := dAtA[iNdEx]; iNdEx++
-					entryTag |= uint64(b&0x7F) << shift
-					if b < 0x80 { break }
-				}
-				entryFieldNum := int32(entryTag >> 3)
-				switch entryFieldNum {
+				if iNdEx >= l { return io.ErrUnexpectedEOF }
+				tagByte := dAtA[iNdEx]; iNdEx++
+				// map entry tag is always single-byte: field 1/2 with any wire type yields values 8–21 (<0x80)
+				if tagByte >= 0x80 { return fmt.Errorf("proto: unexpected map entry tag") }
+				switch int32(tagByte >> 3) {
 				case 1: // map key
 					{{- if eq .MapKey "string"}}
 					var slen uint64
@@ -801,7 +797,7 @@ func (r *Readonly{{$goName}}) FromProtobufVT(dAtA []byte) error {
 					mapVal = vtemp
 					{{- end}}
 				default:
-					rest, err2 := utils.SkipField(utils.WireType(entryTag&0x7), dAtA[iNdEx:])
+					rest, err2 := utils.SkipField(utils.WireType(tagByte&0x7), dAtA[iNdEx:])
 					if err2 != nil { return err2 }
 					iNdEx = l - len(rest)
 				}

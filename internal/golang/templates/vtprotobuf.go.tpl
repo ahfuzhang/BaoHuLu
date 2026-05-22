@@ -20,7 +20,7 @@ var _ = fmt.Sprintf
 var _ = io.EOF
 var _ = unsafe.Pointer(nil)
 var _ = bits.Len64
-var _ = protohelpers.EncodeVarint
+var _ = utils.EncodeVarint
 
 // ─── vtprotobuf-compatible methods ───────────────────────────────────────────
 {{range .Messages}}
@@ -231,20 +231,20 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		{{- if eq .MapVal "string"}}
 		i -= len(v)
 		copy(dAtA[i:], v)
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(v)))
+		i = utils.EncodeVarint(dAtA, i, uint64(len(v)))
 		i--
 		dAtA[i] = 18 /*(2<<3)|2=18, field=2, wireType=LenDelim*/
 		{{- else if eq .MapVal "bytes"}}
 		i -= len(v)
 		copy(dAtA[i:], v)
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(v)))
+		i = utils.EncodeVarint(dAtA, i, uint64(len(v)))
 		i--
 		dAtA[i] = 18 /*(2<<3)|2=18, field=2, wireType=LenDelim*/
 		{{- else if mapValIsMsg .MapVal}}
 		size, err := v.marshalToSizedBufferVT(dAtA[:i])
 		if err != nil { return 0, err }
 		i -= size
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i = utils.EncodeVarint(dAtA, i, uint64(size))
 		i--
 		dAtA[i] = 18 /*(2<<3)|2=18, field=2, wireType=LenDelim*/
 		{{- else if eq .MapVal "double"}}
@@ -310,11 +310,11 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 17 /*(2<<3)|1=17, field=2, wireType=64bit*/
 		{{- else if eq .MapVal "sint32"}}
-		i = protohelpers.EncodeVarint(dAtA, i, uint64((uint32(v)<<1)^uint32(v>>31)))
+		i = utils.EncodeVarint(dAtA, i, uint64((uint32(v)<<1)^uint32(v>>31)))
 		i--
 		dAtA[i] = 16 /*(2<<3)|0=16, field=2, wireType=Varint*/
 		{{- else if eq .MapVal "sint64"}}
-		i = protohelpers.EncodeVarint(dAtA, i, (uint64(v)<<1)^uint64(v>>63))
+		i = utils.EncodeVarint(dAtA, i, (uint64(v)<<1)^uint64(v>>63))
 		i--
 		dAtA[i] = 16 /*(2<<3)|0=16, field=2, wireType=Varint*/
 		{{- else if eq .MapVal "bool"}}
@@ -323,14 +323,14 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 16 /*(2<<3)|0=16, field=2, wireType=Varint*/
 		{{- else}}
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(v))
+		i = utils.EncodeVarint(dAtA, i, uint64(v))
 		i--
 		dAtA[i] = 16 /*(2<<3)|0=16, field=2, wireType=Varint*/
 		{{- end}}
 		{{- if eq .MapKey "string"}}
 		i -= len(k)
 		copy(dAtA[i:], k)
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(k)))
+		i = utils.EncodeVarint(dAtA, i, uint64(len(k)))
 		i--
 		dAtA[i] = 10 /*(1<<3)|2=10, field=1, wireType=LenDelim*/
 		{{- else if eq .MapKey "bool"}}
@@ -379,20 +379,20 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 9 /*(1<<3)|1=9, field=1, wireType=64bit*/
 		{{- else if eq .MapKey "sint32"}}
-		i = protohelpers.EncodeVarint(dAtA, i, uint64((uint32(k)<<1)^uint32(k>>31)))
+		i = utils.EncodeVarint(dAtA, i, uint64((uint32(k)<<1)^uint32(k>>31)))
 		i--
 		dAtA[i] = 8 /*(1<<3)|0=8, field=1, wireType=Varint*/
 		{{- else if eq .MapKey "sint64"}}
-		i = protohelpers.EncodeVarint(dAtA, i, (uint64(k)<<1)^uint64(k>>63))
+		i = utils.EncodeVarint(dAtA, i, (uint64(k)<<1)^uint64(k>>63))
 		i--
 		dAtA[i] = 8 /*(1<<3)|0=8, field=1, wireType=Varint*/
 		{{- else}}
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(k))
+		i = utils.EncodeVarint(dAtA, i, uint64(k))
 		i--
 		dAtA[i] = 8 /*(1<<3)|0=8, field=1, wireType=Varint*/
 		{{- end}}
 		// write outer map entry length + field tag
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(baseI-i))
+		i = utils.EncodeVarint(dAtA, i, uint64(baseI-i))
 		{{writeTagBytes .Number 2}}
 	}
 {{- else if .Repeated}}
@@ -491,7 +491,7 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 			dAtA[j] = byte(uv); j++
 			{{- end}}
 		}
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(pksize))
+		i = utils.EncodeVarint(dAtA, i, uint64(pksize))
 		{{writeTagBytes .Number 2}}
 	}
 {{- else if eq .Type "string"}}
@@ -499,7 +499,7 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		s := m.{{.Name}}[iNdEx]
 		i -= len(s)
 		copy(dAtA[i:], s)
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(s)))
+		i = utils.EncodeVarint(dAtA, i, uint64(len(s)))
 		{{writeTagBytes .Number 2}}
 	}
 {{- else if eq .Type "bytes"}}
@@ -507,7 +507,7 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		b := m.{{.Name}}[iNdEx]
 		i -= len(b)
 		copy(dAtA[i:], b)
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(b)))
+		i = utils.EncodeVarint(dAtA, i, uint64(len(b)))
 		{{writeTagBytes .Number 2}}
 	}
 {{- else}}
@@ -515,7 +515,7 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		size, err := m.{{.Name}}[iNdEx].marshalToSizedBufferVT(dAtA[:i])
 		if err != nil { return 0, err }
 		i -= size
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i = utils.EncodeVarint(dAtA, i, uint64(size))
 		{{writeTagBytes .Number 2}}
 	}
 {{- end}}
@@ -525,7 +525,7 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		size, err := m.{{.Name}}.marshalToSizedBufferVT(dAtA[:i])
 		if err != nil { return 0, err }
 		i -= size
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i = utils.EncodeVarint(dAtA, i, uint64(size))
 		{{writeTagBytes .Number 2}}
 	}
 {{- else}}
@@ -534,7 +534,7 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 		if err != nil { return 0, err }
 		if size > 0 {
 			i -= size
-			i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+			i = utils.EncodeVarint(dAtA, i, uint64(size))
 			{{writeTagBytes .Number 2}}
 		}
 	}
@@ -609,12 +609,12 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 	}
 {{- else if eq .Type "sint32"}}
 	if m.{{.Name}} != 0 {
-		i = protohelpers.EncodeVarint(dAtA, i, uint64((uint32(m.{{.Name}})<<1)^uint32(m.{{.Name}}>>31)))
+		i = utils.EncodeVarint(dAtA, i, uint64((uint32(m.{{.Name}})<<1)^uint32(m.{{.Name}}>>31)))
 		{{writeTagBytes .Number 0}}
 	}
 {{- else if eq .Type "sint64"}}
 	if m.{{.Name}} != 0 {
-		i = protohelpers.EncodeVarint(dAtA, i, (uint64(m.{{.Name}})<<1)^uint64(m.{{.Name}}>>63))
+		i = utils.EncodeVarint(dAtA, i, (uint64(m.{{.Name}})<<1)^uint64(m.{{.Name}}>>63))
 		{{writeTagBytes .Number 0}}
 	}
 {{- else if eq .Type "bool"}}
@@ -627,19 +627,19 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) (int, error) {
 	if len(m.{{.Name}}) > 0 {
 		i -= len(m.{{.Name}})
 		copy(dAtA[i:], m.{{.Name}})
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.{{.Name}})))
+		i = utils.EncodeVarint(dAtA, i, uint64(len(m.{{.Name}})))
 		{{writeTagBytes .Number 2}}
 	}
 {{- else if eq .Type "bytes"}}
 	if len(m.{{.Name}}) > 0 {
 		i -= len(m.{{.Name}})
 		copy(dAtA[i:], m.{{.Name}})
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.{{.Name}})))
+		i = utils.EncodeVarint(dAtA, i, uint64(len(m.{{.Name}})))
 		{{writeTagBytes .Number 2}}
 	}
 {{- else}}
 	if m.{{.Name}} != 0 {
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.{{.Name}}))
+		i = utils.EncodeVarint(dAtA, i, uint64(m.{{.Name}}))
 		{{writeTagBytes .Number 0}}
 	}
 {{- end}}

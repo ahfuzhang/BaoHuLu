@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/binary"
 	"math"
 	"testing"
 	"unsafe"
@@ -77,6 +79,74 @@ func TestAppendVarint(t *testing.T) {
 				t.Fatalf("round-trip: unexpected remaining bytes: %v", rest)
 			}
 		})
+	}
+}
+
+// TestVarintFunctionsAlign verifies that AppendVarint, EncodeVarintV1, EncodeVarint,
+// and EncodeVarintV2 all produce identical encodings across each varint byte length (1–10).
+// encoding/binary.AppendUvarint is the canonical reference.
+func TestVarintFunctionsAlign(t *testing.T) {
+	cases := []struct {
+		n int
+		v uint64
+	}{
+		// 1 byte: v < 2^7
+		{1, 0}, {1, 63}, {1, 127},
+		// 2 bytes: 2^7 <= v < 2^14
+		{2, 128}, {2, 8000}, {2, 16383},
+		// 3 bytes: 2^14 <= v < 2^21; 16384 and 32767 fall in [0x4000, 0x7FFF] which
+		// also satisfies v < 0x8000 — the boundary that separates 2-byte and 3-byte values.
+		{3, 16384}, {3, 32767}, {3, (1 << 21) - 1},
+		// 4 bytes: 2^21 <= v < 2^28
+		{4, 1 << 21}, {4, 1 << 24}, {4, (1 << 28) - 1},
+		// 5 bytes: 2^28 <= v < 2^35
+		{5, 1 << 28}, {5, 1 << 31}, {5, (1 << 35) - 1},
+		// 6 bytes: 2^35 <= v < 2^42
+		{6, 1 << 35}, {6, 1 << 38}, {6, (1 << 42) - 1},
+		// 7 bytes: 2^42 <= v < 2^49
+		{7, 1 << 42}, {7, 1 << 45}, {7, (1 << 49) - 1},
+		// 8 bytes: 2^49 <= v < 2^56
+		{8, 1 << 49}, {8, 1 << 52}, {8, (1 << 56) - 1},
+		// 9 bytes: 2^56 <= v < 2^63
+		{9, 1 << 56}, {9, 1 << 59}, {9, (1 << 63) - 1},
+		// 10 bytes: v >= 2^63
+		{10, 1 << 63}, {10, 1<<63 | 1<<32}, {10, ^uint64(0)},
+	}
+
+	for _, tc := range cases {
+		n, v := tc.n, tc.v
+		ref := binary.AppendUvarint(nil, v)
+		if len(ref) != n {
+			t.Errorf("binary.AppendUvarint(v=%d): len=%d, expected n=%d (test case is wrong)", v, len(ref), n)
+			continue
+		}
+
+		if got := AppendVarint(nil, v); !bytes.Equal(got, ref) {
+			t.Errorf("AppendVarint(v=%d, n=%d): got %v, want %v", v, n, got, ref)
+		}
+
+		// EncodeVarintV1/EncodeVarint/EncodeVarintV2 write backwards into a pre-allocated
+		// buffer. Pass offset=n so the adjusted offset lands at 0 and the varint occupies
+		// buf[0:n]. EncodeVarintV2's append trick requires offset=0 after adjustment, so
+		// passing a larger offset (e.g. maxSize=10) would panic for that function.
+		buf := make([]byte, n)
+
+		start := EncodeVarintV1(buf, n, v)
+		if !bytes.Equal(buf[start:], ref) {
+			t.Errorf("EncodeVarintV1(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
+		}
+
+		clear(buf)
+		start = EncodeVarintV0(buf, n, v)
+		if !bytes.Equal(buf[start:], ref) {
+			t.Errorf("EncodeVarint(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
+		}
+
+		clear(buf)
+		start = EncodeVarint(buf, n, v)
+		if !bytes.Equal(buf[start:], ref) {
+			t.Errorf("EncodeVarintV2(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
+		}
 	}
 }
 

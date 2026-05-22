@@ -50,6 +50,15 @@ const (
 // VarintSize computes the byte count via a single LZCNT/BSR instruction (no comparisons).
 // The switch dispatches on that integer value, which the compiler lowers to a jump table.
 func AppendVarint(b []byte, v uint64) []byte {
+	// fast path
+	if v < 0x80 {
+		return append(b, byte(v))
+	}
+	if v < 0x4000 {
+		return append(b,
+			byte(v)|0x80,
+			byte(v>>7))
+	}
 	switch VarintSize(v) {
 	case 1:
 		return append(b, byte(v))
@@ -129,7 +138,7 @@ func AppendVarint(b []byte, v uint64) []byte {
 }
 
 func EncodeVarintV1(dAtA []byte, offset int, v uint64) int {
-	offset -= SizeOfVarint(v)
+	offset -= ((bits.Len64(v|1) + 6) / 7)
 	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -144,7 +153,12 @@ func EncodeVarintV1(dAtA []byte, offset int, v uint64) int {
 // offset is the position after the last byte; returns the new start offset.
 // SizeOfVarint is inlined via bits.Len64; array indices written high-to-low for BCE.
 // todo: 对这个函数做 benchmark
-func EncodeVarint(dAtA []byte, offset int, v uint64) int {
+func EncodeVarintV0(dAtA []byte, offset int, v uint64) int {
+	if v < 0x80 {
+		offset--
+		dAtA[offset] = uint8(v)
+		return offset
+	}
 	n := (bits.Len64(v|1) + 6) / 7
 	offset -= n
 	switch n {
@@ -213,6 +227,114 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		dAtA[offset+2] = uint8(v>>14) | 0x80
 		dAtA[offset+1] = uint8(v>>7) | 0x80
 		dAtA[offset] = uint8(v) | 0x80
+	}
+	return offset
+}
+
+// 在 proto encode 中，性能提升 -16.8% => -13.3%, 本函数提升 46%
+func EncodeVarint(dAtA []byte, offset int, v uint64) int {
+	// hot path
+	if v < 0x80 {
+		var p *byte = (*byte)(unsafe.Pointer(&dAtA[offset-1]))
+		*p = uint8(v)
+		return offset - 1
+	}
+	if v < 0x4000 {
+		offset -= 2
+		var arr *[2]byte = (*[2]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v >> 7)
+		return offset
+	}
+	// if v < 0x80 {
+	// 	offset--
+	// 	dAtA[offset] = uint8(v)
+	// 	return offset
+	// }
+	// if v < 0x4000 {
+	// 	offset -= 2
+	// 	dAtA[offset+1] = uint8(v >> 7)
+	// 	dAtA[offset] = uint8(v) | 0x80
+	// 	return offset
+	// }
+	n := (bits.Len64(v|1) + 6) / 7
+	offset -= n
+	switch n {
+	// case 1:
+	// 	dAtA[offset] = uint8(v)
+	// case 2:
+	// 	dAtA[offset+1] = uint8(v >> 7)
+	// 	dAtA[offset] = uint8(v) | 0x80
+	case 3:
+		_ = append(dAtA[offset:offset:offset+3],
+			byte(v)|0x80,
+			byte(v>>7)|0x80,
+			byte(v>>14))
+	case 4:
+		_ = append(dAtA[offset:offset:offset+4],
+			byte(v)|0x80,
+			byte(v>>7)|0x80,
+			byte(v>>14)|0x80,
+			byte(v>>21))
+	case 5:
+		_ = append(dAtA[offset:offset:offset+5],
+			byte(v)|0x80,
+			byte(v>>7)|0x80,
+			byte(v>>14)|0x80,
+			byte(v>>21)|0x80,
+			byte(v>>28))
+	case 6:
+		_ = append(dAtA[offset:offset:offset+6],
+			byte(v)|0x80,
+			byte(v>>7)|0x80,
+			byte(v>>14)|0x80,
+			byte(v>>21)|0x80,
+			byte(v>>28)|0x80,
+			byte(v>>35))
+	case 7:
+		_ = append(dAtA[offset:offset:offset+7],
+			byte(v)|0x80,
+			byte(v>>7)|0x80,
+			byte(v>>14)|0x80,
+			byte(v>>21)|0x80,
+			byte(v>>28)|0x80,
+			byte(v>>35)|0x80,
+			byte(v>>42))
+	case 8:
+		_ = append(dAtA[offset:offset:offset+8],
+			byte(v)|0x80,
+			byte(v>>7)|0x80,
+			byte(v>>14)|0x80,
+			byte(v>>21)|0x80,
+			byte(v>>28)|0x80,
+			byte(v>>35)|0x80,
+			byte(v>>42)|0x80,
+			byte(v>>49))
+	case 9:
+		_ = append(dAtA[offset:offset:offset+9],
+			byte(v)|0x80,
+			byte(v>>7)|0x80,
+			byte(v>>14)|0x80,
+			byte(v>>21)|0x80,
+			byte(v>>28)|0x80,
+			byte(v>>35)|0x80,
+			byte(v>>42)|0x80,
+			byte(v>>49)|0x80,
+			byte(v>>56))
+	case 10: // case 10: bit 63 set
+		_ = append(dAtA[offset:offset:offset+10],
+			byte(v)|0x80,
+			byte(v>>7)|0x80,
+			byte(v>>14)|0x80,
+			byte(v>>21)|0x80,
+			byte(v>>28)|0x80,
+			byte(v>>35)|0x80,
+			byte(v>>42)|0x80,
+			byte(v>>49)|0x80,
+			byte(v>>56)|0x80,
+			byte(v>>63))
+	default:
+		return -1 // impossible
 	}
 	return offset
 }

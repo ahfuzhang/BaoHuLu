@@ -672,13 +672,13 @@ func (g *Generator) RenderCSTest(out *os.File, namespace, baseFileName string) e
 	}
 
 	fnMap := template.FuncMap{
-		"csDefault":            csDefaultValue,
-		"upperFirst":           protofile.UpperFirst,
-		"goTypeName":           protofile.GoTypeName,
-		"csSampleLit":          csSampleLit,
-		"firstCsStringField":   firstCsStringField,
-		"safeUnknownFieldNum":  safeUnknownFieldNum,
-		"csTagByteArray":       csTagByteArray,
+		"csDefault":           csDefaultValue,
+		"upperFirst":          protofile.UpperFirst,
+		"goTypeName":          protofile.GoTypeName,
+		"csSampleLit":         csSampleLit,
+		"firstCsStringField":  firstCsStringField,
+		"safeUnknownFieldNum": safeUnknownFieldNum,
+		"csTagByteArray":      csTagByteArray,
 	}
 
 	tmpl, err := template.New("cs_test").Funcs(fnMap).Parse(csTestCodeTemplate)
@@ -856,13 +856,13 @@ func (g *Generator) RenderCSBench(out *os.File, namespace, baseFileName string) 
 	}
 
 	fnMap := template.FuncMap{
-		"csDefault":         csDefaultValue,
-		"upperFirst":        protofile.UpperFirst,
-		"goTypeName":        protofile.GoTypeName,
-		"csSampleLit":       csSampleLit,
-		"benchCsMapFill":    BenchCsMapFill,
-		"benchCsSliceFill":  BenchCsSliceFill,
-		"benchCsScalarLit":  benchCsScalarLit,
+		"csDefault":        csDefaultValue,
+		"upperFirst":       protofile.UpperFirst,
+		"goTypeName":       protofile.GoTypeName,
+		"csSampleLit":      csSampleLit,
+		"benchCsMapFill":   BenchCsMapFill,
+		"benchCsSliceFill": BenchCsSliceFill,
+		"benchCsScalarLit": benchCsScalarLit,
 	}
 
 	tmpl, err := template.New("cs_bench").Funcs(fnMap).Parse(csBenchCodeTemplate)
@@ -883,14 +883,14 @@ func renderCSFromPostForm(w io.Writer, data CsOneTypeData) error {
 
 // ─── C# code template ─────────────────────────────────────────────────────────
 
-//go:embed cs.tpl
+//go:embed templates/message.cs.tpl
 var csCodeTemplate string
 
-//go:embed cs_test.tpl
+//go:embed templates/test.cs.tpl
 var csTestCodeTemplate string
 
-//go:embed cs_bench.tpl
+//go:embed templates/benchmark.cs.tpl
 var csBenchCodeTemplate string
 
-//go:embed frompostform.cs.tpl
+//go:embed templates/frompostform.cs.tpl
 var csFromPostFormTemplate string

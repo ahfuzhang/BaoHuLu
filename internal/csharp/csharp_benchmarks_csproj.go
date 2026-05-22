@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-//go:embed CSharp.Benchmarks.csproj.tpl
+//go:embed templates/CSharp.Benchmarks.csproj.tpl
 var csBenchProjectTemplate string
 
 // BenchmarkProjectContent renders the embedded C# benchmark project template.

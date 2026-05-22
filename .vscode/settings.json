@@ -1,6 +1,8 @@
 {
   "files.associations": {
-    "*.cs.tpl": "csharp"
+    "*.cs.tpl": "csharp",
+    "*.csproj.tpl": "xml",
+    "*.go.tpl": "go"
   },
   "extensions.supportNodeGlobalNavigator": true
 }

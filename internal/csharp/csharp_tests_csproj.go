@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-//go:embed CSharp.Tests.csproj.tpl
+//go:embed templates/CSharp.Tests.csproj.tpl
 var csTestProjectTemplate string
 
 // TestProjectContent renders the embedded C# test project template.

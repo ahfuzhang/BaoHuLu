@@ -8,13 +8,13 @@ import (
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
 )
 
-//go:embed GrpcGen.csproj.tpl
+//go:embed templates/GrpcGen.csproj.tpl
 var grpcGenProjectTemplate string
 
-//go:embed CSharp.csproj.tpl
+//go:embed templates/CSharp.csproj.tpl
 var csProjectTemplate string
 
-//go:embed CSharp.Benchmarks.Program.cs.tpl
+//go:embed templates/CSharp.Benchmarks.Program.cs.tpl
 var csBenchmarkProgramTemplate string
 
 // GrpcGenProjectContent renders the embedded GrpcGen project template.

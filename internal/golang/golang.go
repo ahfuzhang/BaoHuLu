@@ -806,31 +806,31 @@ func (g *Generator) Render(out *os.File) error {
 			}
 			return sb.String()
 		},
-		"zeroVal":         ZeroVal,
-		"readerZero":      ReaderZero,
-		"isPackable":      IsPackable,
-		"is8ByteNumeric":  Is8ByteNumeric,
-		"isSliceType":     func(s string) bool { return strings.HasPrefix(s, "[]") },
-		"readFunc":        ReadFuncForType,
-		"protoWireType":   ProtoWireType,
-		"trimPtr":         func(s string) string { return strings.TrimPrefix(s, "*") },
-		"mapKeyGoType":    func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
-		"mapValGoType":    func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
-		"mapValIsMsg":     func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
-		"upperFirst":      protofile.UpperFirst,
-		"enumValueGoName": EnumValueGoName,
-		"padRight":             padRight,
-		"maxTagLen":            maxTagLen,
-		"maxNameOfLen":         maxNameOfLen,
-		"maxEnumValLen":        maxEnumValLen,
-		"writerFieldNameMax":   writerFieldNameMax,
-		"readerFieldNameMax":   readerFieldNameMax,
-		"writerFieldType":       g.writerFieldType,
-		"readerFieldType":       g.readerFieldType,
-		"writerFieldTypeMax":    g.writerFieldTypeMax,
-		"readerFieldTypeMax":    g.readerFieldTypeMax,
-		"writerAlignedFields":   g.writerAlignedFields,
-		"readerAlignedFields":   g.readerAlignedFields,
+		"zeroVal":             ZeroVal,
+		"readerZero":          ReaderZero,
+		"isPackable":          IsPackable,
+		"is8ByteNumeric":      Is8ByteNumeric,
+		"isSliceType":         func(s string) bool { return strings.HasPrefix(s, "[]") },
+		"readFunc":            ReadFuncForType,
+		"protoWireType":       ProtoWireType,
+		"trimPtr":             func(s string) string { return strings.TrimPrefix(s, "*") },
+		"mapKeyGoType":        func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValGoType":        func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValIsMsg":         func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
+		"upperFirst":          protofile.UpperFirst,
+		"enumValueGoName":     EnumValueGoName,
+		"padRight":            padRight,
+		"maxTagLen":           maxTagLen,
+		"maxNameOfLen":        maxNameOfLen,
+		"maxEnumValLen":       maxEnumValLen,
+		"writerFieldNameMax":  writerFieldNameMax,
+		"readerFieldNameMax":  readerFieldNameMax,
+		"writerFieldType":     g.writerFieldType,
+		"readerFieldType":     g.readerFieldType,
+		"writerFieldTypeMax":  g.writerFieldTypeMax,
+		"readerFieldTypeMax":  g.readerFieldTypeMax,
+		"writerAlignedFields": g.writerAlignedFields,
+		"readerAlignedFields": g.readerAlignedFields,
 		"readerElemType": func(fd FieldTpl) string {
 			return protofile.ReadonlyGoTypeName(fd.Type)
 		},
@@ -1887,12 +1887,12 @@ func (g *Generator) RenderVtprotobuf(out *os.File) error {
 	}
 
 	fnMap := template.FuncMap{
-		"isPackable":   IsPackable,
-		"protoWireType": ProtoWireType,
-		"trimPtr":      func(s string) string { return strings.TrimPrefix(s, "*") },
-		"mapKeyGoType": func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
-		"mapValGoType": func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
-		"mapValIsMsg":  func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
+		"isPackable":       IsPackable,
+		"protoWireType":    ProtoWireType,
+		"trimPtr":          func(s string) string { return strings.TrimPrefix(s, "*") },
+		"mapKeyGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValIsMsg":      func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
 		"readonlyTypeName": protofile.ReadonlyGoTypeName,
 		"readerElemType": func(fd FieldTpl) string {
 			return protofile.ReadonlyGoTypeName(fd.Type)
@@ -1936,7 +1936,7 @@ func (g *Generator) RenderVtprotobuf(out *os.File) error {
 			}
 			if tag < 0x4000 {
 				lo := byte(tag&0x7f | 0x80) // LSB with continuation bit
-				hi := byte(tag >> 7)         // MSB without continuation bit
+				hi := byte(tag >> 7)        // MSB without continuation bit
 				return fmt.Sprintf(
 					"i--\n\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d=%d, byte[1]=%d>>7=%d*/\n\t\ti--\n\t\tdAtA[i] = %d /*byte[0]=%d&0x7f|0x80=%d*/",
 					hi, fieldNum, wtName, fieldNum, wireType, tag, tag, hi,
@@ -1989,23 +1989,23 @@ func (g *Generator) RenderCompare(out *os.File, withVtprotobuf bool) error {
 
 // ─── code template ────────────────────────────────────────────────────────────
 
-//go:embed go.tpl
+//go:embed templates/message.go.tpl
 var codeTemplate string
 
-//go:embed go_test.tpl
+//go:embed templates/test.go.tpl
 var testTemplate string
 
-//go:embed go_timing_test.tpl
+//go:embed templates/timing.test.go.tpl
 var benchTemplate string
 
-//go:embed vtprotobuf.go.tpl
+//go:embed templates/vtprotobuf.go.tpl
 var vtprotobufTemplate string
 
-//go:embed vtprotobuf.test.go.tpl
+//go:embed templates/vtprotobuf.test.go.tpl
 var vtprotobufTestTemplate string
 
-//go:embed vtprotobuf_timing_test.go.tpl
+//go:embed templates/vtprotobuf_timing_test.go.tpl
 var vtprotobufBenchTemplate string
 
-//go:embed compare_test.go.tpl
+//go:embed templates/compare.test.go.tpl
 var compareTemplate string

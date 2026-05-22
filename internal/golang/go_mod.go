@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-//go:embed go.mod.tpl
+//go:embed templates/go.mod.tpl
 var goModTemplate string
 
 // sonicIndirectDeps lists the transitive (indirect) dependencies of github.com/bytedance/sonic v1.15.1.

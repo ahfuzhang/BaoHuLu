@@ -1345,8 +1345,8 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if wt == utils.WireTypeVarint {
 				r.{{.Name}}, in, err = utils.ReadSint32(in)
 			} else if wt == utils.WireType32bit {
-				// todo: 危险，这样的编码方式，可能导致别的工具生成的代码，无法被解码
 				// 此处只是兼容性的解码逻辑，没有风险。
+				// 注意： RewriteDatatype 功能，可能导致二进制格式无法兼容。别的工具生成的代码，无法被解码
 				var _fv uint32
 				_fv, in, err = utils.ReadFixed32(in)
 				r.{{.Name}} = int32(_fv)
@@ -1953,7 +1953,6 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) int {
 		dAtA[i] = 18 /*(2<<3)|2=18, field=2, wireType=LenDelim*/
 		{{- else if mapValIsMsg .MapVal}}
 		size := v.marshalToSizedBufferVT(dAtA[:i])
-		// if err != nil { return 0, err }
 		i -= size
 		i = utils.EncodeVarint(dAtA, i, uint64(size))
 		i--
@@ -2224,7 +2223,6 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) int {
 {{- else}}
 	for iNdEx := len(m.{{.Name}}) - 1; iNdEx >= 0; iNdEx-- {
 		size := m.{{.Name}}[iNdEx].marshalToSizedBufferVT(dAtA[:i])
-		// if err != nil { return 0, err }
 		i -= size
 		i = utils.EncodeVarint(dAtA, i, uint64(size))
 		{{writeTagBytes .Number 2}}
@@ -2234,7 +2232,6 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) int {
 {{- if .IsRecursive}}
 	if m.{{.Name}} != nil {
 		size := m.{{.Name}}.marshalToSizedBufferVT(dAtA[:i])
-		// if err != nil { return 0, err }
 		i -= size
 		i = utils.EncodeVarint(dAtA, i, uint64(size))
 		{{writeTagBytes .Number 2}}
@@ -2242,7 +2239,6 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) int {
 {{- else}}
 	{
 		size := m.{{.Name}}.marshalToSizedBufferVT(dAtA[:i])
-		// if err != nil { return 0, err }
 		if size > 0 {
 			i -= size
 			i = utils.EncodeVarint(dAtA, i, uint64(size))
@@ -2375,9 +2371,6 @@ func (m *{{$goName}}) ToProtobufVT(dst []byte) []byte {
 		dst = dst[:oldLen+size]
 	}
 	n := m.marshalToSizedBufferVT(dst[oldLen:])
-	// if err != nil {
-	//	  return nil, err
-	// }
 	return dst[:oldLen+n]
 }
 

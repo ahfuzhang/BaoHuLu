@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"bytes"
-	"encoding/binary"
 	"math"
 	"testing"
 	"unsafe"
@@ -79,80 +77,6 @@ func TestAppendVarint(t *testing.T) {
 				t.Fatalf("round-trip: unexpected remaining bytes: %v", rest)
 			}
 		})
-	}
-}
-
-// TestVarintFunctionsAlign verifies that AppendVarint, EncodeVarintV1, EncodeVarint,
-// and EncodeVarintV2 all produce identical encodings across each varint byte length (1–10).
-// encoding/binary.AppendUvarint is the canonical reference.
-func TestVarintFunctionsAlign(t *testing.T) {
-	cases := []struct {
-		n int
-		v uint64
-	}{
-		// 1 byte: v < 2^7
-		{1, 0}, {1, 63}, {1, 127},
-		// 2 bytes: 2^7 <= v < 2^14
-		{2, 128}, {2, 8000}, {2, 16383},
-		// 3 bytes: 2^14 <= v < 2^21; 16384 and 32767 fall in [0x4000, 0x7FFF] which
-		// also satisfies v < 0x8000 — the boundary that separates 2-byte and 3-byte values.
-		{3, 16384}, {3, 32767}, {3, (1 << 21) - 1},
-		// 4 bytes: 2^21 <= v < 2^28
-		{4, 1 << 21}, {4, 1 << 24}, {4, (1 << 28) - 1},
-		// 5 bytes: 2^28 <= v < 2^35
-		{5, 1 << 28}, {5, 1 << 31}, {5, (1 << 35) - 1},
-		// 6 bytes: 2^35 <= v < 2^42
-		{6, 1 << 35}, {6, 1 << 38}, {6, (1 << 42) - 1},
-		// 7 bytes: 2^42 <= v < 2^49
-		{7, 1 << 42}, {7, 1 << 45}, {7, (1 << 49) - 1},
-		// 8 bytes: 2^49 <= v < 2^56
-		{8, 1 << 49}, {8, 1 << 52}, {8, (1 << 56) - 1},
-		// 9 bytes: 2^56 <= v < 2^63
-		{9, 1 << 56}, {9, 1 << 59}, {9, (1 << 63) - 1},
-		// 10 bytes: v >= 2^63
-		{10, 1 << 63}, {10, 1<<63 | 1<<32}, {10, ^uint64(0)},
-	}
-
-	for _, tc := range cases {
-		n, v := tc.n, tc.v
-		ref := binary.AppendUvarint(nil, v)
-		if len(ref) != n {
-			t.Errorf("binary.AppendUvarint(v=%d): len=%d, expected n=%d (test case is wrong)", v, len(ref), n)
-			continue
-		}
-
-		if got := AppendVarint(nil, v); !bytes.Equal(got, ref) {
-			t.Errorf("AppendVarint(v=%d, n=%d): got %v, want %v", v, n, got, ref)
-		}
-
-		// EncodeVarintV1/EncodeVarint/EncodeVarintV2 write backwards into a pre-allocated
-		// buffer. Pass offset=n so the adjusted offset lands at 0 and the varint occupies
-		// buf[0:n]. EncodeVarintV2's append trick requires offset=0 after adjustment, so
-		// passing a larger offset (e.g. maxSize=10) would panic for that function.
-		buf := make([]byte, n)
-
-		start := EncodeVarintV1(buf, n, v)
-		if !bytes.Equal(buf[start:], ref) {
-			t.Errorf("EncodeVarintV1(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
-		}
-
-		clear(buf)
-		start = EncodeVarintV0(buf, n, v)
-		if !bytes.Equal(buf[start:], ref) {
-			t.Errorf("EncodeVarint(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
-		}
-
-		clear(buf)
-		start = EncodeVarint(buf, n, v)
-		if !bytes.Equal(buf[start:], ref) {
-			t.Errorf("EncodeVarintV2(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
-		}
-
-		clear(buf)
-		start = EncodeVarintV4(buf, n, v)
-		if !bytes.Equal(buf[start:], ref) {
-			t.Errorf("EncodeVarintV5(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
-		}
 	}
 }
 
@@ -594,6 +518,197 @@ func TestAppendVarint_ExistingBuffer(t *testing.T) {
 	}
 }
 
+// ─── EncodeVarint ─────────────────────────────────────────────────────────────
+
+func TestEncodeVarint(t *testing.T) {
+	cases := []struct {
+		name string
+		v    uint64
+		size int
+	}{
+		// 1 byte: fast path (v < 0x80)
+		{"zero", 0, 1},
+		{"max1", (1 << 7) - 1, 1},
+		// 2 bytes: fast path (0x80 <= v < 0x4000)
+		{"min2", 1 << 7, 2},
+		{"max2", (1 << 14) - 1, 2},
+		// 3-10 bytes: switch path
+		{"min3", 1 << 14, 3},
+		{"max3", (1 << 21) - 1, 3},
+		{"min4", 1 << 21, 4},
+		{"max4", (1 << 28) - 1, 4},
+		{"min5", 1 << 28, 5},
+		{"max5", (1 << 35) - 1, 5},
+		{"min6", 1 << 35, 6},
+		{"max6", (1 << 42) - 1, 6},
+		{"min7", 1 << 42, 7},
+		{"max7", (1 << 49) - 1, 7},
+		{"min8", 1 << 49, 8},
+		{"max8", (1 << 56) - 1, 8},
+		{"min9", 1 << 56, 9},
+		{"max9", (1 << 63) - 1, 9},
+		{"min10", uint64(1) << 63, 10},
+		{"maxUint64", ^uint64(0), 10},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := make([]byte, tc.size)
+			gotOffset := EncodeVarint(buf, tc.size, tc.v)
+			if gotOffset != 0 {
+				t.Fatalf("EncodeVarint(%d): expected offset 0, got %d", tc.v, gotOffset)
+			}
+			want := AppendVarint(nil, tc.v)
+			if len(buf) != len(want) {
+				t.Fatalf("EncodeVarint(%d): len=%d want %d", tc.v, len(buf), len(want))
+			}
+			for i := range want {
+				if buf[i] != want[i] {
+					t.Fatalf("EncodeVarint(%d): byte[%d]=%#x want %#x", tc.v, i, buf[i], want[i])
+				}
+			}
+			// Round-trip via ConsumeVarint
+			decoded, rest, code := ConsumeVarint(buf)
+			if code != 0 {
+				t.Fatalf("EncodeVarint(%d): ConsumeVarint code=%d", tc.v, code)
+			}
+			if decoded != tc.v {
+				t.Fatalf("EncodeVarint(%d): round-trip got %d", tc.v, decoded)
+			}
+			if len(rest) != 0 {
+				t.Fatalf("EncodeVarint(%d): unexpected rest bytes", tc.v)
+			}
+		})
+	}
+}
+
+// ─── consumeVarintError overflow path ─────────────────────────────────────────
+
+func TestConsumeTag_Overflow(t *testing.T) {
+	b := make([]byte, 11)
+	for i := range b {
+		b[i] = 0x80
+	}
+	_, _, _, err := ConsumeTag(b)
+	if err == nil {
+		t.Fatal("expected overflow error from ConsumeTag")
+	}
+}
+
+func TestConsumeBytes_Overflow(t *testing.T) {
+	b := make([]byte, 11)
+	for i := range b {
+		b[i] = 0x80
+	}
+	_, _, err := ConsumeBytes(b)
+	if err == nil {
+		t.Fatal("expected overflow error from ConsumeBytes")
+	}
+}
+
+// ─── Read* error paths ────────────────────────────────────────────────────────
+
+func TestReadInt32_Error(t *testing.T) {
+	_, _, err := ReadInt32(nil)
+	if err == nil {
+		t.Fatal("expected error on empty input")
+	}
+}
+
+func TestReadInt64_Error(t *testing.T) {
+	_, _, err := ReadInt64(nil)
+	if err == nil {
+		t.Fatal("expected error on empty input")
+	}
+}
+
+func TestReadUint32_Error(t *testing.T) {
+	_, _, err := ReadUint32(nil)
+	if err == nil {
+		t.Fatal("expected error on empty input")
+	}
+}
+
+func TestReadUint64_Error(t *testing.T) {
+	_, _, err := ReadUint64(nil)
+	if err == nil {
+		t.Fatal("expected error on empty input")
+	}
+}
+
+func TestReadBool_Error(t *testing.T) {
+	_, _, err := ReadBool(nil)
+	if err == nil {
+		t.Fatal("expected error on empty input")
+	}
+}
+
+func TestReadSint32_Error(t *testing.T) {
+	_, _, err := ReadSint32(nil)
+	if err == nil {
+		t.Fatal("expected error on empty input")
+	}
+}
+
+func TestReadSint64_Error(t *testing.T) {
+	_, _, err := ReadSint64(nil)
+	if err == nil {
+		t.Fatal("expected error on empty input")
+	}
+}
+
+// ─── EncodeJSONString ─────────────────────────────────────────────────────────
+
+func TestEncodeJSONString(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"empty", "", ""},
+		{"plain", "hello world", "hello world"},
+		{"double_quote", `say "hi"`, `say \"hi\"`},
+		{"newline", "line\nnewline", `line\nnewline`},
+		{"tab", "tab\there", `tab\there`},
+		{"carriage_return", "cr\rreturn", `cr\rreturn`},
+		{"backslash", `back\slash`, `back\\slash`},
+		{"form_feed", "\fpage", `\fpage`},
+		{"backspace", "\bhello", `\bhello`},
+		{"ctrl_soh", "\x01", "\\u0001"},
+		{"ctrl_us", "\x1f", "\\u001f"},
+		{"ctrl_null", "\x00", "\\u0000"},
+		{"ctrl_vtab", "\x0b", "\\u000b"},
+		{"mixed", "a\"b\nc\\d", `a\"b\nc\\d`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(EncodeJSONString(tc.input, nil))
+			if got != tc.want {
+				t.Fatalf("EncodeJSONString(%q): got %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+
+	// Test with pre-allocated dst (skips the capacity-expansion branch).
+	t.Run("preallocated_dst", func(t *testing.T) {
+		dst := make([]byte, 0, 512)
+		got := string(EncodeJSONString("hello", dst))
+		if got != "hello" {
+			t.Fatalf("EncodeJSONString preallocated: got %q, want %q", got, "hello")
+		}
+	})
+
+	// Test that existing content in dst is preserved.
+	t.Run("appends_to_existing", func(t *testing.T) {
+		dst := make([]byte, 0, 512)
+		dst = append(dst, []byte("prefix:")...)
+		got := string(EncodeJSONString("hi", dst))
+		if got != "prefix:hi" {
+			t.Fatalf("EncodeJSONString append: got %q, want %q", got, "prefix:hi")
+		}
+	})
+}
+
 var benchmarkInput = "benchmark payload with escape chars:\n newline \t tab \" double-quote \\ backslash; " +
 	"padding to ensure length exceeds one hundred bytes: 0123456789abcdef0123456789abcdef"
 
@@ -606,77 +721,6 @@ func BenchmarkEncodeJSONString(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dst = EncodeJSONString(benchmarkInput, dst[:0])
-	}
-	_ = dst
-}
-
-// 219.86 MB/s
-func BenchmarkEncodeJSONStringSlow(b *testing.B) {
-	dst := make([]byte, 0, 256)
-	b.SetBytes(int64(len(benchmarkInput)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dst = EncodeJSONStringSlow(benchmarkInput, dst[:0])
-	}
-	_ = dst
-}
-
-// 459.45 MB/s
-// 535.41 MB/s
-func BenchmarkEncodeJSONStringV2(b *testing.B) {
-	dst := make([]byte, 0, 256)
-	b.SetBytes(int64(len(benchmarkInput)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dst = EncodeJSONStringV2(benchmarkInput, dst[:0])
-	}
-	_ = dst
-}
-
-// 955.13 MB/s  983.88 MB/s
-func BenchmarkEncodeJSONStringV3(b *testing.B) {
-	dst := make([]byte, 0, 256)
-	dst = EncodeJSONStringV3(benchmarkInput, dst[:0])
-	dst2 := EncodeJSONString(benchmarkInput, make([]byte, 0, 256))
-	if string(dst) != string(dst2) {
-		b.Fatal("fail")
-	}
-	b.SetBytes(int64(len(benchmarkInput)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dst = EncodeJSONStringV3(benchmarkInput, dst[:0])
-	}
-	_ = dst
-}
-
-// 972.06 MB/s
-func BenchmarkEncodeJSONStringV4(b *testing.B) {
-	dst := make([]byte, 0, 256)
-	dst = EncodeJSONStringV4(benchmarkInput, dst[:0])
-	dst2 := EncodeJSONString(benchmarkInput, make([]byte, 0, 256))
-	if string(dst) != string(dst2) {
-		b.Fatal("fail")
-	}
-	b.SetBytes(int64(len(benchmarkInput)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dst = EncodeJSONStringV4(benchmarkInput, dst[:0])
-	}
-	_ = dst
-}
-
-// 1218.97 MB/s
-func BenchmarkEncodeJSONStringV5(b *testing.B) {
-	dst := make([]byte, 0, 256)
-	dst = EncodeJSONStringV5(benchmarkInput, dst[:0])
-	dst2 := EncodeJSONString(benchmarkInput, make([]byte, 0, 256))
-	if string(dst) != string(dst2) {
-		b.Fatal("fail")
-	}
-	b.SetBytes(int64(len(benchmarkInput)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dst = EncodeJSONStringV5(benchmarkInput, dst[:0])
 	}
 	_ = dst
 }

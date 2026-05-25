@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"strconv"
-	"strings"
 	"unsafe"
 )
 
@@ -49,6 +47,7 @@ const (
 // AppendVarint encodes v as a protobuf varint and appends it to b.
 // VarintSize computes the byte count via a single LZCNT/BSR instruction (no comparisons).
 // The switch dispatches on that integer value, which the compiler lowers to a jump table.
+// todo: 这个函数的性能仍然有优化空间
 func AppendVarint(b []byte, v uint64) []byte {
 	// fast path
 	if v < 0x80 {
@@ -141,208 +140,6 @@ func AppendVarint(b []byte, v uint64) []byte {
 	}
 }
 
-func EncodeVarintV1(dAtA []byte, offset int, v uint64) int {
-	offset -= ((bits.Len64(v|1) + 6) / 7)
-	base := offset
-	for v >= 1<<7 {
-		dAtA[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	dAtA[offset] = uint8(v)
-	return base
-}
-
-// EncodeVarint encodes v into dAtA using varint encoding, writing backwards from offset.
-// offset is the position after the last byte; returns the new start offset.
-// SizeOfVarint is inlined via bits.Len64; array indices written high-to-low for BCE.
-// todo: 对这个函数做 benchmark
-func EncodeVarintV0(dAtA []byte, offset int, v uint64) int {
-	if v < 0x80 {
-		offset--
-		dAtA[offset] = uint8(v)
-		return offset
-	}
-	n := (bits.Len64(v|1) + 6) / 7
-	offset -= n
-	switch n {
-	case 1:
-		dAtA[offset] = uint8(v)
-	case 2:
-		dAtA[offset+1] = uint8(v >> 7)
-		dAtA[offset] = uint8(v) | 0x80
-	case 3:
-		dAtA[offset+2] = uint8(v >> 14)
-		dAtA[offset+1] = uint8(v>>7) | 0x80
-		dAtA[offset] = uint8(v) | 0x80
-	case 4:
-		dAtA[offset+3] = uint8(v >> 21)
-		dAtA[offset+2] = uint8(v>>14) | 0x80
-		dAtA[offset+1] = uint8(v>>7) | 0x80
-		dAtA[offset] = uint8(v) | 0x80
-	case 5:
-		dAtA[offset+4] = uint8(v >> 28)
-		dAtA[offset+3] = uint8(v>>21) | 0x80
-		dAtA[offset+2] = uint8(v>>14) | 0x80
-		dAtA[offset+1] = uint8(v>>7) | 0x80
-		dAtA[offset] = uint8(v) | 0x80
-	case 6:
-		dAtA[offset+5] = uint8(v >> 35)
-		dAtA[offset+4] = uint8(v>>28) | 0x80
-		dAtA[offset+3] = uint8(v>>21) | 0x80
-		dAtA[offset+2] = uint8(v>>14) | 0x80
-		dAtA[offset+1] = uint8(v>>7) | 0x80
-		dAtA[offset] = uint8(v) | 0x80
-	case 7:
-		dAtA[offset+6] = uint8(v >> 42)
-		dAtA[offset+5] = uint8(v>>35) | 0x80
-		dAtA[offset+4] = uint8(v>>28) | 0x80
-		dAtA[offset+3] = uint8(v>>21) | 0x80
-		dAtA[offset+2] = uint8(v>>14) | 0x80
-		dAtA[offset+1] = uint8(v>>7) | 0x80
-		dAtA[offset] = uint8(v) | 0x80
-	case 8:
-		dAtA[offset+7] = uint8(v >> 49)
-		dAtA[offset+6] = uint8(v>>42) | 0x80
-		dAtA[offset+5] = uint8(v>>35) | 0x80
-		dAtA[offset+4] = uint8(v>>28) | 0x80
-		dAtA[offset+3] = uint8(v>>21) | 0x80
-		dAtA[offset+2] = uint8(v>>14) | 0x80
-		dAtA[offset+1] = uint8(v>>7) | 0x80
-		dAtA[offset] = uint8(v) | 0x80
-	case 9:
-		dAtA[offset+8] = uint8(v >> 56)
-		dAtA[offset+7] = uint8(v>>49) | 0x80
-		dAtA[offset+6] = uint8(v>>42) | 0x80
-		dAtA[offset+5] = uint8(v>>35) | 0x80
-		dAtA[offset+4] = uint8(v>>28) | 0x80
-		dAtA[offset+3] = uint8(v>>21) | 0x80
-		dAtA[offset+2] = uint8(v>>14) | 0x80
-		dAtA[offset+1] = uint8(v>>7) | 0x80
-		dAtA[offset] = uint8(v) | 0x80
-	default: // case 10: bit 63 set
-		dAtA[offset+9] = 0x01
-		dAtA[offset+8] = uint8(v>>56) | 0x80
-		dAtA[offset+7] = uint8(v>>49) | 0x80
-		dAtA[offset+6] = uint8(v>>42) | 0x80
-		dAtA[offset+5] = uint8(v>>35) | 0x80
-		dAtA[offset+4] = uint8(v>>28) | 0x80
-		dAtA[offset+3] = uint8(v>>21) | 0x80
-		dAtA[offset+2] = uint8(v>>14) | 0x80
-		dAtA[offset+1] = uint8(v>>7) | 0x80
-		dAtA[offset] = uint8(v) | 0x80
-	}
-	return offset
-}
-
-// 在 proto encode 中，性能提升 -16.8% => -13.3%, 本函数提升 46%
-func EncodeVarintV4(dAtA []byte, offset int, v uint64) int {
-	// hot path
-	if v < 0x80 {
-		var p *byte = (*byte)(unsafe.Pointer(&dAtA[offset-1]))
-		*p = uint8(v)
-		return offset - 1
-	}
-	if v < 0x4000 {
-		offset -= 2
-		var arr *[2]byte = (*[2]byte)(unsafe.Pointer(&dAtA[offset]))
-		arr[0] = uint8(v) | 0x80
-		arr[1] = uint8(v >> 7)
-		return offset
-	}
-	// if v < 0x80 {
-	// 	offset--
-	// 	dAtA[offset] = uint8(v)
-	// 	return offset
-	// }
-	// if v < 0x4000 {
-	// 	offset -= 2
-	// 	dAtA[offset+1] = uint8(v >> 7)
-	// 	dAtA[offset] = uint8(v) | 0x80
-	// 	return offset
-	// }
-	n := (bits.Len64(v|1) + 6) / 7
-	offset -= n
-	switch n {
-	// case 1:
-	// 	dAtA[offset] = uint8(v)
-	// case 2:
-	// 	dAtA[offset+1] = uint8(v >> 7)
-	// 	dAtA[offset] = uint8(v) | 0x80
-	case 3:
-		_ = append(dAtA[offset:offset:offset+3],
-			byte(v)|0x80,
-			byte(v>>7)|0x80,
-			byte(v>>14))
-	case 4:
-		_ = append(dAtA[offset:offset:offset+4],
-			byte(v)|0x80,
-			byte(v>>7)|0x80,
-			byte(v>>14)|0x80,
-			byte(v>>21))
-	case 5:
-		_ = append(dAtA[offset:offset:offset+5],
-			byte(v)|0x80,
-			byte(v>>7)|0x80,
-			byte(v>>14)|0x80,
-			byte(v>>21)|0x80,
-			byte(v>>28))
-	case 6:
-		_ = append(dAtA[offset:offset:offset+6],
-			byte(v)|0x80,
-			byte(v>>7)|0x80,
-			byte(v>>14)|0x80,
-			byte(v>>21)|0x80,
-			byte(v>>28)|0x80,
-			byte(v>>35))
-	case 7:
-		_ = append(dAtA[offset:offset:offset+7],
-			byte(v)|0x80,
-			byte(v>>7)|0x80,
-			byte(v>>14)|0x80,
-			byte(v>>21)|0x80,
-			byte(v>>28)|0x80,
-			byte(v>>35)|0x80,
-			byte(v>>42))
-	case 8:
-		_ = append(dAtA[offset:offset:offset+8],
-			byte(v)|0x80,
-			byte(v>>7)|0x80,
-			byte(v>>14)|0x80,
-			byte(v>>21)|0x80,
-			byte(v>>28)|0x80,
-			byte(v>>35)|0x80,
-			byte(v>>42)|0x80,
-			byte(v>>49))
-	case 9:
-		_ = append(dAtA[offset:offset:offset+9],
-			byte(v)|0x80,
-			byte(v>>7)|0x80,
-			byte(v>>14)|0x80,
-			byte(v>>21)|0x80,
-			byte(v>>28)|0x80,
-			byte(v>>35)|0x80,
-			byte(v>>42)|0x80,
-			byte(v>>49)|0x80,
-			byte(v>>56))
-	case 10: // case 10: bit 63 set
-		_ = append(dAtA[offset:offset:offset+10],
-			byte(v)|0x80,
-			byte(v>>7)|0x80,
-			byte(v>>14)|0x80,
-			byte(v>>21)|0x80,
-			byte(v>>28)|0x80,
-			byte(v>>35)|0x80,
-			byte(v>>42)|0x80,
-			byte(v>>49)|0x80,
-			byte(v>>56)|0x80,
-			byte(v>>63))
-	default:
-		return -1 // impossible
-	}
-	return offset
-}
-
 func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 	// hot path
 	if v < 0x80 {
@@ -358,42 +155,22 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		arr[1] = uint8(v >> 7)
 		return offset
 	}
-	// if v < 0x80 {
-	// 	offset--
-	// 	dAtA[offset] = uint8(v)
-	// 	return offset
-	// }
-	// if v < 0x4000 {
-	// 	offset -= 2
-	// 	dAtA[offset+1] = uint8(v >> 7)
-	// 	dAtA[offset] = uint8(v) | 0x80
-	// 	return offset
-	// }
 	n := (bits.Len64(v|1) + 6) / 7
 	offset -= n
 	switch n {
 	case 0:
 		return -10 // impossible branch. for cheat compiler to build jump table
 	case 1:
-		return -11
+		return -11 // impossible branch. for cheat compiler to build jump table
 	case 2:
-		return -12
+		return -12 // impossible branch. for cheat compiler to build jump table
 	case 3:
-		// _ = append(dAtA[offset:offset:offset+3],
-		// 	byte(v)|0x80,
-		// 	byte(v>>7)|0x80,
-		// 	byte(v>>14))
 		var arr *[3]byte = (*[3]byte)(unsafe.Pointer(&dAtA[offset]))
 		arr[0] = uint8(v) | 0x80
 		arr[1] = uint8(v>>7) | 0x80
 		arr[2] = uint8(v >> 14)
 		return offset
 	case 4:
-		// _ = append(dAtA[offset:offset:offset+4],
-		// 	byte(v)|0x80,
-		// 	byte(v>>7)|0x80,
-		// 	byte(v>>14)|0x80,
-		// 	byte(v>>21))
 		var arr *[4]byte = (*[4]byte)(unsafe.Pointer(&dAtA[offset]))
 		arr[0] = uint8(v) | 0x80
 		arr[1] = uint8(v>>7) | 0x80
@@ -401,12 +178,6 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		arr[3] = uint8(v >> 21)
 		return offset
 	case 5:
-		// _ = append(dAtA[offset:offset:offset+5],
-		// 	byte(v)|0x80,
-		// 	byte(v>>7)|0x80,
-		// 	byte(v>>14)|0x80,
-		// 	byte(v>>21)|0x80,
-		// 	byte(v>>28))
 		var arr *[5]byte = (*[5]byte)(unsafe.Pointer(&dAtA[offset]))
 		arr[0] = uint8(v) | 0x80
 		arr[1] = uint8(v>>7) | 0x80
@@ -415,13 +186,6 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		arr[4] = uint8(v >> 28)
 		return offset
 	case 6:
-		// _ = append(dAtA[offset:offset:offset+6],
-		// 	byte(v)|0x80,
-		// 	byte(v>>7)|0x80,
-		// 	byte(v>>14)|0x80,
-		// 	byte(v>>21)|0x80,
-		// 	byte(v>>28)|0x80,
-		// 	byte(v>>35))
 		var arr *[6]byte = (*[6]byte)(unsafe.Pointer(&dAtA[offset]))
 		arr[0] = uint8(v) | 0x80
 		arr[1] = uint8(v>>7) | 0x80
@@ -431,14 +195,6 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		arr[5] = uint8(v >> 35)
 		return offset
 	case 7:
-		// _ = append(dAtA[offset:offset:offset+7],
-		// 	byte(v)|0x80,
-		// 	byte(v>>7)|0x80,
-		// 	byte(v>>14)|0x80,
-		// 	byte(v>>21)|0x80,
-		// 	byte(v>>28)|0x80,
-		// 	byte(v>>35)|0x80,
-		// 	byte(v>>42))
 		var arr *[7]byte = (*[7]byte)(unsafe.Pointer(&dAtA[offset]))
 		arr[0] = uint8(v) | 0x80
 		arr[1] = uint8(v>>7) | 0x80
@@ -449,15 +205,6 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		arr[6] = uint8(v >> 42)
 		return offset
 	case 8:
-		// _ = append(dAtA[offset:offset:offset+8],
-		// 	byte(v)|0x80,
-		// 	byte(v>>7)|0x80,
-		// 	byte(v>>14)|0x80,
-		// 	byte(v>>21)|0x80,
-		// 	byte(v>>28)|0x80,
-		// 	byte(v>>35)|0x80,
-		// 	byte(v>>42)|0x80,
-		// 	byte(v>>49))
 		var arr *[8]byte = (*[8]byte)(unsafe.Pointer(&dAtA[offset]))
 		arr[0] = uint8(v) | 0x80
 		arr[1] = uint8(v>>7) | 0x80
@@ -469,16 +216,6 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		arr[7] = uint8(v >> 49)
 		return offset
 	case 9:
-		// _ = append(dAtA[offset:offset:offset+9],
-		// 	byte(v)|0x80,
-		// 	byte(v>>7)|0x80,
-		// 	byte(v>>14)|0x80,
-		// 	byte(v>>21)|0x80,
-		// 	byte(v>>28)|0x80,
-		// 	byte(v>>35)|0x80,
-		// 	byte(v>>42)|0x80,
-		// 	byte(v>>49)|0x80,
-		// 	byte(v>>56))
 		var arr *[9]byte = (*[9]byte)(unsafe.Pointer(&dAtA[offset]))
 		arr[0] = uint8(v) | 0x80
 		arr[1] = uint8(v>>7) | 0x80
@@ -491,17 +228,6 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		arr[8] = uint8(v >> 56)
 		return offset
 	case 10: // case 10: bit 63 set
-		// _ = append(dAtA[offset:offset:offset+10],
-		// 	byte(v)|0x80,
-		// 	byte(v>>7)|0x80,
-		// 	byte(v>>14)|0x80,
-		// 	byte(v>>21)|0x80,
-		// 	byte(v>>28)|0x80,
-		// 	byte(v>>35)|0x80,
-		// 	byte(v>>42)|0x80,
-		// 	byte(v>>49)|0x80,
-		// 	byte(v>>56)|0x80,
-		// 	byte(v>>63))
 		var arr *[10]byte = (*[10]byte)(unsafe.Pointer(&dAtA[offset]))
 		arr[0] = uint8(v) | 0x80
 		arr[1] = uint8(v>>7) | 0x80
@@ -515,13 +241,8 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		arr[9] = uint8(v >> 63)
 		return offset
 	default:
-		return -1 // impossible
+		return -13 // impossible branch. for cheat compiler to build jump table
 	}
-}
-
-// SizeOfVarint returns the size of the varint-encoded value.
-func SizeOfVarint(x uint64) (n int) {
-	return (bits.Len64(x|1) + 6) / 7
 }
 
 // AppendTag encodes a protobuf field tag (field number + wire type) and appends it to b.
@@ -539,21 +260,6 @@ func VarintSize(v uint64) int {
 // TagSize returns the number of bytes needed to encode a field tag.
 func TagSize(fieldNum int, wt WireType) int {
 	return VarintSize(uint64(fieldNum)<<3 | uint64(wt))
-}
-
-// EncodeVarintBackward encodes v as a varint ending at dAtA[offset] (exclusive)
-// and returns the starting offset. Equivalent to protohelpers.EncodeVarint:
-// the varint bytes are placed at dAtA[base:offset] where base is returned.
-func EncodeVarintBackward(dAtA []byte, offset int, v uint64) int {
-	offset -= VarintSize(v)
-	base := offset
-	for v >= 0x80 {
-		dAtA[offset] = byte(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	dAtA[offset] = byte(v)
-	return base
 }
 
 // AppendSint32 zigzag-encodes v and appends the varint to b.
@@ -762,29 +468,6 @@ func UnsafeBytesFromString(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-// AppendJSONKey appends `"key":` to dst using a single capacity check.
-// It pre-grows dst by len(key)+3 bytes, then writes the bytes from tail to head
-// to reduce bounds checks.
-func AppendJSONKey(dst []byte, key string) []byte {
-	nameLen := len(key)
-	n := nameLen + 3
-	base := len(dst)
-	if cap(dst)-base < n {
-		tmp := make([]byte, base, base+n+256)
-		copy(tmp, dst)
-		dst = tmp
-	}
-	dst = dst[:base+n]
-	pos := base + n
-	dst[pos-1] = ':'
-	pos--
-	dst[pos-1] = '"'
-	pos -= nameLen
-	copy(dst[pos-1:], key)
-	dst[pos-2] = '"'
-	return dst
-}
-
 // EncodeJSONString appends a JSON-safe escaped version of s into dst.
 // No heap allocations are performed.
 func EncodeJSONString(s string, dst []byte) []byte {
@@ -849,134 +532,7 @@ func EncodeJSONString(s string, dst []byte) []byte {
 	return dst[:offset+ii]
 }
 
-func EncodeJSONStringV5(s string, dst []byte) []byte {
-	b := unsafe.Slice(unsafe.StringData(s), len(s))
-	needed := len(s) * 6
-	if cap(dst)-len(dst) < needed {
-		tmp := make([]byte, len(dst), len(dst)+needed+256)
-		copy(tmp, dst)
-		dst = tmp
-	}
-	offset := len(dst)
-	d := dst[offset : offset+needed]
-	ii := 0
-	for i := 0; i < len(b); i++ {
-		c := b[i]
-		if (escapeTable[c/8] & (1 << (c % 8))) == 0 {
-			// fast path
-			d[ii] = c
-			ii++
-			continue
-		}
-		switch c {
-		case '"':
-			d[ii+1] = '"'
-			d[ii] = '\\'
-			ii += 2
-		case '\n':
-			d[ii+1] = 'n'
-			d[ii] = '\\'
-			ii += 2
-		case '\t':
-			d[ii+1] = 't'
-			d[ii] = '\\'
-			ii += 2
-		case '\r':
-			d[ii+1] = 'r'
-			d[ii] = '\\'
-			ii += 2
-		case '\\':
-			d[ii+1] = '\\'
-			d[ii] = '\\'
-			ii += 2
-		case '\f':
-			d[ii+1] = 'f'
-			d[ii] = '\\'
-			ii += 2
-		case '\b':
-			d[ii+1] = 'b'
-			d[ii] = '\\'
-			ii += 2
-		default:
-			// control characters must be escaped as \uXXXX per JSON spec
-			d[ii+5] = hex[c&0xf]
-			d[ii+4] = hex[(c>>4)&0xf]
-			d[ii+3] = '0'
-			d[ii+2] = '0'
-			d[ii+1] = 'u'
-			d[ii] = '\\'
-			ii += 6
-		}
-	}
-	return dst[:offset+ii]
-}
-
-func EncodeJSONStringV0(s string, dst []byte) []byte {
-	ptr := unsafe.StringData(s)
-	for i := 0; i < len(s); i++ {
-		c := *(*byte)(unsafe.Add(unsafe.Pointer(ptr), i))
-		switch c {
-		case '"':
-			dst = append(dst, '\\', '"')
-		case '\n':
-			dst = append(dst, '\\', 'n')
-		case '\t':
-			dst = append(dst, '\\', 't')
-		case '\r':
-			dst = append(dst, '\\', 'r')
-		case '\\':
-			dst = append(dst, '\\', '\\')
-		default:
-			if c < 0x20 {
-				// control characters must be escaped as \uXXXX per JSON spec
-				dst = append(dst,
-					'\\', 'u', '0', '0',
-					"0123456789abcdef"[c>>4],
-					"0123456789abcdef"[c&0xf],
-				)
-			} else {
-				dst = append(dst, c)
-			}
-		}
-	}
-	return dst
-}
-
 const hex = "0123456789abcdef"
-
-func EncodeJSONStringV2(s string, dst []byte) []byte {
-	b := unsafe.Slice(unsafe.StringData(s), len(s))
-	for i := 0; i < len(b); i++ {
-		switch b[i] {
-		case '"':
-			dst = append(dst, '\\', '"')
-		case '\n':
-			dst = append(dst, '\\', 'n')
-		case '\t':
-			dst = append(dst, '\\', 't')
-		case '\r':
-			dst = append(dst, '\\', 'r')
-		case '\\':
-			dst = append(dst, '\\', '\\')
-		case '\f':
-			dst = append(dst, '\\', 'f')
-		case '\b':
-			dst = append(dst, '\\', 'b')
-		default:
-			if b[i] >= 0x20 {
-				dst = append(dst, b[i])
-				continue
-			}
-			// control characters must be escaped as \uXXXX per JSON spec
-			dst = append(dst,
-				'\\', 'u', '0', '0',
-				hex[b[i]>>4],
-				hex[b[i]&0xf],
-			)
-		}
-	}
-	return dst
-}
 
 var escapeTable [256 / 8]byte = func() [256 / 8]byte {
 	var table [256 / 8]byte
@@ -987,115 +543,6 @@ var escapeTable [256 / 8]byte = func() [256 / 8]byte {
 	}
 	return table
 }()
-
-func EncodeJSONStringV3(s string, dst []byte) []byte {
-	b := unsafe.Slice(unsafe.StringData(s), len(s))
-	for i := 0; i < len(b); i++ {
-		c := b[i]
-		if (escapeTable[c/8] & (1 << (c % 8))) == 0 {
-			// fast path
-			dst = append(dst, c)
-			continue
-		}
-		switch c {
-		case '"':
-			dst = append(dst, '\\', '"')
-		case '\n':
-			dst = append(dst, '\\', 'n')
-		case '\t':
-			dst = append(dst, '\\', 't')
-		case '\r':
-			dst = append(dst, '\\', 'r')
-		case '\\':
-			dst = append(dst, '\\', '\\')
-		case '\f':
-			dst = append(dst, '\\', 'f')
-		case '\b':
-			dst = append(dst, '\\', 'b')
-		default:
-			// control characters must be escaped as \uXXXX per JSON spec
-			dst = append(dst,
-				'\\', 'u', '0', '0',
-				hex[c>>4],
-				hex[c&0xf],
-			)
-		}
-	}
-	return dst
-}
-
-var escapeTable2 [256]bool = func() [256]bool {
-	var table [256]bool
-	for i := 0; i < 256; i++ {
-		if i < 0x20 || i == '"' || i == '\\' {
-			table[i] = true
-		}
-	}
-	return table
-}()
-
-func EncodeJSONStringV4(s string, dst []byte) []byte {
-	b := unsafe.Slice(unsafe.StringData(s), len(s))
-	for i := 0; i < len(b); i++ {
-		c := b[i]
-		if !escapeTable2[c] {
-			// fast path
-			dst = append(dst, c)
-			continue
-		}
-		switch c {
-		case '"':
-			dst = append(dst, '\\', '"')
-		case '\n':
-			dst = append(dst, '\\', 'n')
-		case '\t':
-			dst = append(dst, '\\', 't')
-		case '\r':
-			dst = append(dst, '\\', 'r')
-		case '\\':
-			dst = append(dst, '\\', '\\')
-		case '\f':
-			dst = append(dst, '\\', 'f')
-		case '\b':
-			dst = append(dst, '\\', 'b')
-		default:
-			// control characters must be escaped as \uXXXX per JSON spec
-			dst = append(dst,
-				'\\', 'u', '0', '0',
-				hex[c>>4],
-				hex[c&0xf],
-			)
-		}
-	}
-	return dst
-}
-
-// copy from fastjson
-func EncodeJSONStringSlow(s string, dst []byte) []byte {
-	if !hasSpecialChars(s) {
-		// Fast path - nothing to escape.
-		dst = append(dst, '"')
-		dst = append(dst, s...)
-		dst = append(dst, '"')
-		return dst
-	}
-
-	// Slow path.
-	return strconv.AppendQuote(dst, s)
-}
-
-// todo: 值得使用 avx2 加速
-func hasSpecialChars(s string) bool {
-	if strings.IndexByte(s, '"') >= 0 || strings.IndexByte(s, '\\') >= 0 {
-		return true
-	}
-	for i := range len(s) {
-		if s[i] < 0x20 {
-			return true
-		}
-	}
-	return false
-}
 
 func ConsumeVarint(b []byte) (uint64, []byte, int64) {
 	var x uint64

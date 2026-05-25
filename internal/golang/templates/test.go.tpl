@@ -58,12 +58,22 @@ func makeSample{{$goName}}() {{$goName}} {
 }
 {{- end}}
 
+func testToProtobuf{{$goName}}(t *testing.T, m *{{$goName}}, dst []byte) []byte {
+	t.Helper()
+	vtOut := m.ToProtobufVT(nil)
+	abOut := m.ToProtobufByAppend(nil)
+	if !bytes.Equal(vtOut, abOut) {
+		t.Fatalf("ToProtobufVT and ToProtobufByAppend produced different output:\n  VT:       %v\n  ByAppend: %v", vtOut, abOut)
+	}
+	return m.ToProtobuf(dst)
+}
+
 func Test{{$goName}}Empty(t *testing.T) {
 	m := &{{$goName}}{}
 	if got := m.ProtobufSize(); got != 0 {
 		t.Fatalf("ProtobufSize() = %d, want 0 for empty {{$goName}}", got)
 	}
-	out := m.ToProtobuf(nil)
+	out := testToProtobuf{{$goName}}(t, m, nil)
 	if len(out) != 0 {
 		t.Fatalf("ToProtobuf() = %d bytes, want 0 for empty {{$goName}}", len(out))
 	}
@@ -73,7 +83,7 @@ func Test{{$goName}}ProtobufRoundtrip(t *testing.T) {
 	w := makeSample{{$goName}}()
 	sz := w.ProtobufSize()
 	buf := make([]byte, 0, sz)
-	buf = w.ToProtobuf(buf)
+	buf = testToProtobuf{{$goName}}(t, &w, buf)
 	if len(buf) != sz {
 		t.Fatalf("ProtobufSize=%d but ToProtobuf produced %d bytes", sz, len(buf))
 	}
@@ -85,7 +95,7 @@ func Test{{$goName}}ProtobufRoundtrip(t *testing.T) {
 
 	// Clone → re-serialize → compare bytes (proves lossless roundtrip).
 	w2 := r.Clone(nil)
-	buf2 := w2.ToProtobuf(make([]byte, 0, w2.ProtobufSize()))
+	buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
 	if !bytes.Equal(buf, buf2) {
 		t.Fatalf("protobuf roundtrip mismatch:\n  want %v\n  got  %v", buf, buf2)
 	}
@@ -97,7 +107,7 @@ func Test{{$goName}}ToProtobufAppendsToExistingBuffer(t *testing.T) {
 	w := makeSample{{$goName}}()
 	prefix := []byte("existing-prefix:")
 	sz := w.ProtobufSize()
-	fresh := w.ToProtobuf(nil)
+	fresh := testToProtobuf{{$goName}}(t, &w, nil)
 	cases := []struct {
 		name string
 		buf  []byte
@@ -110,7 +120,7 @@ func Test{{$goName}}ToProtobufAppendsToExistingBuffer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			copy(tc.buf, prefix)
 
-			out := w.ToProtobuf(tc.buf)
+			out := testToProtobuf{{$goName}}(t, &w, tc.buf)
 			if len(out) != len(prefix)+sz {
 				t.Fatalf("ToProtobuf produced %d bytes, want %d", len(out), len(prefix)+sz)
 			}
@@ -258,13 +268,13 @@ func Test{{$goName}}NumericBoundary(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			sz := tc.w.ProtobufSize()
-			buf := tc.w.ToProtobuf(make([]byte, 0, sz))
+			buf := testToProtobuf{{$goName}}(t, &tc.w, make([]byte, 0, sz))
 			var r {{$roName}}
 			if err := r.FromProtobuf(buf); err != nil {
 				t.Fatalf("FromProtobuf error: %v", err)
 			}
 			w2 := r.Clone(nil)
-			buf2 := w2.ToProtobuf(make([]byte, 0, w2.ProtobufSize()))
+			buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
 			if !bytes.Equal(buf, buf2) {
 				t.Fatalf("protobuf roundtrip mismatch for %q:\n  want %v\n  got  %v", tc.name, buf, buf2)
 			}
@@ -286,13 +296,13 @@ func Test{{$goName}}FloatIntegerEquivalent(t *testing.T) {
 	}
 
 	// ── Protobuf roundtrip ────────────────────────────────────────────────────
-	buf := w.ToProtobuf(make([]byte, 0, w.ProtobufSize()))
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
 	var r {{$roName}}
 	if err := r.FromProtobuf(buf); err != nil {
 		t.Fatalf("FromProtobuf error: %v", err)
 	}
 	w2 := r.Clone(nil)
-	buf2 := w2.ToProtobuf(make([]byte, 0, w2.ProtobufSize()))
+	buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
 	if !bytes.Equal(buf, buf2) {
 		t.Fatalf("protobuf roundtrip mismatch:\n  want %v\n  got  %v", buf, buf2)
 	}
@@ -325,7 +335,7 @@ func Test{{$goName}}StringEscapes(t *testing.T) {
 	}
 
 	// ── Protobuf roundtrip ────────────────────────────────────────────────────
-	buf := w.ToProtobuf(make([]byte, 0, w.ProtobufSize()))
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
 	var r {{$roName}}
 	if err := r.FromProtobuf(buf); err != nil {
 		t.Fatalf("FromProtobuf error: %v", err)
@@ -357,7 +367,7 @@ func Test{{$goName}}Reset(t *testing.T) {
 
 func Test{{$roName}}Reset(t *testing.T) {
 	w := makeSample{{$goName}}()
-	buf := w.ToProtobuf(make([]byte, 0, w.ProtobufSize()))
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
 	var r {{$roName}}
 	if err := r.FromProtobuf(buf); err != nil {
 		t.Fatalf("FromProtobuf error: %v", err)
@@ -520,7 +530,7 @@ func Test{{$goName}}FromJSONMapKeyTypeError(t *testing.T) {
 // internal copy is independent of the caller's buffer).
 func Test{{$goName}}FromProtobufWithCopyRoundtrip(t *testing.T) {
 	w := makeSample{{$goName}}()
-	buf := w.ToProtobuf(make([]byte, 0, w.ProtobufSize()))
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
 
 	// Keep a pristine reference before we corrupt the source buffer.
 	ref := make([]byte, len(buf))
@@ -537,7 +547,7 @@ func Test{{$goName}}FromProtobufWithCopyRoundtrip(t *testing.T) {
 	}
 
 	w2 := r.Clone(nil)
-	got := w2.ToProtobuf(make([]byte, 0, w2.ProtobufSize()))
+	got := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
 	if !bytes.Equal(ref, got) {
 		t.Fatalf("FromProtobufWithCopy: data changed after source mutation\n  want %v\n  got  %v", ref, got)
 	}
@@ -549,7 +559,7 @@ func Test{{$goName}}FromProtobufWithCopyRoundtrip(t *testing.T) {
 // result must be identical to the first call.
 func Test{{$goName}}FromProtobufWithCopyAfterReset(t *testing.T) {
 	w := makeSample{{$goName}}()
-	buf := w.ToProtobuf(make([]byte, 0, w.ProtobufSize()))
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
 	if len(buf) != w.ProtobufSize(){
 		t.Fatal("len(buf) != w.ProtobufSize()")
 	}
@@ -566,7 +576,7 @@ func Test{{$goName}}FromProtobufWithCopyAfterReset(t *testing.T) {
 		t.Fatalf("second FromProtobufWithCopy (after reset) error: %v", err)
 	}
 	w2 := r.Clone(nil)
-	got := w2.ToProtobuf(make([]byte, 0, w2.ProtobufSize()))
+	got := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
 	if !bytes.Equal(buf, got) {
 		t.Fatalf("FromProtobufWithCopy after reset: roundtrip mismatch\n  want %v\n  got  %v", buf, got)
 	}
@@ -629,7 +639,7 @@ func Test{{$goName}}FromJSONWithCopyAfterReset(t *testing.T) {
 
 func Test{{$goName}}CloneNilDst(t *testing.T) {
 	w := makeSample{{$goName}}()
-	buf := w.ToProtobuf(make([]byte, 0, w.ProtobufSize()))
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
 	var r {{$roName}}
 	if err := r.FromProtobuf(buf); err != nil {
 		t.Fatalf("FromProtobuf error: %v", err)
@@ -638,7 +648,7 @@ func Test{{$goName}}CloneNilDst(t *testing.T) {
 	if w2 == nil {
 		t.Fatal("Clone(nil) returned nil")
 	}
-	buf2 := w2.ToProtobuf(make([]byte, 0, w2.ProtobufSize()))
+	buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
 	if !bytes.Equal(buf, buf2) {
 		t.Fatalf("Clone roundtrip mismatch")
 	}
@@ -646,7 +656,7 @@ func Test{{$goName}}CloneNilDst(t *testing.T) {
 
 func Test{{$goName}}CloneExistingDst(t *testing.T) {
 	w := makeSample{{$goName}}()
-	buf := w.ToProtobuf(make([]byte, 0, w.ProtobufSize()))
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
 	var r {{$roName}}
 	if err := r.FromProtobuf(buf); err != nil {
 		t.Fatalf("FromProtobuf error: %v", err)
@@ -656,7 +666,7 @@ func Test{{$goName}}CloneExistingDst(t *testing.T) {
 	if w2 != existing {
 		t.Error("Clone(existing) must return the same pointer")
 	}
-	buf2 := w2.ToProtobuf(make([]byte, 0, w2.ProtobufSize()))
+	buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
 	if !bytes.Equal(buf, buf2) {
 		t.Fatalf("Clone(existing) roundtrip mismatch")
 	}
@@ -667,7 +677,7 @@ func Test{{$goName}}CloneExistingDst(t *testing.T) {
 // Clone must call clear() instead of allocating fresh containers.
 func Test{{$goName}}CloneReuseDst(t *testing.T) {
 	w := makeSample{{$goName}}()
-	buf := w.ToProtobuf(make([]byte, 0, w.ProtobufSize()))
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
 
 	var r1 {{$roName}}
 	if err := r1.FromProtobuf(buf); err != nil {
@@ -677,7 +687,7 @@ func Test{{$goName}}CloneReuseDst(t *testing.T) {
 	dst := r1.Clone(nil)
 
 	// Re-parse the cloned output so r2 mirrors r1 exactly.
-	buf2 := dst.ToProtobuf(make([]byte, 0, dst.ProtobufSize()))
+	buf2 := testToProtobuf{{$goName}}(t, dst, make([]byte, 0, dst.ProtobufSize()))
 	var r2 {{$roName}}
 	if err := r2.FromProtobuf(buf2); err != nil {
 		t.Fatalf("second FromProtobuf error: %v", err)
@@ -685,7 +695,7 @@ func Test{{$goName}}CloneReuseDst(t *testing.T) {
 
 	// Second clone: dst already has populated maps/slices → exercises clear().
 	dst2 := r2.Clone(dst)
-	buf3 := dst2.ToProtobuf(make([]byte, 0, dst2.ProtobufSize()))
+	buf3 := testToProtobuf{{$goName}}(t, dst2, make([]byte, 0, dst2.ProtobufSize()))
 	if !bytes.Equal(buf, buf3) {
 		t.Fatalf("Clone(reuse dst) roundtrip mismatch:\n  want %v\n  got  %v", buf, buf3)
 	}

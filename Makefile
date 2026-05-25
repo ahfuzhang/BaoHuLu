@@ -1,4 +1,4 @@
-Version ?= v0.6.0
+Version ?= v0.7.0
 
 .PHONY: build run test check check-bce
 
@@ -37,3 +37,10 @@ QiWa.rpc:
 	  -csharp_out.with.bench \
 	  -src.csharp_template.dir=./templates/csharp/QiWa.rpc/ \
 	  -dst.csharp_template.out_dir=./build/csharp/QiWa.rpc/
+
+util_converage_path=build/golang/utils/coverage
+
+utils_coverage:
+	mkdir -p $(util_converage_path)
+	go test -coverprofile=$(util_converage_path)/coverage.out -v github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils dependencies/golang/utils/...
+	go tool cover -html=$(util_converage_path)/coverage.out -o $(util_converage_path)/coverage.html

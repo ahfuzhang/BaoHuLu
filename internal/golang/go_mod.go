@@ -22,18 +22,11 @@ const sonicIndirectDeps = "\nrequire (\n" +
 	")\n"
 
 // GoModContent renders the embedded go.mod template for a generated module.
-// If withVtprotobuf is true, github.com/planetscale/vtprotobuf is added to the require block.
 // If withTest is true, github.com/bytedance/sonic and its indirect deps are added so the
 // generated directory works without running go mod tidy.
-func GoModContent(modulePath, version string, withVtprotobuf, withTest bool) string {
+func GoModContent(modulePath, version string, withTest bool) string {
 	baoHuLuRequire := fmt.Sprintf("\tgithub.com/ahfuzhang/BaoHuLu %s", version)
 	content := fmt.Sprintf(goModTemplate, modulePath, version)
-	if withVtprotobuf {
-		content = strings.Replace(content,
-			baoHuLuRequire,
-			baoHuLuRequire+"\n\tgithub.com/planetscale/vtprotobuf v0.6.0",
-			1)
-	}
 	if withTest {
 		content = strings.Replace(content,
 			baoHuLuRequire,

@@ -98,22 +98,12 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 	src := benchBuild{{$goName}}()
 	jsonData := src.ToJSON(nil)
 	pbData := src.ToProtobuf(nil)
-{{- if $.WithVtprotobuf}}
-	pbVTData, err := src.ToProtobufVT(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-{{- end}}
 
 	var (
 		mJEncBHL, mJEncStd, mJEncJV2, mJEncSonic metrics
 		mJDecBHL, mJDecStd, mJDecJV2, mJDecSonic metrics
 		mPbEncReg                       metrics
 		mPbDecReg                       metrics
-{{- if $.WithVtprotobuf}}
-		mPbEncVT metrics
-		mPbDecVT metrics
-{{- end}}
 	)
 
 	fmt.Println()
@@ -205,57 +195,6 @@ skipJSONEncode:
 	}
 skipJSONDecode:
 
-{{- if $.WithVtprotobuf}}
-	// Protobuf encode
-	{
-		buf := make([]byte, 0, len(pbVTData))
-		var encErr error
-		mPbEncVT = runBench(func() int {
-			buf, encErr = src.ToProtobufVT(buf[:0])
-			if encErr != nil {
-				return 0
-			}
-			return len(buf)
-		})
-		buf2 := make([]byte, 0, len(pbData))
-		mPbEncReg = runBench(func() int {
-			buf2 = src.ToProtobuf(buf2[:0])
-			return len(buf2)
-		})
-		fmt.Printf(
-			"pb encode:    [ToProtobufVT] %s, %d allocs/op"+
-				" | [ToProtobuf] %s, %d allocs/op, %s\n",
-			fmtBPS(mPbEncVT.bytesPerSec), mPbEncVT.allocsPerOp,
-			fmtBPS(mPbEncReg.bytesPerSec), mPbEncReg.allocsPerOp, fmtPct(mPbEncVT.bytesPerSec, mPbEncReg.bytesPerSec, "ToProtobuf"),
-		)
-	}
-
-	// Protobuf decode
-	{
-		var rVT {{$roName}}
-		mPbDecVT = runBench(func() int {
-			rVT.Reset()
-			if err := rVT.FromProtobufVT(pbVTData); err != nil {
-				t.Fatal("FromProtobufVT failed:", err)
-			}
-			return len(pbVTData)
-		})
-		var rPB {{$roName}}
-		mPbDecReg = runBench(func() int {
-			rPB.Reset()
-			if err := rPB.FromProtobuf(pbData); err != nil {
-				t.Fatal("FromProtobuf failed:", err)
-			}
-			return len(pbData)
-		})
-		fmt.Printf(
-			"pb decode:    [FromProtobufVT] %s, %d allocs/op"+
-				" | [FromProtobuf] %s, %d allocs/op, %s\n",
-			fmtBPS(mPbDecVT.bytesPerSec), mPbDecVT.allocsPerOp,
-			fmtBPS(mPbDecReg.bytesPerSec), mPbDecReg.allocsPerOp, fmtPct(mPbDecVT.bytesPerSec, mPbDecReg.bytesPerSec, "FromProtobuf"),
-		)
-	}
-{{- else}}
 	// Protobuf encode
 	{
 		buf := make([]byte, 0, len(pbData))
@@ -284,7 +223,6 @@ skipJSONDecode:
 			fmtBPS(mPbDecReg.bytesPerSec), mPbDecReg.allocsPerOp,
 		)
 	}
-{{- end}}
 
 	mdBase := func(m metrics) string {
 		return fmt.Sprintf("%s<br>%d allocs/op", fmtBPS(m.bytesPerSec), m.allocsPerOp)
@@ -300,46 +238,33 @@ skipJSONDecode:
 	fmt.Println("---")
 	fmt.Println()
 
-	fmt.Println("### JSON Performance")
-	fmt.Println()
-	fmt.Println("| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |")
-	fmt.Println("|:----------|:-------:|:-------------:|:----------------:|:---------------:|")
-	fmt.Printf("| json encode | %s | %s | %s | %s |\n",
-		mdBase(mJEncBHL),
-		mdCmp(mJEncStd, mJEncBHL),
-		mdCmp(mJEncJV2, mJEncBHL),
-		mdCmp(mJEncSonic, mJEncBHL),
-	)
-	fmt.Printf("| json decode | %s | %s | %s | %s |\n",
-		mdBase(mJDecBHL),
-		mdCmp(mJDecStd, mJDecBHL),
-		mdCmp(mJDecJV2, mJDecBHL),
-		mdCmp(mJDecSonic, mJDecBHL),
-	)
+	if os.Getenv("no_json_decode") == "" || os.Getenv("no_json_encode") == ""{
+		fmt.Println("### JSON Performance")
+		fmt.Println()
+		fmt.Println("| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |")
+		fmt.Println("|:----------|:-------:|:-------------:|:----------------:|:---------------:|")
+		fmt.Printf("| json encode | %s | %s | %s | %s |\n",
+			mdBase(mJEncBHL),
+			mdCmp(mJEncStd, mJEncBHL),
+			mdCmp(mJEncJV2, mJEncBHL),
+			mdCmp(mJEncSonic, mJEncBHL),
+		)
+		fmt.Printf("| json decode | %s | %s | %s | %s |\n",
+			mdBase(mJDecBHL),
+			mdCmp(mJDecStd, mJDecBHL),
+			mdCmp(mJDecJV2, mJDecBHL),
+			mdCmp(mJDecSonic, mJDecBHL),
+		)
 
-	fmt.Println()
+		fmt.Println()
+	}
 
-{{- if $.WithVtprotobuf}}
-	fmt.Println("### Protobuf Performance")
-	fmt.Println()
-	fmt.Println("| Operation | BaoHuLu VT (baseline) | BaoHuLu |")
-	fmt.Println("|:----------|:---------------------:|:-------:|")
-	fmt.Printf("| pb encode | %s | %s |\n",
-		mdBase(mPbEncVT),
-		mdCmp(mPbEncReg, mPbEncVT),
-	)
-	fmt.Printf("| pb decode | %s | %s |\n",
-		mdBase(mPbDecVT),
-		mdCmp(mPbDecReg, mPbDecVT),
-	)
-{{- else}}
 	fmt.Println("### Protobuf Performance")
 	fmt.Println()
 	fmt.Println("| Operation | BaoHuLu |")
 	fmt.Println("|:----------|:-------:|")
 	fmt.Printf("| pb encode | %s |\n", mdBase(mPbEncReg))
 	fmt.Printf("| pb decode | %s |\n", mdBase(mPbDecReg))
-{{- end}}
 
 	fmt.Println()
 }

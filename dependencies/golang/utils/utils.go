@@ -60,6 +60,8 @@ func AppendVarint(b []byte, v uint64) []byte {
 			byte(v>>7))
 	}
 	switch VarintSize(v) {
+	case 0:
+		return nil
 	case 1:
 		return append(b, byte(v))
 	case 2:
@@ -122,7 +124,7 @@ func AppendVarint(b []byte, v uint64) []byte {
 			byte(v>>42)|0x80,
 			byte(v>>49)|0x80,
 			byte(v>>56))
-	default: // 10 bytes (full uint64)
+	case 10: // 10 bytes (full uint64)
 		return append(b,
 			byte(v)|0x80,
 			byte(v>>7)|0x80,
@@ -134,6 +136,8 @@ func AppendVarint(b []byte, v uint64) []byte {
 			byte(v>>49)|0x80,
 			byte(v>>56)|0x80,
 			byte(v>>63))
+	default:
+		return nil
 	}
 }
 
@@ -232,7 +236,7 @@ func EncodeVarintV0(dAtA []byte, offset int, v uint64) int {
 }
 
 // 在 proto encode 中，性能提升 -16.8% => -13.3%, 本函数提升 46%
-func EncodeVarint(dAtA []byte, offset int, v uint64) int {
+func EncodeVarintV4(dAtA []byte, offset int, v uint64) int {
 	// hot path
 	if v < 0x80 {
 		var p *byte = (*byte)(unsafe.Pointer(&dAtA[offset-1]))
@@ -337,6 +341,182 @@ func EncodeVarint(dAtA []byte, offset int, v uint64) int {
 		return -1 // impossible
 	}
 	return offset
+}
+
+func EncodeVarint(dAtA []byte, offset int, v uint64) int {
+	// hot path
+	if v < 0x80 {
+		offset--
+		var p *byte = (*byte)(unsafe.Pointer(&dAtA[offset]))
+		*p = uint8(v)
+		return offset
+	}
+	if v < 0x4000 {
+		offset -= 2
+		var arr *[2]byte = (*[2]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v >> 7)
+		return offset
+	}
+	// if v < 0x80 {
+	// 	offset--
+	// 	dAtA[offset] = uint8(v)
+	// 	return offset
+	// }
+	// if v < 0x4000 {
+	// 	offset -= 2
+	// 	dAtA[offset+1] = uint8(v >> 7)
+	// 	dAtA[offset] = uint8(v) | 0x80
+	// 	return offset
+	// }
+	n := (bits.Len64(v|1) + 6) / 7
+	offset -= n
+	switch n {
+	case 0:
+		return -10 // impossible branch. for cheat compiler to build jump table
+	case 1:
+		return -11
+	case 2:
+		return -12
+	case 3:
+		// _ = append(dAtA[offset:offset:offset+3],
+		// 	byte(v)|0x80,
+		// 	byte(v>>7)|0x80,
+		// 	byte(v>>14))
+		var arr *[3]byte = (*[3]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v>>7) | 0x80
+		arr[2] = uint8(v >> 14)
+		return offset
+	case 4:
+		// _ = append(dAtA[offset:offset:offset+4],
+		// 	byte(v)|0x80,
+		// 	byte(v>>7)|0x80,
+		// 	byte(v>>14)|0x80,
+		// 	byte(v>>21))
+		var arr *[4]byte = (*[4]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v>>7) | 0x80
+		arr[2] = uint8(v>>14) | 0x80
+		arr[3] = uint8(v >> 21)
+		return offset
+	case 5:
+		// _ = append(dAtA[offset:offset:offset+5],
+		// 	byte(v)|0x80,
+		// 	byte(v>>7)|0x80,
+		// 	byte(v>>14)|0x80,
+		// 	byte(v>>21)|0x80,
+		// 	byte(v>>28))
+		var arr *[5]byte = (*[5]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v>>7) | 0x80
+		arr[2] = uint8(v>>14) | 0x80
+		arr[3] = uint8(v>>21) | 0x80
+		arr[4] = uint8(v >> 28)
+		return offset
+	case 6:
+		// _ = append(dAtA[offset:offset:offset+6],
+		// 	byte(v)|0x80,
+		// 	byte(v>>7)|0x80,
+		// 	byte(v>>14)|0x80,
+		// 	byte(v>>21)|0x80,
+		// 	byte(v>>28)|0x80,
+		// 	byte(v>>35))
+		var arr *[6]byte = (*[6]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v>>7) | 0x80
+		arr[2] = uint8(v>>14) | 0x80
+		arr[3] = uint8(v>>21) | 0x80
+		arr[4] = uint8(v>>28) | 0x80
+		arr[5] = uint8(v >> 35)
+		return offset
+	case 7:
+		// _ = append(dAtA[offset:offset:offset+7],
+		// 	byte(v)|0x80,
+		// 	byte(v>>7)|0x80,
+		// 	byte(v>>14)|0x80,
+		// 	byte(v>>21)|0x80,
+		// 	byte(v>>28)|0x80,
+		// 	byte(v>>35)|0x80,
+		// 	byte(v>>42))
+		var arr *[7]byte = (*[7]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v>>7) | 0x80
+		arr[2] = uint8(v>>14) | 0x80
+		arr[3] = uint8(v>>21) | 0x80
+		arr[4] = uint8(v>>28) | 0x80
+		arr[5] = uint8(v>>35) | 0x80
+		arr[6] = uint8(v >> 42)
+		return offset
+	case 8:
+		// _ = append(dAtA[offset:offset:offset+8],
+		// 	byte(v)|0x80,
+		// 	byte(v>>7)|0x80,
+		// 	byte(v>>14)|0x80,
+		// 	byte(v>>21)|0x80,
+		// 	byte(v>>28)|0x80,
+		// 	byte(v>>35)|0x80,
+		// 	byte(v>>42)|0x80,
+		// 	byte(v>>49))
+		var arr *[8]byte = (*[8]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v>>7) | 0x80
+		arr[2] = uint8(v>>14) | 0x80
+		arr[3] = uint8(v>>21) | 0x80
+		arr[4] = uint8(v>>28) | 0x80
+		arr[5] = uint8(v>>35) | 0x80
+		arr[6] = uint8(v>>42) | 0x80
+		arr[7] = uint8(v >> 49)
+		return offset
+	case 9:
+		// _ = append(dAtA[offset:offset:offset+9],
+		// 	byte(v)|0x80,
+		// 	byte(v>>7)|0x80,
+		// 	byte(v>>14)|0x80,
+		// 	byte(v>>21)|0x80,
+		// 	byte(v>>28)|0x80,
+		// 	byte(v>>35)|0x80,
+		// 	byte(v>>42)|0x80,
+		// 	byte(v>>49)|0x80,
+		// 	byte(v>>56))
+		var arr *[9]byte = (*[9]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v>>7) | 0x80
+		arr[2] = uint8(v>>14) | 0x80
+		arr[3] = uint8(v>>21) | 0x80
+		arr[4] = uint8(v>>28) | 0x80
+		arr[5] = uint8(v>>35) | 0x80
+		arr[6] = uint8(v>>42) | 0x80
+		arr[7] = uint8(v>>49) | 0x80
+		arr[8] = uint8(v >> 56)
+		return offset
+	case 10: // case 10: bit 63 set
+		// _ = append(dAtA[offset:offset:offset+10],
+		// 	byte(v)|0x80,
+		// 	byte(v>>7)|0x80,
+		// 	byte(v>>14)|0x80,
+		// 	byte(v>>21)|0x80,
+		// 	byte(v>>28)|0x80,
+		// 	byte(v>>35)|0x80,
+		// 	byte(v>>42)|0x80,
+		// 	byte(v>>49)|0x80,
+		// 	byte(v>>56)|0x80,
+		// 	byte(v>>63))
+		var arr *[10]byte = (*[10]byte)(unsafe.Pointer(&dAtA[offset]))
+		arr[0] = uint8(v) | 0x80
+		arr[1] = uint8(v>>7) | 0x80
+		arr[2] = uint8(v>>14) | 0x80
+		arr[3] = uint8(v>>21) | 0x80
+		arr[4] = uint8(v>>28) | 0x80
+		arr[5] = uint8(v>>35) | 0x80
+		arr[6] = uint8(v>>42) | 0x80
+		arr[7] = uint8(v>>49) | 0x80
+		arr[8] = uint8(v>>56) | 0x80
+		arr[9] = uint8(v >> 63)
+		return offset
+	default:
+		return -1 // impossible
+	}
 }
 
 // SizeOfVarint returns the size of the varint-encoded value.
@@ -536,6 +716,7 @@ func ReadFixed64(b []byte) (uint64, []byte, error) {
 	if len(b) < 8 {
 		return 0, b, fmt.Errorf("EOF reading fixed64")
 	}
+	// todo: 直接使用位运算会不会更快?
 	return binary.LittleEndian.Uint64(b), b[8:], nil
 }
 

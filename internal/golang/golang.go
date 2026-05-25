@@ -848,6 +848,7 @@ func (g *Generator) Render(out *os.File) error {
 			}
 			return false
 		},
+		"hasMapsOrMsgs": HasMapsOrMsgs,
 		// tagSize computes utils.TagSize(fieldNum, wireType) at template generation time,
 		// so the generated code contains the literal integer instead of a runtime call.
 		"tagSize": func(fieldNum, wireType int) int {
@@ -857,6 +858,40 @@ func (g *Generator) Render(out *os.File) error {
 		// protoWireTypeInt returns the integer wire-type value for a proto scalar type name.
 		"protoWireTypeInt": func(pt string) int {
 			return int(ProtoWireType(pt))
+		},
+		// writeTagBytes returns Go statements that write the field tag backward in a buffer.
+		"writeTagBytes": func(fieldNum, wireType int) string {
+			var wtName string
+			switch wireType {
+			case 0:
+				wtName = "Varint"
+			case 1:
+				wtName = "64bit"
+			case 2:
+				wtName = "LenDelim"
+			case 5:
+				wtName = "32bit"
+			default:
+				wtName = fmt.Sprintf("wt%d", wireType)
+			}
+			tag := uint64(fieldNum<<3 | wireType)
+			if tag < 0x80 {
+				return fmt.Sprintf("i--\n\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d (%d)*/",
+					byte(tag), fieldNum, wtName, fieldNum, wireType, tag)
+			}
+			if tag < 0x4000 {
+				lo := byte(tag&0x7f | 0x80)
+				hi := byte(tag >> 7)
+				return fmt.Sprintf(
+					"i--\n"+
+						"\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d=%d, byte[1]=%d>>7 (%d)*/\n"+
+						"\t\ti--\n"+
+						"\t\tdAtA[i] = %d /*byte[0]=%d&0x7f|0x80 (%d)*/",
+					hi, fieldNum, wtName, fieldNum, wireType, tag, tag, hi,
+					lo, tag, lo)
+			}
+			return fmt.Sprintf("i = utils.EncodeVarint(dAtA, i, %d) /*field=%d, wireType=%s, (%d<<3)|%d (%d)*/",
+				tag, fieldNum, wtName, fieldNum, wireType, tag)
 		},
 	}
 
@@ -1127,6 +1162,18 @@ func FirstScalarField(fields []FieldTpl) *FieldTpl {
 func HasMapsOrSlices(fields []FieldTpl) bool {
 	for _, f := range fields {
 		if f.Map || f.Repeated || f.IsMsg {
+			return true
+		}
+	}
+	return false
+}
+
+// HasMapsOrMsgs returns true if any field is a map or embedded message.
+// Used to decide whether ToProtobuf should delegate to ToProtobufByAppend
+// (complex types) or ToProtobufVT (simple scalars and repeated slices).
+func HasMapsOrMsgs(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if f.Map || f.IsMsg {
 			return true
 		}
 	}
@@ -1657,6 +1704,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 		"skipEncodingJSON":         SkipEncodingJSON,
 		"firstScalarField":         FirstScalarField,
 		"hasMapsOrSlices":          HasMapsOrSlices,
+		"hasMapsOrMsgs":            HasMapsOrMsgs,
 		"firstMsgField":            FirstMsgField,
 		"firstMapField":            FirstMapField,
 		"firstRepeatedField":       FirstRepeatedField,
@@ -1749,227 +1797,17 @@ func (g *Generator) RenderBench(out *os.File) error {
 	return tmpl.Execute(out, data)
 }
 
-// RenderVtprotobufTest renders the vtprotobuf test file to out.
-// The generated file tests ProtobufSizeVT, ToProtobufVT, and FromProtobufVT.
-// It reuses the makeSampleXxx helpers defined in the regular _test.go file,
-// so it must only be emitted alongside that file.
-func (g *Generator) RenderVtprotobufTest(out *os.File) error {
-	var msgs []MsgTpl
-	for _, name := range g.Order {
-		md := g.Messages[name]
-		msgs = append(msgs, MsgTpl{
-			Name:   md.Name,
-			GoName: protofile.GoTypeName(md.Name),
-		})
-	}
-	data := RenderData{
-		Package:  g.Pkg,
-		Messages: msgs,
-	}
-	tmpl, err := template.New("vtprotobuf_test").Parse(vtprotobufTestTemplate)
-	if err != nil {
-		return fmt.Errorf("parse vtprotobuf test template: %w", err)
-	}
-	return tmpl.Execute(out, data)
-}
-
-// RenderVtprotobufBench renders the vtprotobuf timing-benchmark test file to out.
-// The generated file benchmarks ProtobufSizeVT, ToProtobufVT, and FromProtobufVT.
-// It reuses the benchBuildXxx helpers defined in the regular _timing_test.go file,
-// so it must only be emitted alongside that file.
-func (g *Generator) RenderVtprotobufBench(out *os.File) error {
-	var msgs []MsgTpl
-	for _, name := range g.Order {
-		md := g.Messages[name]
-		msgs = append(msgs, MsgTpl{
-			Name:   md.Name,
-			GoName: protofile.GoTypeName(md.Name),
-		})
-	}
-	data := RenderData{
-		Package:  g.Pkg,
-		Messages: msgs,
-	}
-	tmpl, err := template.New("vtprotobuf_timing_test").Parse(vtprotobufBenchTemplate)
-	if err != nil {
-		return fmt.Errorf("parse vtprotobuf bench template: %w", err)
-	}
-	return tmpl.Execute(out, data)
-}
-
-// RenderVtprotobuf renders the vtprotobuf compatibility methods file to out.
-// It generates ProtobufSizeVT, ToProtobufVT on each message type and
-// FromProtobufVT on each Readonly message type.
-func (g *Generator) RenderVtprotobuf(out *os.File) error {
-	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
-	readerLayouts := make(map[string]protofile.MsgLayoutInfo)
-
-	var msgs []MsgTpl
-	for _, name := range g.Order {
-		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
-
-		writerSizeOf := func(fd protofile.FieldDef) int {
-			if fd.IsMsg && fd.IsRecursive {
-				return 8
-			}
-			if fd.IsMsg {
-				if li, ok := writerLayouts[fd.Type]; ok {
-					return li.Size
-				}
-			}
-			return protofile.FieldGoSize(fd)
-		}
-		writerPtrdataOf := func(fd protofile.FieldDef) int {
-			if fd.IsMsg && fd.IsRecursive {
-				return 8
-			}
-			if fd.IsMsg {
-				if li, ok := writerLayouts[fd.Type]; ok {
-					return li.Ptrdata
-				}
-			}
-			return protofile.FieldPtrdata(fd)
-		}
-		sortedWriterDefs := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
-		writerLayouts[name] = protofile.ComputeStructLayout(sortedWriterDefs, writerSizeOf, writerPtrdataOf)
-		for _, fd := range sortedWriterDefs {
-			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
-		}
-
-		rawBufDef := protofile.FieldDef{Name: "rawBuffer", Type: "bytes", GoType: "[]byte"}
-		readerDefs := make([]protofile.FieldDef, 0, len(md.Fields)+1)
-		readerDefs = append(readerDefs, rawBufDef)
-		readerDefs = append(readerDefs, md.Fields...)
-
-		readerSizeOf := func(fd protofile.FieldDef) int {
-			if fd.IsMsg && fd.IsRecursive {
-				return 8
-			}
-			if fd.IsMsg {
-				if li, ok := readerLayouts[fd.Type]; ok {
-					return li.Size
-				}
-			}
-			return protofile.FieldGoSize(fd)
-		}
-		readerPtrdataOf := func(fd protofile.FieldDef) int {
-			if fd.IsMsg && fd.IsRecursive {
-				return 8
-			}
-			if fd.IsMsg {
-				if li, ok := readerLayouts[fd.Type]; ok {
-					return li.Ptrdata
-				}
-			}
-			return protofile.FieldPtrdata(fd)
-		}
-		sortedReaderDefs := protofile.SortFieldsWithCallbacks(readerDefs, readerSizeOf, readerPtrdataOf)
-		readerLayouts[name] = protofile.ComputeStructLayout(sortedReaderDefs, readerSizeOf, readerPtrdataOf)
-		for _, fd := range sortedReaderDefs {
-			if fd.Name == rawBufDef.Name && fd.Number == 0 {
-				mt.ReaderFields = append(mt.ReaderFields, FieldTpl{
-					FieldDef:   fd,
-					ReaderType: "[]byte",
-					IsRawBuf:   true,
-				})
-			} else {
-				mt.ReaderFields = append(mt.ReaderFields, g.makeFieldTpl(fd, name))
-			}
-		}
-
-		msgs = append(msgs, mt)
-	}
-
-	data := RenderData{
-		Package:  g.Pkg,
-		Messages: msgs,
-	}
-
-	fnMap := template.FuncMap{
-		"isPackable":       IsPackable,
-		"protoWireType":    ProtoWireType,
-		"trimPtr":          func(s string) string { return strings.TrimPrefix(s, "*") },
-		"mapKeyGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
-		"mapValGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
-		"mapValIsMsg":      func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
-		"readonlyTypeName": protofile.ReadonlyGoTypeName,
-		"readerElemType": func(fd FieldTpl) string {
-			return protofile.ReadonlyGoTypeName(fd.Type)
-		},
-		"elemType":    func(s string) string { return strings.TrimPrefix(s, "[]") },
-		"wireTypeInt": func(pt string) int { return int(ProtoWireType(pt)) },
-		// sizeofTag returns the byte count of the varint-encoded proto field tag.
-		// fieldNum is the proto field number; wireType is the raw wire type integer (0,1,2,5).
-		"sizeofTag": func(fieldNum, wireType int) int {
-			tag := uint64(fieldNum<<3 | wireType)
-			switch {
-			case tag < 0x80:
-				return 1
-			case tag < 0x4000:
-				return 2
-			default:
-				return 3
-			}
-		},
-		// writeTagBytes returns Go statements (with \t\t continuation indentation) that
-		// write the field tag backward in a buffer (vtprotobuf backward-fill style).
-		// The caller's template line must supply the leading \t\t indentation.
-		"writeTagBytes": func(fieldNum, wireType int) string {
-			var wtName string
-			switch wireType {
-			case 0:
-				wtName = "Varint"
-			case 1:
-				wtName = "64bit"
-			case 2:
-				wtName = "LenDelim"
-			case 5:
-				wtName = "32bit"
-			default:
-				wtName = fmt.Sprintf("wt%d", wireType)
-			}
-			tag := uint64(fieldNum<<3 | wireType)
-			if tag < 0x80 {
-				return fmt.Sprintf("i--\n\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d (%d)*/",
-					byte(tag), fieldNum, wtName, fieldNum, wireType, tag)
-			}
-			if tag < 0x4000 {
-				lo := byte(tag&0x7f | 0x80) // LSB with continuation bit
-				hi := byte(tag >> 7)        // MSB without continuation bit
-				return fmt.Sprintf(
-					"i--\n"+
-						"\t\tdAtA[i] = %d /*field=%d, wireType=%s, (%d<<3)|%d=%d, byte[1]=%d>>7 (%d)*/\n"+
-						"\t\ti--\n"+
-						"\t\tdAtA[i] = %d /*byte[0]=%d&0x7f|0x80 (%d)*/",
-					hi, fieldNum, wtName, fieldNum, wireType, tag, tag, hi,
-					lo, tag, lo)
-			}
-			// Field number >= 2048: 3-byte tag, keep as EncodeVarint call
-			return fmt.Sprintf("i = protohelpers.EncodeVarint(dAtA, i, %d) /*field=%d, wireType=%s, (%d<<3)|%d (%d)*/",
-				tag, fieldNum, wtName, fieldNum, wireType, tag)
-		},
-	}
-	tmpl, err := template.New("vtprotobuf").Funcs(fnMap).Parse(vtprotobufTemplate)
-	if err != nil {
-		return fmt.Errorf("parse vtprotobuf template: %w", err)
-	}
-	return tmpl.Execute(out, data)
-}
-
 // CompareRenderData is the template data for the compare test file.
 type CompareRenderData struct {
-	Package        string
-	Messages       []MsgTpl
-	WithVtprotobuf bool
+	Package  string
+	Messages []MsgTpl
 }
 
 // RenderCompare renders the performance-comparison test file to out.
 // It generates one Test_<Msg>_with_compare function per message, measuring
 // JSON and Protobuf encode/decode throughput against standard library alternatives.
-// When withVtprotobuf is true, VT-protobuf encode/decode measurements are included.
 // The generated file depends on the benchBuildXxx helpers from the _timing_test.go file.
-func (g *Generator) RenderCompare(out *os.File, withVtprotobuf bool) error {
+func (g *Generator) RenderCompare(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
@@ -1979,9 +1817,8 @@ func (g *Generator) RenderCompare(out *os.File, withVtprotobuf bool) error {
 		})
 	}
 	data := CompareRenderData{
-		Package:        g.Pkg,
-		Messages:       msgs,
-		WithVtprotobuf: withVtprotobuf,
+		Package:  g.Pkg,
+		Messages: msgs,
 	}
 	tmpl, err := template.New("compare_test").Parse(compareTemplate)
 	if err != nil {
@@ -2000,15 +1837,6 @@ var testTemplate string
 
 //go:embed templates/timing.test.go.tpl
 var benchTemplate string
-
-//go:embed templates/vtprotobuf.go.tpl
-var vtprotobufTemplate string
-
-//go:embed templates/vtprotobuf.test.go.tpl
-var vtprotobufTestTemplate string
-
-//go:embed templates/vtprotobuf_timing_test.go.tpl
-var vtprotobufBenchTemplate string
 
 //go:embed templates/compare.test.go.tpl
 var compareTemplate string

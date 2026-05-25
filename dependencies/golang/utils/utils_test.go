@@ -147,6 +147,12 @@ func TestVarintFunctionsAlign(t *testing.T) {
 		if !bytes.Equal(buf[start:], ref) {
 			t.Errorf("EncodeVarintV2(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
 		}
+
+		clear(buf)
+		start = EncodeVarintV4(buf, n, v)
+		if !bytes.Equal(buf[start:], ref) {
+			t.Errorf("EncodeVarintV5(v=%d, n=%d): got %v, want %v", v, n, buf[start:], ref)
+		}
 	}
 }
 

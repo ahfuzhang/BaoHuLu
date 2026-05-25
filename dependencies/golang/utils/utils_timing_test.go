@@ -427,9 +427,114 @@ func BenchmarkEncodeVarintV210(b *testing.B) {
 	_ = buf
 }
 
+func BenchmarkEncodeVarintV41(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(1)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// 假设以 inline 的方式处理 1 字节
+		if varintByteValues[0] < 0x80 {
+			buf[0] = uint8(varintByteValues[0])
+			continue
+		}
+		EncodeVarintV4(buf, 1, varintByteValues[0])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV42(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(2)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 2, varintByteValues[1])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV43(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(3)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 3, varintByteValues[2])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV44(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(4)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 4, varintByteValues[3])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV45(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(5)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 5, varintByteValues[4])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV46(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(6)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 6, varintByteValues[5])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV47(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(7)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 7, varintByteValues[6])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV48(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(8)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 8, varintByteValues[7])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV49(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(9)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 9, varintByteValues[8])
+	}
+	_ = buf
+}
+
+func BenchmarkEncodeVarintV410(b *testing.B) {
+	buf := make([]byte, 16)
+	b.SetBytes(10)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeVarintV4(buf, 10, varintByteValues[9])
+	}
+	_ = buf
+}
+
 // ─── Throughput comparison table ─────────────────────────────────────────────
 
-// TestAppendVarintThroughput runs all three varint encoding functions for each
+// TestAppendVarintThroughput runs all varint encoding functions for each
 // encoded byte length (1-10) and prints a markdown comparison table (MB/s).
 // go test -test.fullpath=true -v -run ^TestAppendVarintThroughput$ github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils
 func TestAppendVarintThroughput(t *testing.T) {
@@ -457,6 +562,12 @@ func TestAppendVarintThroughput(t *testing.T) {
 		BenchmarkEncodeVarintV27, BenchmarkEncodeVarintV28, BenchmarkEncodeVarintV29,
 		BenchmarkEncodeVarintV210,
 	}
+	v4Funcs := [10]func(*testing.B){
+		BenchmarkEncodeVarintV41, BenchmarkEncodeVarintV42, BenchmarkEncodeVarintV43,
+		BenchmarkEncodeVarintV44, BenchmarkEncodeVarintV45, BenchmarkEncodeVarintV46,
+		BenchmarkEncodeVarintV47, BenchmarkEncodeVarintV48, BenchmarkEncodeVarintV49,
+		BenchmarkEncodeVarintV410,
+	}
 
 	mbPerSec := func(sz int, fn func(*testing.B)) float64 {
 		r := testing.Benchmark(fn)
@@ -469,17 +580,18 @@ func TestAppendVarintThroughput(t *testing.T) {
 	}
 
 	fmt.Println()
-	fmt.Println("| Encoded bytes | AppendVarint (MB/s) | EncodeVarintV1 (MB/s) | EncodeVarint (MB/s) | EncodeVarintV2 (MB/s) |")
-	fmt.Println("|:---:|---:|---:|---:|---:|")
+	fmt.Println("| Encoded bytes | AppendVarint (MB/s) | EncodeVarintV1 (MB/s) | EncodeVarint (MB/s) | EncodeVarintV2 (MB/s) | EncodeVarintV4 (MB/s) |")
+	fmt.Println("|:---:|---:|---:|---:|---:|---:|")
 
 	for i := range 10 {
 		sz := i + 1
-		fmt.Printf("| %d | %.2f | %.2f | %.2f | %.2f |\n",
+		fmt.Printf("| %d | %.2f | %.2f | %.2f | %.2f | %.2f |\n",
 			sz,
 			mbPerSec(sz, appendFuncs[i]),
 			mbPerSec(sz, v1Funcs[i]),
 			mbPerSec(sz, v2Funcs[i]),
 			mbPerSec(sz, v3Funcs[i]),
+			mbPerSec(sz, v4Funcs[i]),
 		)
 	}
 }

@@ -56,7 +56,7 @@ func benchBuild{{$goName}}Base() {{$goName}} {
 {{- end}}
 {{- else if eq .Type "string"}}
 	w.{{.Name}} = "benchmark payload with escape chars:\n newline \t tab \" double-quote \\ backslash; " +
-		"padding to ensure length exceeds one hundred bytes: 0123456789abcdef0123456789abcdef"
+		"padding to ensure length exceeds one \b hundred \f bytes: \r 0123456789abcdef0123456789abcdef 中文"
 {{- else if eq .Type "bytes"}}
 	w.{{.Name}} = []byte("benchmark bytes payload with special chars: \n \t \\ " +
 		"padding to exceed one hundred bytes: 0123456789abcdef0123456789abcdef")

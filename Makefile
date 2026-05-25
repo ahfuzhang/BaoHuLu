@@ -15,10 +15,12 @@ gen: build
 	  -go_out=./build/golang/DemoServer/ \
 	  -go_out.with.test \
 	  -go_out.with.bench \
-	  -go_out.with.vtprotobuf \
 	  -csharp_out=./build/csharp/DemoServer/ \
 	  -csharp_out.with.test \
 	  -csharp_out.with.bench
+
+# deprecated:
+#	  -go_out.with.vtprotobuf 
 
 go: build
 	./build/hulu tu \

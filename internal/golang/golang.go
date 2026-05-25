@@ -535,11 +535,12 @@ type FieldTpl struct {
 }
 
 type MsgTpl struct {
-	Name         string     // proto message name (used as map/lookup key)
-	GoName       string     // Go type name: same as proto message name
-	Comment      []string   // proto comment lines (without leading //)
-	Fields       []FieldTpl // writer fields, sorted for optimal layout
-	ReaderFields []FieldTpl // readonly fields = Fields + rawBuffer, all sorted
+	Name          string     // proto message name (used as map/lookup key)
+	GoName        string     // Go type name: same as proto message name
+	Comment       []string   // proto comment lines (without leading //)
+	Fields        []FieldTpl // writer fields, sorted for optimal layout
+	ReverseFields []FieldTpl // writer fields in reverse layout order (matches marshalToSizedBufferVT output)
+	ReaderFields  []FieldTpl // readonly fields = Fields + rawBuffer, all sorted
 }
 
 type EnumTpl struct {
@@ -725,6 +726,11 @@ func (g *Generator) Render(out *os.File) error {
 
 		for _, fd := range sortedWriterDefs {
 			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
+		}
+
+		// --- ReverseFields: writer fields in reverse layout order, matching marshalToSizedBufferVT output.
+		for j := len(mt.Fields) - 1; j >= 0; j-- {
+			mt.ReverseFields = append(mt.ReverseFields, mt.Fields[j])
 		}
 
 		// --- Readonly struct: include rawBuffer in the sort, and use precomputed
@@ -1643,6 +1649,10 @@ func (g *Generator) RenderTest(out *os.File) error {
 			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
 		}
 
+		for j := len(mt.Fields) - 1; j >= 0; j-- {
+			mt.ReverseFields = append(mt.ReverseFields, mt.Fields[j])
+		}
+
 		rawBufDef := protofile.FieldDef{Name: "rawBuffer", Type: "bytes", GoType: "[]byte"}
 		readerDefs := make([]protofile.FieldDef, 0, len(md.Fields)+1)
 		readerDefs = append(readerDefs, rawBufDef)
@@ -1769,6 +1779,10 @@ func (g *Generator) RenderBench(out *os.File) error {
 
 		for _, fd := range sortedWriterDefs {
 			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
+		}
+
+		for j := len(mt.Fields) - 1; j >= 0; j-- {
+			mt.ReverseFields = append(mt.ReverseFields, mt.Fields[j])
 		}
 
 		msgs = append(msgs, mt)

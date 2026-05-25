@@ -292,7 +292,7 @@ func (m *{{$goName}}) ProtobufSize() int {
 }
 
 func (m *{{$goName}}) ToProtobufByAppend(in []byte) []byte {
-{{- range .Fields}}
+{{- range .ReverseFields}}
 {{- if .Map}}
 	for k, v := range m.{{.Name}} {
 		entrySize := 0
@@ -379,7 +379,11 @@ func (m *{{$goName}}) ToProtobufByAppend(in []byte) []byte {
 		{{- else}}
 		in = utils.AppendVarint(in, uint64(k))
 		{{- end}}
+		{{- if (mapValIsMsg .MapVal)}}
+		in = utils.AppendTag(in, 2, utils.WireTypeLenDelim)
+		{{- else}}
 		in = utils.AppendTag(in, 2, {{protoWireType .MapVal}})
+		{{- end}}
 		{{- if eq .MapVal "string"}}
 		in = utils.AppendVarint(in, uint64(len(v)))
 		in = append(in, v...)

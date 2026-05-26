@@ -480,3 +480,68 @@ pb decode:    [FromProtobuf] 12.75 GB/s, 0 allocs/op
 | pb decode | 697.10 MB/s<br>156 allocs/op | 478.19 MB/s<br>155 allocs/op<br><span style="color:red">+45.8%</span> |
 
 
+# 2026-05-26， linux, amd64, intel 4.5GHz
+
+## all types
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 1.78 GB/s<br>0 allocs/op | 163.98 MB/s<br>3260 allocs/op<br><span style="color:red">+985.1%</span> | 384.50 MB/s<br>77 allocs/op<br><span style="color:red">+362.8%</span> | 1.11 GB/s<br>40 allocs/op<br><span style="color:red">+60.8%</span> |
+| json decode | 558.59 MB/s<br>52 allocs/op | 151.93 MB/s<br>1357 allocs/op<br><span style="color:red">+267.7%</span> | 185.23 MB/s<br>1357 allocs/op<br><span style="color:red">+201.6%</span> | 422.77 MB/s<br>1060 allocs/op<br><span style="color:red">+32.1%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 1.38 GB/s<br>0 allocs/op |
+| pb decode | 545.18 MB/s<br>155 allocs/op |
+
+## value types
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 3.12 GB/s<br>0 allocs/op | 407.37 MB/s<br>3 allocs/op<br><span style="color:red">+665.3%</span> | 386.62 MB/s<br>3 allocs/op<br><span style="color:red">+706.4%</span> | 1.17 GB/s<br>3 allocs/op<br><span style="color:red">+165.5%</span> |
+| json decode | 976.34 MB/s<br>0 allocs/op | 257.54 MB/s<br>1 allocs/op<br><span style="color:red">+279.1%</span> | 310.60 MB/s<br>1 allocs/op<br><span style="color:red">+214.3%</span> | 634.81 MB/s<br>3 allocs/op<br><span style="color:red">+53.8%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 2.00 GB/s<br>0 allocs/op |
+| pb decode | 1.21 GB/s<br>0 allocs/op |
+
+## all types, 优化了 switch
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 1.73 GB/s<br>0 allocs/op | 161.43 MB/s<br>3260 allocs/op<br><span style="color:red">+969.3%</span> | 394.21 MB/s<br>77 allocs/op<br><span style="color:red">+337.9%</span> | 1.14 GB/s<br>40 allocs/op<br><span style="color:red">+50.9%</span> |
+| json decode | 571.17 MB/s<br>52 allocs/op | 154.05 MB/s<br>1364 allocs/op<br><span style="color:red">+270.8%</span> | 181.04 MB/s<br>1364 allocs/op<br><span style="color:red">+215.5%</span> | 427.95 MB/s<br>1060 allocs/op<br><span style="color:red">+33.5%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 1.33 GB/s<br>0 allocs/op |
+| pb decode | 543.46 MB/s<br>155 allocs/op |
+
+## value types, 优化了 switch
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 3.05 GB/s<br>0 allocs/op | 409.55 MB/s<br>3 allocs/op<br><span style="color:red">+644.4%</span> | 380.92 MB/s<br>3 allocs/op<br><span style="color:red">+700.4%</span> | 1.17 GB/s<br>3 allocs/op<br><span style="color:red">+161.0%</span> |
+| json decode | 990.23 MB/s<br>0 allocs/op | 248.66 MB/s<br>1 allocs/op<br><span style="color:red">+298.2%</span> | 290.02 MB/s<br>1 allocs/op<br><span style="color:red">+241.4%</span> | 638.67 MB/s<br>3 allocs/op<br><span style="color:red">+55.0%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 2.01 GB/s<br>0 allocs/op |
+| pb decode | 1.24 GB/s<br>0 allocs/op |

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastjson"
+	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastfloat"
 )
 
 // for build time check
@@ -1462,7 +1463,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 		if visitErr != nil {
 			return
 		}
-		switch string(k) {
+		k1 := unsafe.String(unsafe.SliceData(k), len(k))
+		switch k1 {
 {{- range .Fields}}
 		case NameOf{{$goName}}{{.Name}}:
 {{- if .Map}}
@@ -1500,31 +1502,32 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- else if eq $kc "bool"}}
 				mKey = unsafe.String(unsafe.SliceData(mk), len(mk)) == "true"
 {{- else if eq $kc "signed32"}}
-				_mk64, _ek := strconv.ParseInt(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 32)
+				// _mk64, _ek := strconv.ParseInt(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 32)
+				_mk64, _ek := fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(mk), len(mk)))
 				if _ek != nil {
 					visitErr = _ek
 					return
 				}
 				mKey = {{mapKeyGoType .MapKey}}(_mk64)
 {{- else if eq $kc "signed64"}}
-				// todo: use fastfloat.ParseUint64
-				_mk64, _ek := strconv.ParseInt(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 64)
+				//_mk64, _ek := strconv.ParseInt(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 64)
+				_mk64, _ek := fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(mk), len(mk)))
 				if _ek != nil {
 					visitErr = _ek
 					return
 				}
 				mKey = _mk64
 {{- else if eq $kc "unsigned32"}}
-				// todo: use fastfloat.ParseUint64
-				_mku64, _ek := strconv.ParseUint(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 32)
+				// _mku64, _ek := strconv.ParseUint(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 32)
+				_mku64, _ek := fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(mk), len(mk)))
 				if _ek != nil {
 					visitErr = _ek
 					return
 				}
 				mKey = {{mapKeyGoType .MapKey}}(_mku64)
 {{- else if eq $kc "unsigned64"}}
-				// todo: use fastfloat.ParseUint64
-				_mku64, _ek := strconv.ParseUint(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 64)
+				// _mku64, _ek := strconv.ParseUint(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 64)
+				_mku64, _ek := fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(mk), len(mk)))
 				if _ek != nil {
 					visitErr = _ek
 					return
@@ -1599,7 +1602,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ev2 error
-					_iv, _ev2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+					// _iv, _ev2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+					_iv, _ev2 = fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 					if _ev2 != nil {
 						visitErr = _ev2
 						return
@@ -1629,8 +1633,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ev2 error
-					// todo: use fastfloat.ParseUint64
-					_uv, _ev2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+					// _uv, _ev2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+					_uv, _ev2 = fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 					if _ev2 != nil {
 						visitErr = _ev2
 						return
@@ -1647,7 +1651,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- end}}
 				r.{{.Name}}[mKey] = mVal
 {{- end}}
-			}, parser)
+			}, parser, {{if eq .MapKey "string"}}false{{else}}true{{end}})
 {{- else if .Repeated}}
 			_arr, _e := v.Array()
 			if _e != nil {
@@ -1737,7 +1741,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ei2 error
-					_iv, _ei2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+					// _iv, _ei2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+					_iv, _ei2 = fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 					if _ei2 != nil {
 						visitErr = _ei2
 						return
@@ -1767,8 +1772,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ei2 error
-					// todo: use fastfloat.ParseUint64
-					_uv, _ei2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+					// _uv, _ei2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+					_uv, _ei2 = fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 					if _ei2 != nil {
 						visitErr = _ei2
 						return
@@ -1859,7 +1864,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					return
 				}
 				var _e2 error
-				_iv, _e2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+				// _iv, _e2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+				_iv, _e2 = fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 				if _e2 != nil {
 					visitErr = _e2
 					return
@@ -1889,8 +1895,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					return
 				}
 				var _e2 error
-				// todo: use fastfloat.ParseUint64
-				_uv, _e2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+				// _uv, _e2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
+				_uv, _e2 = fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 				if _e2 != nil {
 					visitErr = _e2
 					return
@@ -1908,7 +1914,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- end}}
 {{- end}}
 		}
-	}, parser)
+	}, parser, true/*skip unescape keys, because all key must by proto field name*/)
 	return visitErr
 }
 

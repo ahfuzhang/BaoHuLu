@@ -82,9 +82,11 @@ message AllTypes {
   // 	•	1..18999
   //  •	20000..536870911
 
-  // map<string, ValueTypes> values = 1010; // map value 是 message 类型的情况
-  //AllTypes next = 1011; // 测试递归定义的情形
-  //map<uint64, AllTypes> children = 1012;
+  // 去掉下面三项后， linux+amd64 下发现， json decode 的性能快于 sonic 70%
+  map<string, ValueTypes> values = 1010; // map value 是 message 类型的情况
+  AllTypes next = 1011; // 测试递归定义的情形
+  map<uint64, AllTypes> children = 1012;
+  // 所有字段都展开后：linux+amd64 下, json decode 的性能快于 sonic 12%
 }
 
 // @from-post-form

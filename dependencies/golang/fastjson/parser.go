@@ -363,7 +363,7 @@ func (c *cache) unescapeStringBestEffort(s string) string {
 
 // parseRawKey is similar to parseRawString, but is optimized
 // for small-sized keys without escape sequences.
-func parseRawKey(s string) (string, string, error) {
+func parseRawKey(s string) (string, string, error) { // todo: 占比 5.17%，值得优化
 	for i := range len(s) {
 		if s[i] == '"' {
 			// Fast path.
@@ -481,13 +481,17 @@ func (o *Object) Len() int {
 // of the parsed JSON.
 //
 // f cannot hold key and/or v after returning.
-func (o *Object) Visit(f func(key []byte, v *Value), p *Parser) {
+func (o *Object) Visit(f func(key []byte, v *Value), p *Parser, skipUnescapeKeys bool) {
 	if o == nil {
 		return
 	}
-
-	o.unescapeKeys(p)
-
+	if skipUnescapeKeys {
+		// 当上层知道所需要的 key 一定没有特殊字符时，跳过解析 key 的步骤
+		// 6.79% => 3.18%, 优化后，o.unescapeKeys(p) 函数的占比降低了
+		o.keysUnescaped = true
+	} else {
+		o.unescapeKeys(p)
+	}
 	kvs := o.kvs
 	for i := range kvs {
 		kv := &kvs[i]

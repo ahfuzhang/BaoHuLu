@@ -336,8 +336,22 @@ func ConsumeTag(b []byte) (fieldNum int, wt WireType, rest []byte, err error) {
 	return
 }
 
+func ConsumeBytes(b []byte) (data []byte, rest []byte, err error) {
+	var v uint64
+	v, rest, err = ReadVarint(b)
+	if err != nil {
+		return
+	}
+	if uint64(len(rest)) < v {
+		return nil, b, fmt.Errorf("not enough bytes: need %d have %d", v, len(rest))
+	}
+	data = rest[:v]
+	rest = rest[v:]
+	return
+}
+
 // ConsumeBytes reads a length-delimited byte slice from b.
-func ConsumeBytes(b []byte) ([]byte, []byte, error) {
+func ConsumeBytesV1(b []byte) ([]byte, []byte, error) {
 	l := uint64(b[0])
 	if l < 0x80 {
 		// fast path
@@ -407,12 +421,22 @@ func SkipField(wt WireType, b []byte) ([]byte, error) {
 
 // ─── Scalar read ──────────────────────────────────────────────────────────────
 
-func ReadInt32(b []byte) (int32, []byte, error) {
+func ReadInt32V0(b []byte) (int32, []byte, error) {
 	v, rest, code := ConsumeVarint(b)
 	if code != 0 {
 		return 0, b, consumeVarintError(code)
 	}
 	return int32(v), rest, nil
+}
+
+func ReadInt32(b []byte) (n int32, rest []byte, err error) {
+	var v uint64
+	v, rest, err = ReadVarint(b)
+	if err != nil {
+		return
+	}
+	n = int32(v)
+	return
 }
 
 func ReadInt32V1(b []byte) (int32, []byte, error) {
@@ -440,7 +464,7 @@ func ReadInt32V1(b []byte) (int32, []byte, error) {
 	return 0, nil, errVarintOverflow
 }
 
-func ReadInt64(b []byte) (int64, []byte, error) {
+func ReadInt64V1(b []byte) (int64, []byte, error) {
 	v, rest, code := ConsumeVarint(b)
 	if code != 0 {
 		return 0, b, consumeVarintError(code)
@@ -448,7 +472,17 @@ func ReadInt64(b []byte) (int64, []byte, error) {
 	return int64(v), rest, nil
 }
 
-func ReadUint32(b []byte) (uint32, []byte, error) {
+func ReadInt64(b []byte) (n int64, rest []byte, err error) {
+	var v uint64
+	v, rest, err = ReadVarint(b)
+	if err != nil {
+		return
+	}
+	n = int64(v)
+	return
+}
+
+func ReadUint32V1(b []byte) (uint32, []byte, error) {
 	v, rest, code := ConsumeVarint(b)
 	if code != 0 {
 		return 0, b, consumeVarintError(code)
@@ -456,7 +490,17 @@ func ReadUint32(b []byte) (uint32, []byte, error) {
 	return uint32(v), rest, nil
 }
 
-func ReadUint64(b []byte) (uint64, []byte, error) {
+func ReadUint32(b []byte) (n uint32, rest []byte, err error) {
+	var v uint64
+	v, rest, err = ReadVarint(b)
+	if err != nil {
+		return
+	}
+	n = uint32(v)
+	return
+}
+
+func ReadUint64V1(b []byte) (uint64, []byte, error) {
 	v, rest, code := ConsumeVarint(b)
 	if code != 0 {
 		return 0, b, consumeVarintError(code)
@@ -464,7 +508,12 @@ func ReadUint64(b []byte) (uint64, []byte, error) {
 	return v, rest, nil
 }
 
-func ReadSint32(b []byte) (int32, []byte, error) {
+func ReadUint64(b []byte) (n uint64, rest []byte, err error) {
+	n, rest, err = ReadVarint(b)
+	return
+}
+
+func ReadSint32V1(b []byte) (int32, []byte, error) {
 	v, rest, code := ConsumeVarint(b)
 	if code != 0 {
 		return 0, b, consumeVarintError(code)
@@ -473,7 +522,17 @@ func ReadSint32(b []byte) (int32, []byte, error) {
 	return n, rest, nil
 }
 
-func ReadSint64(b []byte) (int64, []byte, error) {
+func ReadSint32(b []byte) (n int32, rest []byte, err error) {
+	var v uint64
+	v, rest, err = ReadVarint(b)
+	if err != nil {
+		return
+	}
+	n = int32((uint32(v) >> 1) ^ -(uint32(v) & 1))
+	return
+}
+
+func ReadSint64V1(b []byte) (int64, []byte, error) {
 	v, rest, code := ConsumeVarint(b)
 	if code != 0 {
 		return 0, b, consumeVarintError(code)
@@ -482,12 +541,32 @@ func ReadSint64(b []byte) (int64, []byte, error) {
 	return n, rest, nil
 }
 
-func ReadBool(b []byte) (bool, []byte, error) {
+func ReadSint64(b []byte) (n int64, rest []byte, err error) {
+	var v uint64
+	v, rest, err = ReadVarint(b)
+	if err != nil {
+		return
+	}
+	n = int64((v >> 1) ^ -(v & 1))
+	return
+}
+
+func ReadBoolV1(b []byte) (bool, []byte, error) {
 	v, rest, code := ConsumeVarint(b)
 	if code != 0 {
 		return false, b, consumeVarintError(code)
 	}
 	return v != 0, rest, nil
+}
+
+func ReadBool(b []byte) (ret bool, rest []byte, err error) {
+	var v uint64
+	v, rest, err = ReadVarint(b)
+	// if err != nil {
+	// 	return
+	// }
+	ret = v != 0
+	return
 }
 
 func ReadFixed32(b []byte) (uint32, []byte, error) {
@@ -528,7 +607,7 @@ func ReadDouble(b []byte) (float64, []byte, error) {
 // ReadString returns a string backed by the same memory as b (zero-copy).
 func ReadString(b []byte) (string, []byte, error) {
 	data, rest, err := ConsumeBytes(b)
-	if err != nil {
+	if err != nil { // todo: 内部的判断都可以去掉
 		return "", b, err
 	}
 	if len(data) == 0 {
@@ -539,6 +618,106 @@ func ReadString(b []byte) (string, []byte, error) {
 
 func ReadBytes(b []byte) ([]byte, []byte, error) {
 	return ConsumeBytes(b)
+}
+
+func ReadVarint(b []byte) (v uint64, rest []byte, err error) {
+	if b[0] < 0x80 {
+		v = uint64(b[0])
+		rest = b[1:]
+		return
+	}
+	if len(b) > 1 && b[1] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]) << 7)
+		rest = b[2:]
+		return
+	}
+	if len(b) > 2 && b[2] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]&0x7F) << 7) |
+			(uint64(b[2]) << 14)
+		rest = b[3:]
+		return
+	}
+	if len(b) > 3 && b[3] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]&0x7F) << 7) |
+			(uint64(b[2]&0x7F) << 14) |
+			(uint64(b[3]) << 21)
+		rest = b[4:]
+		return
+	}
+	if len(b) > 4 && b[4] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]&0x7F) << 7) |
+			(uint64(b[2]&0x7F) << 14) |
+			(uint64(b[3]&0x7F) << 21) |
+			(uint64(b[4]) << 28)
+		rest = b[5:]
+		return
+	}
+	if len(b) > 5 && b[5] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]&0x7F) << 7) |
+			(uint64(b[2]&0x7F) << 14) |
+			(uint64(b[3]&0x7F) << 21) |
+			(uint64(b[4]&0x7F) << 28) |
+			(uint64(b[5]) << 35)
+		rest = b[6:]
+		return
+	}
+	if len(b) > 6 && b[6] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]&0x7F) << 7) |
+			(uint64(b[2]&0x7F) << 14) |
+			(uint64(b[3]&0x7F) << 21) |
+			(uint64(b[4]&0x7F) << 28) |
+			(uint64(b[5]&0x7F) << 35) |
+			(uint64(b[6]) << 42)
+		rest = b[7:]
+		return
+	}
+	if len(b) > 7 && b[7] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]&0x7F) << 7) |
+			(uint64(b[2]&0x7F) << 14) |
+			(uint64(b[3]&0x7F) << 21) |
+			(uint64(b[4]&0x7F) << 28) |
+			(uint64(b[5]&0x7F) << 35) |
+			(uint64(b[6]&0x7F) << 42) |
+			(uint64(b[7]) << 49)
+		rest = b[8:]
+		return
+	}
+	if len(b) > 8 && b[8] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]&0x7F) << 7) |
+			(uint64(b[2]&0x7F) << 14) |
+			(uint64(b[3]&0x7F) << 21) |
+			(uint64(b[4]&0x7F) << 28) |
+			(uint64(b[5]&0x7F) << 35) |
+			(uint64(b[6]&0x7F) << 42) |
+			(uint64(b[7]&0x7F) << 49) |
+			(uint64(b[8]) << 56)
+		rest = b[9:]
+		return
+	}
+	if len(b) > 9 && b[9] < 0x80 {
+		v = uint64(b[0]&0x7F) |
+			(uint64(b[1]&0x7F) << 7) |
+			(uint64(b[2]&0x7F) << 14) |
+			(uint64(b[3]&0x7F) << 21) |
+			(uint64(b[4]&0x7F) << 28) |
+			(uint64(b[5]&0x7F) << 35) |
+			(uint64(b[6]&0x7F) << 42) |
+			(uint64(b[7]&0x7F) << 49) |
+			(uint64(b[8]&0x7F) << 56) |
+			(uint64(b[9]) << 63)
+		rest = b[10:]
+		return
+	}
+	err = errVarintEOF
+	return
 }
 
 // UnsafeBytesFromString returns a []byte view of s without copying.

@@ -92,6 +92,11 @@
   - json 序列化：
     - 提前计算长度，然后使用数组从后往前赋值的方法来提升性能  =>  ❌ 负优化，无提升
   - FromProtobuf的性能只有 ToProtobuf 的一半不到。相比之下，pb 反序列化的性能优化值得做
+  - 数组类型的优化:
+    - `r._ValuesArr = append(r._ValuesArr, ReadonlyValueTypes{})`
+    - 先计算出元素个数
+    - 预先扩容到指定大小
+    - 使用切片得到某个成员，而不是 append
 * 类型扩展
   - 支持 decimal 数据类型 => 无意义 ❌ => 需要认真考虑，否则对金融领域的支持就会有限
 * 扩展语法：

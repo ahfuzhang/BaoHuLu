@@ -709,6 +709,65 @@ func TestEncodeJSONString(t *testing.T) {
 	})
 }
 
+// ─── ReadVarint ───────────────────────────────────────────────────────────────
+
+func TestReadVarint(t *testing.T) {
+	cases := []struct {
+		name string
+		v    uint64
+	}{
+		{"1byte_min", 0},
+		{"1byte_max", (1 << 7) - 1},
+		{"2byte_min", 1 << 7},
+		{"2byte_max", (1 << 14) - 1},
+		{"3byte_min", 1 << 14},
+		{"3byte_max", (1 << 21) - 1},
+		{"4byte_min", 1 << 21},
+		{"4byte_max", (1 << 28) - 1},
+		{"5byte_min", 1 << 28},
+		{"5byte_max", (1 << 35) - 1},
+		{"6byte_min", 1 << 35},
+		{"6byte_max", (1 << 42) - 1},
+		{"7byte_min", 1 << 42},
+		{"7byte_max", (1 << 49) - 1},
+		{"8byte_min", 1 << 49},
+		{"8byte_max", (1 << 56) - 1},
+		{"9byte_min", 1 << 56},
+		{"9byte_max", (1 << 63) - 1},
+		{"10byte_min", uint64(1) << 63},
+		{"10byte_max", ^uint64(0)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := AppendVarint(nil, tc.v)
+			b = append(b, 0xAA) // sentinel to verify rest slicing
+			got, rest, err := ReadVarint(b)
+			if err != nil {
+				t.Fatalf("ReadVarint(%d): unexpected error: %v", tc.v, err)
+			}
+			if got != tc.v {
+				t.Fatalf("ReadVarint(%d): got %d want %d", tc.v, got, tc.v)
+			}
+			if len(rest) != 1 || rest[0] != 0xAA {
+				t.Fatalf("ReadVarint(%d): unexpected rest %v", tc.v, rest)
+			}
+		})
+	}
+}
+
+func TestReadVarint_EOF(t *testing.T) {
+	// 10 continuation bytes: all 10 conditions false → errVarintEOF
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = 0x80
+	}
+	_, _, err := ReadVarint(b)
+	if err == nil {
+		t.Fatal("expected EOF error from ReadVarint")
+	}
+}
+
 var benchmarkInput = "benchmark payload with escape chars:\n newline \t tab \" double-quote \\ backslash; " +
 	"padding to ensure length exceeds one hundred bytes: 0123456789abcdef0123456789abcdef"
 

@@ -27,7 +27,7 @@ func ParseUint64BestEffort(s string) uint64 {
 			if i > 18 {
 				// The integer part may be out of range for uint64.
 				// Fall back to slow parsing.
-				dd, err := strconv.ParseUint(s, 10, 64)
+				dd, err := strconv.ParseUint(s, 10, 64) // 占 7.68%
 				if err != nil {
 					return 0
 				}
@@ -66,7 +66,7 @@ func ParseUint64(s string) (uint64, error) {
 			if i > 18 {
 				// The integer part may be out of range for uint64.
 				// Fall back to slow parsing.
-				dd, err := strconv.ParseUint(s, 10, 64)
+				dd, err := strconv.ParseUint(s, 10, 64) // 占 7.68%
 				if err != nil {
 					return 0, err
 				}

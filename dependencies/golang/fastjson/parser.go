@@ -16,9 +16,6 @@ import (
 // Parser cannot be used from concurrent goroutines.
 // Use per-goroutine parsers or ParserPool instead.
 type Parser struct {
-	// b contains working copy of the string to be parsed.
-	//b []byte
-
 	// c is a cache for json values.
 	c cache
 }
@@ -45,25 +42,8 @@ func (p *Parser) Parse(s string) (*Value, error) {
 }
 
 func (p *Parser) Reset() {
-	//p.b = p.b[:0]
 	p.c.reset()
 }
-
-// func (p *Parser) ParseNoCopy(s string) (*Value, error) {
-// 	s = skipWS(s)
-// 	p.b = s2b(s)
-// 	p.c.reset()
-
-// 	v, tail, err := p.c.parseValue(b2s(p.b), 0)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("cannot parse JSON: %s; unparsed tail: %q", err, startEndString(tail))
-// 	}
-// 	tail = skipWS(tail)
-// 	if len(tail) > 0 {
-// 		return nil, fmt.Errorf("unexpected tail: %q", startEndString(tail))
-// 	}
-// 	return v, nil
-// }
 
 // ParseBytes parses b containing JSON.
 //
@@ -293,31 +273,7 @@ func (c *cache) parseObject(s string, depth int) (*Value, string, error) {
 	}
 }
 
-func escapeString(dst []byte, s string) []byte {
-	if !hasSpecialChars(s) {
-		// Fast path - nothing to escape.
-		dst = append(dst, '"')
-		dst = append(dst, s...)
-		dst = append(dst, '"')
-		return dst
-	}
-
-	// Slow path.
-	return strconv.AppendQuote(dst, s)
-}
-
-func hasSpecialChars(s string) bool {
-	if strings.IndexByte(s, '"') >= 0 || strings.IndexByte(s, '\\') >= 0 {
-		return true
-	}
-	for i := range len(s) {
-		if s[i] < 0x20 {
-			return true
-		}
-	}
-	return false
-}
-
+// 资源占用 14.32%
 func (c *cache) unescapeStringBestEffort(s string) string {
 	n := strings.IndexByte(s, '\\')
 	if n < 0 {
@@ -333,7 +289,6 @@ func (c *cache) unescapeStringBestEffort(s string) string {
 		c.arena = append(c.arena, s...)
 	}
 	b := c.arena[len(c.arena)-len(s):] // It is safe to do, since b is no longer reachable after this line.
-	//b := s2b(s) // It is safe to do, since s points to a byte slice in Parser.b.
 	b = b[:n]
 	s = s[n+1:]
 	for len(s) > 0 {
@@ -363,7 +318,7 @@ func (c *cache) unescapeStringBestEffort(s string) string {
 				break
 			}
 			xs := s[:4]
-			x, err := strconv.ParseUint(xs, 16, 16)
+			x, err := strconv.ParseUint(xs, 16, 16) // 占 7.68%
 			if err != nil {
 				// Invalid escape sequence. Just store it unchanged.
 				b = append(b, "\\u"...)
@@ -382,88 +337,7 @@ func (c *cache) unescapeStringBestEffort(s string) string {
 				b = append(b, xs...)
 				break
 			}
-			x1, err := strconv.ParseUint(s[2:6], 16, 16)
-			if err != nil {
-				b = append(b, "\\u"...)
-				b = append(b, xs...)
-				break
-			}
-			r := utf16.DecodeRune(rune(x), rune(x1))
-			b = append(b, string(r)...)
-			s = s[6:]
-		default:
-			// Unknown escape sequence. Just store it unchanged.
-			b = append(b, '\\', ch)
-		}
-		n = strings.IndexByte(s, '\\')
-		if n < 0 {
-			b = append(b, s...)
-			break
-		}
-		b = append(b, s[:n]...)
-		s = s[n+1:]
-	}
-	return b2s(b)
-}
-
-func unescapeStringBestEffort1(s string) string {
-	n := strings.IndexByte(s, '\\')
-	if n < 0 {
-		// Fast path - nothing to unescape.
-		return s
-	}
-
-	// Slow path - unescape string.
-	b := s2b(s) // It is safe to do, since s points to a byte slice in Parser.b.
-	b = b[:n]
-	s = s[n+1:]
-	for len(s) > 0 {
-		ch := s[0]
-		s = s[1:]
-		switch ch {
-		case '"':
-			b = append(b, '"')
-		case '\\':
-			b = append(b, '\\')
-		case '/':
-			b = append(b, '/')
-		case 'b':
-			b = append(b, '\b')
-		case 'f':
-			b = append(b, '\f')
-		case 'n':
-			b = append(b, '\n')
-		case 'r':
-			b = append(b, '\r')
-		case 't':
-			b = append(b, '\t')
-		case 'u':
-			if len(s) < 4 {
-				// Too short escape sequence. Just store it unchanged.
-				b = append(b, "\\u"...)
-				break
-			}
-			xs := s[:4]
-			x, err := strconv.ParseUint(xs, 16, 16)
-			if err != nil {
-				// Invalid escape sequence. Just store it unchanged.
-				b = append(b, "\\u"...)
-				break
-			}
-			s = s[4:]
-			if !utf16.IsSurrogate(rune(x)) {
-				b = append(b, string(rune(x))...)
-				break
-			}
-
-			// Surrogate.
-			// See https://en.wikipedia.org/wiki/Universal_Character_Set_characters#Surrogates
-			if len(s) < 6 || s[0] != '\\' || s[1] != 'u' {
-				b = append(b, "\\u"...)
-				b = append(b, xs...)
-				break
-			}
-			x1, err := strconv.ParseUint(s[2:6], 16, 16)
+			x1, err := strconv.ParseUint(s[2:6], 16, 16) // 占 7.68%
 			if err != nil {
 				b = append(b, "\\u"...)
 				b = append(b, xs...)
@@ -577,40 +451,6 @@ func (o *Object) reset() {
 	o.keysUnescaped = false
 }
 
-// MarshalTo appends marshaled o to dst and returns the result.
-func (o *Object) MarshalTo(dst []byte) []byte {
-	dst = append(dst, '{')
-	kvs := o.kvs
-	for i := range kvs {
-		kv := &kvs[i]
-		if o.keysUnescaped {
-			dst = escapeString(dst, kv.k)
-		} else {
-			dst = append(dst, '"')
-			dst = append(dst, kv.k...)
-			dst = append(dst, '"')
-		}
-		dst = append(dst, ':')
-		dst = kv.v.MarshalTo(dst)
-		if i != len(o.kvs)-1 {
-			dst = append(dst, ',')
-		}
-	}
-	dst = append(dst, '}')
-	return dst
-}
-
-// String returns string representation for the o.
-//
-// This function is for debugging purposes only. It isn't optimized for speed.
-// See MarshalTo instead.
-func (o *Object) String() string {
-	b := o.MarshalTo(nil)
-	// It is safe converting b to string without allocation, since b is no longer
-	// reachable after this line.
-	return b2s(b)
-}
-
 func (o *Object) getKV() *kv {
 	if cap(o.kvs) > len(o.kvs) {
 		o.kvs = o.kvs[:len(o.kvs)+1]
@@ -676,55 +516,6 @@ func (v *Value) reset() {
 
 	v.s = ""
 	v.t = 0
-}
-
-// MarshalTo appends marshaled v to dst and returns the result.
-func (v *Value) MarshalTo(dst []byte) []byte {
-	switch v.t {
-	case typeRawString:
-		dst = append(dst, '"')
-		dst = append(dst, v.s...)
-		dst = append(dst, '"')
-		return dst
-	case TypeObject:
-		return v.o.MarshalTo(dst)
-	case TypeArray:
-		dst = append(dst, '[')
-		for i, vv := range v.a {
-			dst = vv.MarshalTo(dst)
-			if i != len(v.a)-1 {
-				dst = append(dst, ',')
-			}
-		}
-		dst = append(dst, ']')
-		return dst
-	case TypeString:
-		return escapeString(dst, v.s)
-	case TypeNumber:
-		return append(dst, v.s...)
-	case TypeTrue:
-		return append(dst, "true"...)
-	case TypeFalse:
-		return append(dst, "false"...)
-	case TypeNull:
-		return append(dst, "null"...)
-	default:
-		panic(fmt.Errorf("BUG: unexpected Value type: %d", v.t))
-	}
-}
-
-// String returns string representation of the v.
-//
-// The function is for debugging purposes only. It isn't optimized for speed.
-// See MarshalTo instead.
-//
-// Don't confuse this function with StringBytes, which must be called
-// for obtaining the underlying JSON string for the v.
-func (v *Value) String() string {
-	b := v.MarshalTo(nil)
-	// It is safe converting b to string without allocation, since b is no longer
-	// reachable after this line.
-	return b2s(b)
 }
 
 // Type represents JSON type.

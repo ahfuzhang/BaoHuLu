@@ -1478,6 +1478,17 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				r.{{.Name}} = make({{.ReaderType}}, _mapObj.Len())
 				{{- end}}
 			}
+{{- if mapValIsMsg .MapVal}}
+			if r._{{.Name}}Arr == nil {
+				r._{{.Name}}Arr = make([]{{readonlyTypeName .MapVal}}, 0, _mapObj.Len())
+			} else {
+				if cap(r._{{.Name}}Arr) >= _mapObj.Len() {
+					r._{{.Name}}Arr = r._{{.Name}}Arr[:0]
+				} else {
+					r._{{.Name}}Arr = make([]{{readonlyTypeName .MapVal}}, 0, _mapObj.Len())
+				}
+			}
+{{- end}}
 			_mapObj.Visit(func(mk []byte, mv *fastjson.Value) {
 				if visitErr != nil {
 					return
@@ -1496,6 +1507,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				mKey = {{mapKeyGoType .MapKey}}(_mk64)
 {{- else if eq $kc "signed64"}}
+				// todo: use fastfloat.ParseUint64
 				_mk64, _ek := strconv.ParseInt(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 64)
 				if _ek != nil {
 					visitErr = _ek
@@ -1503,6 +1515,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				mKey = _mk64
 {{- else if eq $kc "unsigned32"}}
+				// todo: use fastfloat.ParseUint64
 				_mku64, _ek := strconv.ParseUint(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 32)
 				if _ek != nil {
 					visitErr = _ek
@@ -1510,6 +1523,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				mKey = {{mapKeyGoType .MapKey}}(_mku64)
 {{- else if eq $kc "unsigned64"}}
+				// todo: use fastfloat.ParseUint64
 				_mku64, _ek := strconv.ParseUint(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 64)
 				if _ek != nil {
 					visitErr = _ek
@@ -1518,18 +1532,20 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				mKey = _mku64
 {{- end}}
 {{- if mapValIsMsg .MapVal}}
-				r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
+				// r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
+				r._{{.Name}}Arr = r._{{.Name}}Arr[:len(r._{{.Name}}Arr)+1]
 				_mValIdx := len(r._{{.Name}}Arr) - 1
 				_subObj, _eo := mv.Object()
 				if _eo != nil {
 					visitErr = _eo
 					return
 				}
-				if _eo2 := r._{{.Name}}Arr[_mValIdx].fromJSONValue(_subObj, parser); _eo2 != nil {
+				sub := &r._{{.Name}}Arr[_mValIdx]
+				if _eo2 := sub.fromJSONValue(_subObj, parser); _eo2 != nil {
 					visitErr = _eo2
 					return
 				}
-				r.{{.Name}}[mKey] = &r._{{.Name}}Arr[_mValIdx]
+				r.{{.Name}}[mKey] = sub
 {{- else}}
 				var mVal {{mapValGoType .MapVal}}
 {{- $vc := jsonScalarClass .MapVal}}
@@ -1613,6 +1629,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ev2 error
+					// todo: use fastfloat.ParseUint64
 					_uv, _ev2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 					if _ev2 != nil {
 						visitErr = _ev2
@@ -1750,6 +1767,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ei2 error
+					// todo: use fastfloat.ParseUint64
 					_uv, _ei2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 					if _ei2 != nil {
 						visitErr = _ei2
@@ -1871,6 +1889,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					return
 				}
 				var _e2 error
+				// todo: use fastfloat.ParseUint64
 				_uv, _e2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 				if _e2 != nil {
 					visitErr = _e2
@@ -1898,11 +1917,11 @@ func (r *Readonly{{$goName}}) FromJSON(src []byte, parser *fastjson.Parser) erro
 	if parser == nil {
 		parser = &fastjson.Parser{}
 	}
-	v, err := parser.Parse(unsafe.String(&src[0], len(src)))
+	v, err := parser.Parse(unsafe.String(unsafe.SliceData(src), len(src)))
 	if err != nil {
 		return err
 	}
-	obj, err := v.Object()
+	obj, err := v.Object()  // todo: 函数本身消耗资源为整个函数的 33.86%
 	if err != nil {
 		return err
 	}

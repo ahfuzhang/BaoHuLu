@@ -545,6 +545,7 @@ var escapeTable [256 / 8]byte = func() [256 / 8]byte {
 }()
 
 func ConsumeVarint(b []byte) (uint64, []byte, int64) {
+	// todo: 加速 1-2 字节的解码性能
 	var x uint64
 	var s uint
 	for i, c := range b {

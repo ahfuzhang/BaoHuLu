@@ -1199,6 +1199,40 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 		if err != nil {
 			return err
 		}
+		// c1 := in[0]
+		// wt = utils.WireType(c1 & 0x7)
+		// if c1 < 0x80 {
+		// 	fieldNum = int(c1) >> 3
+		// 	in = in[1:]
+		// } else if len(in) > 1 && in[1] < 0x80 {
+		// 	fieldNum = ((int(c1) >> 3) & 15) | (int(in[1]) << 4)
+		// 	in = in[2:]
+		// } else {
+		// 	var x uint64
+		// 	var s uint
+		// 	var found bool
+		// 	for i, c := range in {
+		// 		if i == 10 {
+		// 			return fmt.Errorf("varint overflow")
+		// 		}
+		// 		if c < 0x80 {
+		// 			x |= uint64(c) << s
+		// 			found = true
+		// 			in = in[i+1:]
+		// 			break
+		// 		}
+		// 		x |= uint64(c&0x7f) << s
+		// 		s += 7
+		// 	}
+		// 	if !found {
+		// 		return fmt.Errorf("unexpected EOF reading varint")
+		// 	}
+		// 	fieldNum = int(x >> 3)
+		// 	// fieldNum, _, in, err = utils.ConsumeTag(in)
+		// 	// if err != nil {
+		// 	// 	return err
+		// 	// }
+		// }
 		switch fieldNum {
 {{- range .Fields}}
 		case {{$goName}}{{.Name}}Tag: // {{.Name}}

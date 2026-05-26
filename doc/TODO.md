@@ -43,6 +43,7 @@
     - 增加单元测试
     - 增加对比测试
     - 增加 benchmark
+  - 尝试做 PGO 优化  
 * CSharp
   - 成员上加上 attribute，支持原生的 json 编解码 ✅
   - 生成 test ✅
@@ -90,6 +91,7 @@
   - 对于 数组类型，要能够数出来 item 的数量
   - json 序列化：
     - 提前计算长度，然后使用数组从后往前赋值的方法来提升性能  =>  ❌ 负优化，无提升
+  - FromProtobuf的性能只有 ToProtobuf 的一半不到。相比之下，pb 反序列化的性能优化值得做
 * 类型扩展
   - 支持 decimal 数据类型 => 无意义 ❌ => 需要认真考虑，否则对金融领域的支持就会有限
 * 扩展语法：
@@ -109,6 +111,7 @@
   - hulu --version  ✅
 * 编程语言支持
   - 支持 js 的 pb 序列化/反序列化
+  - 支持 typescript
 * 格式支持
   - 考虑支持 yaml 格式
     - FromYAML() 时，对 map 使用 perfect hash，让读具备极高的性能

@@ -47,7 +47,7 @@ const (
 // AppendVarint encodes v as a protobuf varint and appends it to b.
 // VarintSize computes the byte count via a single LZCNT/BSR instruction (no comparisons).
 // The switch dispatches on that integer value, which the compiler lowers to a jump table.
-// todo: 这个函数的性能仍然有优化空间
+// todo: 这个函数的性能仍然有优化空间  => 使用 *[10]byte 来优化
 func AppendVarint(b []byte, v uint64) []byte {
 	// fast path
 	if v < 0x80 {
@@ -58,7 +58,17 @@ func AppendVarint(b []byte, v uint64) []byte {
 			byte(v)|0x80,
 			byte(v>>7))
 	}
-	switch VarintSize(v) {
+	n := (bits.Len64(v|1) + 6) / 7
+	/*
+		// 未发现明显的效果
+		if cap(b)-len(b) >= n {
+			// enought space
+			b = b[:len(b)+n]
+			_ = EncodeVarint(b, len(b), v)
+			return b
+		}
+	*/
+	switch n {
 	case 0:
 		return nil
 	case 1:
@@ -293,33 +303,77 @@ func AppendLenDelim(b []byte, data []byte) []byte {
 
 // ConsumeTag reads a field tag (field number + wire type) from b.
 func ConsumeTag(b []byte) (fieldNum int, wt WireType, rest []byte, err error) {
-	var v uint64
-	var code int64
-	v, rest, code = ConsumeVarint(b) // rest is the named return; assigned directly
-	if code != 0 {
-		err = consumeVarintError(code)
-		rest = b // restore original slice on error
+	c1 := b[0]
+	wt = WireType(c1 & 0x7)
+	if c1 < 0x80 {
+		fieldNum = int(c1) >> 3
+		rest = b[1:]
 		return
 	}
-	fieldNum = int(v >> 3)
-	wt = WireType(v & 0x7)
+	if len(b) > 1 && b[1] < 0x80 {
+		fieldNum = ((int(c1) >> 3) & 15) | (int(b[1]) << 4)
+		rest = b[2:]
+		return
+	}
+	// slow path
+	var x uint64
+	var s uint
+	for i, c := range b {
+		if i == 10 {
+			err = fmt.Errorf("varint overflow")
+			return
+		}
+		if c < 0x80 {
+			x |= uint64(c) << s
+			fieldNum = int(x >> 3)
+			rest = b[i+1:]
+			return
+		}
+		x |= uint64(c&0x7f) << s
+		s += 7
+	}
+	err = fmt.Errorf("unexpected EOF reading varint")
 	return
 }
 
 // ConsumeBytes reads a length-delimited byte slice from b.
-func ConsumeBytes(b []byte) (data []byte, rest []byte, err error) {
-	var l uint64
-	var code int64
-	l, rest, code = ConsumeVarint(b)
-	if code != 0 {
-		err = consumeVarintError(code)
-		rest = b
-		return
+func ConsumeBytes(b []byte) ([]byte, []byte, error) {
+	l := uint64(b[0])
+	if l < 0x80 {
+		// fast path
+		rest := b[1:]
+		if uint64(len(rest)) < l {
+			return nil, b, fmt.Errorf("not enough bytes: need %d have %d", l, len(rest))
+		}
+		return rest[:l], rest[l:], nil
 	}
-	if uint64(len(rest)) < l {
-		return nil, b, fmt.Errorf("not enough bytes: need %d have %d", l, len(rest))
+	if len(b) > 1 && b[1] < 0x80 {
+		l = (l & 0x7f) | (uint64(b[1]) << 7)
+		rest := b[2:]
+		if uint64(len(rest)) < l {
+			return nil, b, fmt.Errorf("not enough bytes: need %d have %d", l, len(rest))
+		}
+		return rest[:l], rest[l:], nil
 	}
-	return rest[:l], rest[l:], nil
+	// slow path
+	l = 0
+	var s uint
+	for i, c := range b {
+		if i == 10 {
+			return nil, nil, fmt.Errorf("varint overflow")
+		}
+		if c < 0x80 {
+			l |= uint64(c) << s
+			rest := b[i+1:]
+			if uint64(len(rest)) < l {
+				return nil, b, fmt.Errorf("not enough bytes: need %d have %d", l, len(rest))
+			}
+			return rest[:l], rest[l:], nil
+		}
+		l |= uint64(c&0x7f) << s
+		s += 7
+	}
+	return nil, nil, fmt.Errorf("unexpected EOF reading varint")
 }
 
 // SkipField advances past a single field value of the given wire type.
@@ -359,6 +413,31 @@ func ReadInt32(b []byte) (int32, []byte, error) {
 		return 0, b, consumeVarintError(code)
 	}
 	return int32(v), rest, nil
+}
+
+func ReadInt32V1(b []byte) (int32, []byte, error) {
+	var v int32
+	if b[0] < 0x80 {
+		return int32(b[0]), b[1:], nil
+	}
+	if len(b) > 1 && b[1] < 0x80 {
+		v = int32(b[0]&0x7F) | (int32(b[1]) << 7)
+		return v, b[2:], nil
+	}
+	if len(b) > 2 && b[2] < 0x80 {
+		v = int32(b[0]&0x7F) | (int32(b[1]&0x7F) << 7) | (int32(b[2]) << 14)
+		return v, b[3:], nil
+	}
+	if len(b) > 3 && b[3] < 0x80 {
+		v = int32(b[0]&0x7F) | (int32(b[1]&0x7F) << 7) | (int32(b[2]&0x7F) << 14) | (int32(b[3]) << 21)
+		return v, b[4:], nil
+	}
+	if len(b) > 4 && b[4] < 0x80 {
+		v = int32(b[0]&0x7F) | (int32(b[1]&0x7F) << 7) | (int32(b[2]&0x7F) << 14) | (int32(b[3]&0x7F) << 21) | (int32(b[4]) << 28)
+		return v, b[5:], nil
+	}
+	fmt.Printf("%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X \n", b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9])
+	return 0, nil, errVarintOverflow
 }
 
 func ReadInt64(b []byte) (int64, []byte, error) {
@@ -546,6 +625,16 @@ var escapeTable [256 / 8]byte = func() [256 / 8]byte {
 
 func ConsumeVarint(b []byte) (uint64, []byte, int64) {
 	// todo: 加速 1-2 字节的解码性能
+	/*
+		// 看起来是负优化
+		if b[0] < 0x80 {
+			// fast path
+			return uint64(b[0]), b[1:], 0
+		}
+		if len(b) > 1 && b[1] < 0x80 {
+			return (uint64(b[0]) & 0x7F) | (uint64(b[1]) << 7), b[2:], 0
+		}
+	*/
 	var x uint64
 	var s uint
 	for i, c := range b {

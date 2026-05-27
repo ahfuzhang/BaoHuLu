@@ -626,6 +626,100 @@ func ReadVarint(b []byte) (v uint64, rest []byte, err error) {
 		rest = b[1:]
 		return
 	}
+	if len(b) >= 10 {
+		if b[1] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]) << 7)
+			rest = b[2:]
+			return
+		}
+		if b[2] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]&0x7F) << 7) |
+				(uint64(b[2]) << 14)
+			rest = b[3:]
+			return
+		}
+		if b[3] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]&0x7F) << 7) |
+				(uint64(b[2]&0x7F) << 14) |
+				(uint64(b[3]) << 21)
+			rest = b[4:]
+			return
+		}
+		if b[4] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]&0x7F) << 7) |
+				(uint64(b[2]&0x7F) << 14) |
+				(uint64(b[3]&0x7F) << 21) |
+				(uint64(b[4]) << 28)
+			rest = b[5:]
+			return
+		}
+		if b[5] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]&0x7F) << 7) |
+				(uint64(b[2]&0x7F) << 14) |
+				(uint64(b[3]&0x7F) << 21) |
+				(uint64(b[4]&0x7F) << 28) |
+				(uint64(b[5]) << 35)
+			rest = b[6:]
+			return
+		}
+		if b[6] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]&0x7F) << 7) |
+				(uint64(b[2]&0x7F) << 14) |
+				(uint64(b[3]&0x7F) << 21) |
+				(uint64(b[4]&0x7F) << 28) |
+				(uint64(b[5]&0x7F) << 35) |
+				(uint64(b[6]) << 42)
+			rest = b[7:]
+			return
+		}
+		if b[7] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]&0x7F) << 7) |
+				(uint64(b[2]&0x7F) << 14) |
+				(uint64(b[3]&0x7F) << 21) |
+				(uint64(b[4]&0x7F) << 28) |
+				(uint64(b[5]&0x7F) << 35) |
+				(uint64(b[6]&0x7F) << 42) |
+				(uint64(b[7]) << 49)
+			rest = b[8:]
+			return
+		}
+		if b[8] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]&0x7F) << 7) |
+				(uint64(b[2]&0x7F) << 14) |
+				(uint64(b[3]&0x7F) << 21) |
+				(uint64(b[4]&0x7F) << 28) |
+				(uint64(b[5]&0x7F) << 35) |
+				(uint64(b[6]&0x7F) << 42) |
+				(uint64(b[7]&0x7F) << 49) |
+				(uint64(b[8]) << 56)
+			rest = b[9:]
+			return
+		}
+		if b[9] < 0x80 {
+			v = uint64(b[0]&0x7F) |
+				(uint64(b[1]&0x7F) << 7) |
+				(uint64(b[2]&0x7F) << 14) |
+				(uint64(b[3]&0x7F) << 21) |
+				(uint64(b[4]&0x7F) << 28) |
+				(uint64(b[5]&0x7F) << 35) |
+				(uint64(b[6]&0x7F) << 42) |
+				(uint64(b[7]&0x7F) << 49) |
+				(uint64(b[8]&0x7F) << 56) |
+				(uint64(b[9]) << 63)
+			rest = b[10:]
+			return
+		}
+		err = errVarintEOF
+		return
+	}
 	if len(b) > 1 && b[1] < 0x80 {
 		v = uint64(b[0]&0x7F) |
 			(uint64(b[1]) << 7)
@@ -828,4 +922,32 @@ func ConsumeVarint(b []byte) (uint64, []byte, int64) {
 		s += 7
 	}
 	return 0, b, 2
+}
+
+func ConsumeVarintV1(b []byte) (v uint64, rest []byte, err error) {
+	// todo: 加速 1-2 字节的解码性能
+	/*
+		// 看起来是负优化
+		if b[0] < 0x80 {
+			// fast path
+			return uint64(b[0]), b[1:], 0
+		}
+		if len(b) > 1 && b[1] < 0x80 {
+			return (uint64(b[0]) & 0x7F) | (uint64(b[1]) << 7), b[2:], 0
+		}
+	*/
+	var x uint64
+	var s uint
+	for i, c := range b {
+		if i == 10 {
+			return 0, b, errVarintEOF
+		}
+		if c < 0x80 {
+			x |= uint64(c) << s
+			return x, b[i+1:], nil
+		}
+		x |= uint64(c&0x7f) << s
+		s += 7
+	}
+	return 0, b, errVarintOverflow
 }

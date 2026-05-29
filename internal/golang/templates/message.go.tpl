@@ -1284,9 +1284,17 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if err != nil {
 				return err
 			}
+			//  _mapKeyCount := utils.CountMapKey(entryData)  // 这个没有用，这个值一定是 1
 			var mKey {{mapKeyGoType .MapKey}}
 			{{- if mapValIsMsg .MapVal}}
-			r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
+			if cap(r._{{.Name}}Arr) < 16 {
+				r._{{.Name}}Arr = append(make([]{{readonlyTypeName .MapVal}}, 0, 16), r._{{.Name}}Arr...)
+			}
+			if cap(r._{{.Name}}Arr) == len(r._{{.Name}}Arr) {
+				r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
+			} else {
+				r._{{.Name}}Arr = r._{{.Name}}Arr[:len(r._{{.Name}}Arr)+1]
+			}
 			_mValIdx := len(r._{{.Name}}Arr) - 1
 			{{- else}}
 			var mVal {{mapValGoType .MapVal}}
@@ -1321,9 +1329,9 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			}
 			if r.{{.Name}} == nil {
 				{{- if mapValIsMsg .MapVal}}
-				r.{{.Name}} = make(map[{{mapKeyGoType .MapKey}}]*{{readonlyTypeName .MapVal}})
+				r.{{.Name}} = make(map[{{mapKeyGoType .MapKey}}]*{{readonlyTypeName .MapVal}}, 64)
 				{{- else}}
-				r.{{.Name}} = make({{.ReaderType}})
+				r.{{.Name}} = make({{.ReaderType}}, 64)
 				{{- end}}
 			}
 			{{- if mapValIsMsg .MapVal}}
@@ -1332,6 +1340,10 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			r.{{.Name}}[mKey] = mVal
 			{{- end}}
 {{- else if .Repeated}}
+            if cap(r.{{.Name}}) < 64 {
+				temp := make({{.ReaderType}}, 0, 64)  // 一开始就分配一个大一点内存，避免频繁的对 slice 扩容
+				r.{{.Name}} = append(temp, r.{{.Name}}...)
+			}
 {{- if isPackable .Type}}
 			var packedData []byte
 			packedData, in, err = utils.ConsumeBytes(in)

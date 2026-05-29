@@ -419,6 +419,28 @@ func SkipField(wt WireType, b []byte) ([]byte, error) {
 	return b, fmt.Errorf("unknown wire type %d", wt)
 }
 
+// CountMapKey scans a protobuf map-entry byte slice and counts the occurrences
+// of field 1 (the key field). For a well-formed single entry this returns 1;
+// the caller uses it to pre-size the destination map via make(map[K]V, n).
+func CountMapKey(data []byte) int {
+	n := 0
+	for len(data) > 0 {
+		fieldNum, wt, rest, err := ConsumeTag(data)
+		if err != nil {
+			break
+		}
+		data = rest
+		if fieldNum == 1 {
+			n++
+		}
+		data, err = SkipField(wt, data)
+		if err != nil {
+			break
+		}
+	}
+	return n
+}
+
 // ─── Scalar read ──────────────────────────────────────────────────────────────
 
 func ReadInt32V0(b []byte) (int32, []byte, error) {
@@ -925,7 +947,6 @@ func ConsumeVarint(b []byte) (uint64, []byte, int64) {
 }
 
 func ConsumeVarintV1(b []byte) (v uint64, rest []byte, err error) {
-	// todo: 加速 1-2 字节的解码性能
 	/*
 		// 看起来是负优化
 		if b[0] < 0x80 {

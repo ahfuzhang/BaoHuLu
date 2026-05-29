@@ -34,6 +34,7 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 	type metrics struct {
 		bytesPerSec float64
 		allocsPerOp int64
+		opsPerSec   float64
 	}
 
 	runBench := func(fn func() int) metrics {
@@ -63,6 +64,7 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 		return metrics{
 			bytesPerSec: float64(totalBytes) / elapsed.Seconds(),
 			allocsPerOp: allocsPerOp,
+			opsPerSec:   float64(count) / elapsed.Seconds(),
 		}
 	}
 
@@ -71,6 +73,16 @@ func Test_{{$goName}}_with_compare(t *testing.T) {
 			return fmt.Sprintf("%.2f GB/s", bps/1e9)
 		}
 		return fmt.Sprintf("%.2f MB/s", bps/1e6)
+	}
+
+	fmtOPS := func(ops float64) string {
+		// if ops >= 1e6 {
+		// 	return fmt.Sprintf("%.2f M times/s", ops/1e6)
+		// }
+		// if ops >= 1e3 {
+		// 	return fmt.Sprintf("%.2f K times/s", ops/1e3)
+		// }
+		return fmt.Sprintf("%.0f times/s", ops)
 	}
 
 	fmtPct := func(base, cmp float64, cmpName string) string {
@@ -225,11 +237,12 @@ skipJSONDecode:
 	}
 
 	mdBase := func(m metrics) string {
-		return fmt.Sprintf("%s<br>%d allocs/op", fmtBPS(m.bytesPerSec), m.allocsPerOp)
+		return fmt.Sprintf("%s<br>%d allocs/op<br>%s", fmtBPS(m.bytesPerSec), m.allocsPerOp, fmtOPS(m.opsPerSec))
 	}
 	mdCmp := func(m, base metrics) string {
-		return fmt.Sprintf("%s<br>%d allocs/op<br>%s",
+		return fmt.Sprintf("%s<br>%d allocs/op<br>%s<br>%s",
 			fmtBPS(m.bytesPerSec), m.allocsPerOp,
+			fmtOPS(m.opsPerSec),
 			fmtPctMD(base.bytesPerSec, m.bytesPerSec),
 		)
 	}

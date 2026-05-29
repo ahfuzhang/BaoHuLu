@@ -579,3 +579,58 @@ pb decode:    [FromProtobuf] 12.75 GB/s, 0 allocs/op
 |:----------|:-------:|
 | pb encode | 1.51 GB/s<br>0 allocs/op |
 | pb decode | 819.87 MB/s<br>0 allocs/op |
+
+# 2026-05-29, linux, amd64, intel 4.5GHz
+
+## all types
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 1.67 GB/s<br>0 allocs/op<br>13644 times/s | 162.23 MB/s<br>3261 allocs/op<br>1325 times/s<br><span style="color:red">+930.1%</span> | 390.28 MB/s<br>77 allocs/op<br>3186 times/s<br><span style="color:red">+328.2%</span> | 1.17 GB/s<br>40 allocs/op<br>9571 times/s<br><span style="color:red">+42.5%</span> |
+| json decode | 528.60 MB/s<br>52 allocs/op<br>4316 times/s | 151.76 MB/s<br>1357 allocs/op<br>1239 times/s<br><span style="color:red">+248.3%</span> | 180.47 MB/s<br>1357 allocs/op<br>1473 times/s<br><span style="color:red">+192.9%</span> | 413.99 MB/s<br>1060 allocs/op<br>3380 times/s<br><span style="color:red">+27.7%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 1.33 GB/s<br>0 allocs/op<br>17760 times/s |
+| pb decode | 601.66 MB/s<br>155 allocs/op<br>8008 times/s |
+
+## value types
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 2.97 GB/s<br>0 allocs/op<br>12811964 times/s | 410.60 MB/s<br>3 allocs/op<br>1769839 times/s<br><span style="color:red">+623.9%</span> | 384.06 MB/s<br>3 allocs/op<br>1655431 times/s<br><span style="color:red">+673.9%</span> | 1.17 GB/s<br>3 allocs/op<br>5050167 times/s<br><span style="color:red">+153.7%</span> |
+| json decode | 961.32 MB/s<br>0 allocs/op<br>4143613 times/s | 230.17 MB/s<br>1 allocs/op<br>992102 times/s<br><span style="color:red">+317.7%</span> | 274.95 MB/s<br>1 allocs/op<br>1185116 times/s<br><span style="color:red">+249.6%</span> | 609.52 MB/s<br>3 allocs/op<br>2627234 times/s<br><span style="color:red">+57.7%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 1.93 GB/s<br>0 allocs/op<br>32732309 times/s |
+| pb decode | 1.42 GB/s<br>0 allocs/op<br>24087522 times/s |
+
+## all types, 优化 map 和 slice 的初始化大小
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 1.72 GB/s<br>0 allocs/op<br>14079 times/s | 162.38 MB/s<br>3260 allocs/op<br>1326 times/s<br><span style="color:red">+962.0%</span> | 392.32 MB/s<br>77 allocs/op<br>3203 times/s<br><span style="color:red">+339.6%</span> | 1.15 GB/s<br>40 allocs/op<br>9416 times/s<br><span style="color:red">+49.5%</span> |
+| json decode | 521.40 MB/s<br>52 allocs/op<br>4257 times/s | 155.00 MB/s<br>1357 allocs/op<br>1265 times/s<br><span style="color:red">+236.4%</span> | 184.76 MB/s<br>1357 allocs/op<br>1508 times/s<br><span style="color:red">+182.2%</span> | 416.61 MB/s<br>1060 allocs/op<br>3401 times/s<br><span style="color:red">+25.2%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 1.34 GB/s<br>0 allocs/op<br>17781 times/s |
+| pb decode | 777.39 MB/s<br>56 allocs/op<br>10347 times/s |
+
+* before: 601.66 MB/s<br>155 allocs/op<br>8008 times/s
+  - 提升 29.21%
+  
+

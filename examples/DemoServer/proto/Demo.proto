@@ -89,7 +89,7 @@ message AllTypes {
   // 所有字段都展开后：linux+amd64 下, json decode 的性能快于 sonic 12%
 
   // @decimal=round:7
-  double price = 1013;
+  // double price = 1013;  // encoding/json 库序列化时会失败
 }
 
 // @from-post-form

@@ -38,7 +38,7 @@
   - Clone 方法中: 整数的数组类型，是否按照字节对齐了? ✅
   - 与 golang 1.26 的 json/v2 做性能对比 ✅
   - 把 FromProtobufVT() 做出来 ✅
-    - 现在同时使用了两个版本，需要决定最终暴露哪个版本
+    - 现在同时使用了两个版本，需要决定最终暴露哪个版本 ✅,  ToProtobuf() 方法，两个版本并存。简单类型使用 ToProtobufVT(), 复杂类型使用 ToProtobufAppend()
   - vtprotobuf
     - 增加单元测试
     - 增加对比测试
@@ -101,7 +101,7 @@
   - 支持 decimal 数据类型 => 无意义 ❌ => 需要认真考虑，否则对金融领域的支持就会有限
 * 扩展语法：
   - @path 支持多次使用  ✅
-  - @decimal=round:5   支持 decimal 数据类型，小数位数 5 位
+  - @decimal=round:5   支持 decimal 数据类型，小数位数 5 位  ✅
   - rewrite datatype 选项：
     - 允许在编码阶段把 int64 类型改写为 fixed64，当值大于等于  1<<49，用 fixed64 存储，更加节约空间和性能
     - 后果：其他工具实现的编解码，无法与当前的二进制格式兼容。

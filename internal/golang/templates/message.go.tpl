@@ -23,6 +23,12 @@ var _ = unsafe.Pointer(nil)
 var _ = math.Float32bits
 var _ = strconv.IntSize
 var _ = base64.StdEncoding
+var _ = utils.AppendVarint
+var _ *fastjson.Parser
+var _ = fastfloat.ParseBestEffort
+{{- if anyMsgHasDecimalField .Messages}}
+var _ = decimal.New
+{{- end}}
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 {{range .Enums}}

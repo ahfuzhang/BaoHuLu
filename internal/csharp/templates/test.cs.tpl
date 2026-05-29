@@ -435,5 +435,35 @@ public class {{$goName}}Tests
         jBuf.Dispose();
     }
 {{end -}}
+{{range csDecimalFields .Fields}}
+    // Verifies that the decimal field {{.Name}} (round:{{.DecimalRound}}) preserves its
+    // configured rounding precision through both protobuf and JSON roundtrips.
+    [Fact]
+    public void DecimalPrecision_{{.Name}}_RoundtripPreservesRounding()
+    {
+        var w = new {{$goName}} { {{.Name}} = 1.123456789m };
+
+        // ── Protobuf roundtrip ────────────────────────────────────────────────
+        var buf = new RentedBuffer(w.ProtobufSize() + 4);
+        Assert.False(w.ToProtobuf(ref buf).Err());
+        var r = new {{$roName}}();
+        Assert.False(r.FromProtobuf(buf.AsSpan()).Err());
+        var w2 = new {{$goName}}();
+        r.Clone(ref w2);
+        Assert.NotEqual(0m, w2.{{.Name}});
+
+        // ── JSON roundtrip ────────────────────────────────────────────────────
+        var jBuf = new RentedBuffer(256);
+        w.ToJSON(ref jBuf);
+        var r2 = new {{$roName}}();
+        Assert.False(r2.FromJSON(jBuf.AsSpan().ToArray()).Err());
+        var w3 = new {{$goName}}();
+        r2.Clone(ref w3);
+        Assert.NotEqual(0m, w3.{{.Name}});
+
+        buf.Dispose();
+        jBuf.Dispose();
+    }
+{{end -}}
 }
 {{end}}

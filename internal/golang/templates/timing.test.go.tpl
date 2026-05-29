@@ -13,6 +13,9 @@ import (
 	"github.com/bytedance/sonic"
 
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastjson"
+{{- if anyMsgHasDecimalField .Messages}}
+	"github.com/govalues/decimal"
+{{- end}}
 )
 
 {{range .Messages}}

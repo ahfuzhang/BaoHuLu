@@ -95,10 +95,23 @@ message Child{
 * 对于 golang:
   - 每个 struct 后的成员，在 json 这个 tag 之后增加 `json:"${XX},omitempty", ${Name}:"${Value}"`
 
-### #formName
+### @formName
 
 * 此扩展用于定义使用 `application/x-www-form-urlencoded` 进行编码的表单的名字
 
+### @decimal
+
+* 此扩展，便于在金融领域使用 decimal 类型来表示金额
+* 语法为 `// @decimal=round:5`
+* 限制：必须用于 double 类型的字段上方
+* 对于 golang:
+  - 使用库 github.com/govalues/decimal 中的 decimal 类型。代码模版会把 double 替换为 decimal
+* 对于 csharp
+  - 使用 csharp 自带的 decimal 类型
+* 精度处理：
+  - `round:5` 这一段的含义是，最大的小数位数为 5
+  - 序列化时：根据 round 的小数精度，在指定的位数上做四舍五入. 然后按照 double 类型来序列化
+  - 反序列化时：先按照 double 类型来反序列化，然后按照 round 要求的精度来四舍五入，然后再赋值给 decimal 类型。
 
 ## method 扩展语法
 

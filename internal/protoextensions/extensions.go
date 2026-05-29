@@ -9,7 +9,10 @@
 // tooling continues to work unchanged.
 package protoextensions
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // TagExt holds a single @tag extension: @tag=Name:Value.
 type TagExt struct {
@@ -32,6 +35,9 @@ type FieldExtensions struct {
 	YamlName string
 	// Tags holds arbitrary extra struct tags produced by @tag=Name:Value.
 	Tags []TagExt
+	// DecimalRound, when > 0, marks this field as a decimal type with the given number of
+	// decimal places. Only valid on proto double fields. Syntax: @decimal=round:N
+	DecimalRound int
 }
 
 // MessageExtensions collects all extension annotations found on a proto message.
@@ -77,6 +83,14 @@ func ParseAndStripField(lines []string) (FieldExtensions, []string) {
 					Name:  strings.TrimSpace(tagName),
 					Value: strings.TrimSpace(tagVal),
 				})
+			}
+		case "decimal":
+			// value format: "round:N"
+			_, roundStr, ok := strings.Cut(value, "round:")
+			if ok {
+				if n, err := strconv.Atoi(strings.TrimSpace(roundStr)); err == nil && n > 0 {
+					ext.DecimalRound = n
+				}
 			}
 		}
 	}

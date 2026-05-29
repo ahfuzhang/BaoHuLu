@@ -44,6 +44,9 @@ func (g *Generator) csWriterType(fd protofile.FieldDef) string {
 		elem := g.csValType(fd.Type)
 		return fmt.Sprintf("List<%s>", elem)
 	}
+	if fd.DecimalRound > 0 {
+		return "decimal"
+	}
 	return g.csValType(fd.Type)
 }
 
@@ -57,6 +60,9 @@ func (g *Generator) csReadonlyType(fd protofile.FieldDef) string {
 	if fd.Repeated {
 		elem := g.csReadonlyValType(fd.Type)
 		return fmt.Sprintf("List<%s>", elem)
+	}
+	if fd.DecimalRound > 0 {
+		return "decimal"
 	}
 	return g.csReadonlyValType(fd.Type)
 }
@@ -102,6 +108,8 @@ func csDefaultValue(csType string) string {
 		return "0.0"
 	case "float":
 		return "0.0f"
+	case "decimal":
+		return "0m"
 	}
 	if strings.HasSuffix(csType, "[]") || strings.HasPrefix(csType, "Dictionary<") {
 		return "null"
@@ -184,6 +192,8 @@ type CsFieldTpl struct {
 	IsFixed32  bool // float, fixed32, sfixed32
 	IsFixed64  bool // double, fixed64, sfixed64
 	IsPackable bool // repeated packable numeric
+	IsDecimal  bool // @decimal=round:N annotation: double → System.Decimal
+	DecimalRound int // rounding precision for @decimal fields
 	// C# type strings
 	WriterType         string // C# type for mutable struct field
 	ReadonlyType       string // C# type for readonly struct field
@@ -230,6 +240,7 @@ func NewGenerator(pg *protofile.Generator) *Generator {
 }
 
 func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
+	isDecimal := fd.DecimalRound > 0
 	f := CsFieldTpl{
 		Name:               fd.Name,
 		JsonName:           fd.JsonName,
@@ -245,7 +256,7 @@ func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 		IsSint32:           fd.Type == "sint32",
 		IsSint64:           fd.Type == "sint64",
 		IsFixed32:          fd.Type == "float" || fd.Type == "fixed32" || fd.Type == "sfixed32",
-		IsFixed64:          fd.Type == "double" || fd.Type == "fixed64" || fd.Type == "sfixed64",
+		IsFixed64:          !isDecimal && (fd.Type == "double" || fd.Type == "fixed64" || fd.Type == "sfixed64"),
 		IsPackable:         fd.Repeated && csIsPackable(fd.Type),
 		WriterType:         g.csWriterType(fd),
 		ReadonlyType:       g.csReadonlyType(fd),
@@ -255,6 +266,8 @@ func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 		MapKey:             fd.MapKey,
 		MapVal:             fd.MapVal,
 		Type:               fd.Type,
+		IsDecimal:          isDecimal,
+		DecimalRound:       fd.DecimalRound,
 	}
 	if fd.Map {
 		f.MapKeyCS = g.csScalarType(fd.MapKey)
@@ -539,6 +552,8 @@ func primitiveCSLit(csType string) string {
 		return "1.5f"
 	case "double":
 		return "1.5"
+	case "decimal":
+		return "1.12345m"
 	case "long":
 		return "42L"
 	case "ulong":
@@ -626,6 +641,17 @@ func firstCsStringField(fields []CsFieldTpl) *CsFieldTpl {
 	return nil
 }
 
+// csDecimalFields returns all plain (non-map, non-repeated) decimal fields in the list.
+func csDecimalFields(fields []CsFieldTpl) []CsFieldTpl {
+	var out []CsFieldTpl
+	for _, f := range fields {
+		if f.IsDecimal && !f.IsMap && !f.IsRepeated {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // safeUnknownFieldNum returns a field number guaranteed to be above any field
 // defined in the message, suitable for use as an "unknown field" in tests.
 func safeUnknownFieldNum(fields []CsFieldTpl) int {
@@ -679,6 +705,7 @@ func (g *Generator) RenderCSTest(out *os.File, namespace, baseFileName string) e
 		"firstCsStringField":  firstCsStringField,
 		"safeUnknownFieldNum": safeUnknownFieldNum,
 		"csTagByteArray":      csTagByteArray,
+		"csDecimalFields":     csDecimalFields,
 	}
 
 	tmpl, err := template.New("cs_test").Funcs(fnMap).Parse(csTestCodeTemplate)

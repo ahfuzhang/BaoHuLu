@@ -91,7 +91,7 @@ func runXi(args []string) {
 // modulePath is derived from the proto file: the full "option go_package" value
 // is used when present; otherwise the "package" statement value is used.
 // The generated file declares the runtime dependencies of the generated code.
-func writeGoMod(modPath, goPackage, packageName string, withTest bool) error {
+func writeGoMod(modPath, goPackage, packageName string, withTest, withDecimal bool) error {
 	modulePath := goPackage
 	if modulePath == "" {
 		modulePath = packageName
@@ -99,8 +99,20 @@ func writeGoMod(modPath, goPackage, packageName string, withTest bool) error {
 	if modulePath == "" {
 		modulePath = "generated"
 	}
-	content := gogen.GoModContent(modulePath, Version, withTest)
+	content := gogen.GoModContent(modulePath, Version, withTest, withDecimal)
 	return os.WriteFile(modPath, utils.UnsafeBytesFromString(content), 0644)
+}
+
+// hasDecimalFields returns true when any message in the proto has a @decimal field.
+func hasDecimalFields(pg *protofile.Generator) bool {
+	for _, md := range pg.Messages {
+		for _, fd := range md.Fields {
+			if fd.DecimalRound > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // writeCsTestProj creates a .csproj file for the generated C# test project.
@@ -180,7 +192,7 @@ func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, w
 	}
 
 	modPath := filepath.Join(goOut, "go.mod")
-	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, withTest); err != nil {
+	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, withTest, hasDecimalFields(pg)); err != nil {
 		return fmt.Errorf("write %s: %w", modPath, err)
 	}
 	fmt.Printf("generated %s\n", modPath)

@@ -81,6 +81,8 @@ func ZeroVal(goType string) string {
 		return `""`
 	case "[]byte":
 		return "nil"
+	case "decimal.Decimal":
+		return "decimal.Decimal{}"
 	default:
 		if strings.HasPrefix(goType, "[]") || strings.HasPrefix(goType, "map[") || strings.HasPrefix(goType, "*") {
 			return "nil"
@@ -98,6 +100,8 @@ func ReaderZero(rt string) string {
 		return "false"
 	case "string":
 		return `""`
+	case "decimal.Decimal":
+		return "decimal.Decimal{}"
 	case "[]byte":
 		return "nil"
 	default:
@@ -309,6 +313,9 @@ func readerFieldNameMax(fields []FieldTpl) int {
 // writerFieldType returns the Go type string for a writer struct field,
 // matching what go.tpl generates.
 func (g *Generator) writerFieldType(f FieldTpl) string {
+	if f.IsDecimal {
+		return "decimal.Decimal"
+	}
 	if f.Map && f.MapValIsMsg {
 		kgt, _, _ := g.ProtoTypeToGo(f.MapKey, false)
 		vgt, _, _ := g.ProtoTypeToGo(f.MapVal, false)
@@ -325,6 +332,9 @@ func (g *Generator) writerFieldType(f FieldTpl) string {
 func (g *Generator) readerFieldType(f FieldTpl) string {
 	if f.IsRawBuf {
 		return "[]byte"
+	}
+	if f.IsDecimal {
+		return "decimal.Decimal"
 	}
 	if f.Map && f.MapValIsMsg {
 		kgt, _, _ := g.ProtoTypeToGo(f.MapKey, false)
@@ -531,6 +541,7 @@ type FieldTpl struct {
 	StructTag       string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
 	MapValIsMsg     bool   // true when MapVal is a message type (not scalar/enum)
 	ElemIsRecursive bool   // true when map/repeated element msg type cycles back to the containing message
+	IsDecimal       bool   // true when field has @decimal=round:N annotation (double → decimal.Decimal)
 }
 
 type MsgTpl struct {
@@ -667,6 +678,10 @@ func (g *Generator) makeFieldTpl(fd protofile.FieldDef, containingMsgName string
 			elemIsRecursive = canReachViaAllEdges(g.Messages, fd.Type, containingMsgName, visited)
 		}
 	}
+	isDecimal := fd.DecimalRound > 0
+	if isDecimal && fd.Type != "double" {
+		panic(fmt.Sprintf("@decimal annotation on field %q: only allowed on double fields, got %q", fd.Name, fd.Type))
+	}
 	return FieldTpl{
 		FieldDef:        fd,
 		WireType:        wt,
@@ -674,6 +689,7 @@ func (g *Generator) makeFieldTpl(fd protofile.FieldDef, containingMsgName string
 		StructTag:       buildStructTag(fd),
 		MapValIsMsg:     mapValIsMsg,
 		ElemIsRecursive: elemIsRecursive,
+		IsDecimal:       isDecimal,
 	}
 }
 
@@ -853,7 +869,10 @@ func (g *Generator) Render(out *os.File) error {
 			}
 			return false
 		},
-		"hasMapsOrMsgs": HasMapsOrMsgs,
+		"hasMapsOrMsgs":           HasMapsOrMsgs,
+		"hasDecimalFields":         HasDecimalFields,
+		"anyMsgHasDecimalField":    AnyMsgHasDecimalField,
+		"decimalRound":             func(f FieldTpl) int { return f.DecimalRound },
 		// tagSize computes utils.TagSize(fieldNum, wireType) at template generation time,
 		// so the generated code contains the literal integer instead of a runtime call.
 		"tagSize": func(fieldNum, wireType int) int {
@@ -1008,6 +1027,9 @@ func SampleFieldLiteral(ft FieldTpl) string {
 		}
 		return fmt.Sprintf("makeSample%s()", ft.GoType)
 	}
+	if ft.IsDecimal {
+		return "decimal.MustParse(\"1.12345\")"
+	}
 	return SampleScalarLiteral(ft.Type, ft.GoType)
 }
 
@@ -1149,12 +1171,12 @@ func LargeIntLit(ft FieldTpl) string {
 }
 
 // FirstScalarField returns the first plain (non-map, non-repeated, non-msg,
-// non-rawBuffer) field, or nil when no such field exists. The returned field
+// non-rawBuffer, non-decimal) field, or nil when no such field exists. The returned field
 // is used by the test template to generate JSON-type-error tests.
 func FirstScalarField(fields []FieldTpl) *FieldTpl {
 	for i := range fields {
 		f := &fields[i]
-		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf {
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf && !f.IsDecimal {
 			return f
 		}
 	}
@@ -1179,6 +1201,26 @@ func HasMapsOrSlices(fields []FieldTpl) bool {
 func HasMapsOrMsgs(fields []FieldTpl) bool {
 	for _, f := range fields {
 		if f.Map || f.IsMsg {
+			return true
+		}
+	}
+	return false
+}
+
+// HasDecimalFields returns true when any field in the list uses @decimal annotation.
+func HasDecimalFields(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if f.IsDecimal {
+			return true
+		}
+	}
+	return false
+}
+
+// AnyMsgHasDecimalField returns true when any message in the list has a decimal field.
+func AnyMsgHasDecimalField(msgs []MsgTpl) bool {
+	for _, m := range msgs {
+		if HasDecimalFields(m.Fields) {
 			return true
 		}
 	}
@@ -1317,11 +1359,11 @@ func boundaryLitsForType(protoType string) []typeBoundary {
 
 // NumericBoundaryCases returns one BoundaryCase per boundary value per direct
 // scalar numeric field in fields. Only plain (non-map, non-repeated, non-msg)
-// fields are considered.
+// fields are considered. Decimal fields are excluded (they use a separate test).
 func NumericBoundaryCases(fields []FieldTpl) []BoundaryCase {
 	var out []BoundaryCase
 	for _, f := range fields {
-		if f.Map || f.Repeated || f.IsMsg || f.IsRawBuf {
+		if f.Map || f.Repeated || f.IsMsg || f.IsRawBuf || f.IsDecimal {
 			continue
 		}
 		for _, b := range boundaryLitsForType(f.Type) {
@@ -1337,9 +1379,10 @@ func NumericBoundaryCases(fields []FieldTpl) []BoundaryCase {
 
 // HasNumericBoundaryFields returns true if any direct scalar numeric field
 // (int32, uint32, int64, uint64, float, double and their aliases) exists.
+// Decimal fields are excluded.
 func HasNumericBoundaryFields(fields []FieldTpl) bool {
 	for _, f := range fields {
-		if f.Map || f.Repeated || f.IsMsg || f.IsRawBuf {
+		if f.Map || f.Repeated || f.IsMsg || f.IsRawBuf || f.IsDecimal {
 			continue
 		}
 		if len(boundaryLitsForType(f.Type)) > 0 {
@@ -1349,10 +1392,10 @@ func HasNumericBoundaryFields(fields []FieldTpl) bool {
 	return false
 }
 
-// HasFloatFields returns true if any direct scalar float or double field exists.
+// HasFloatFields returns true if any direct scalar float or double field exists (excluding decimal).
 func HasFloatFields(fields []FieldTpl) bool {
 	for _, f := range fields {
-		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf {
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf && !f.IsDecimal {
 			if f.Type == "float" || f.Type == "double" {
 				return true
 			}
@@ -1361,11 +1404,11 @@ func HasFloatFields(fields []FieldTpl) bool {
 	return false
 }
 
-// FloatFields returns all direct scalar float and double fields.
+// FloatFields returns all direct scalar float and double fields (excluding decimal).
 func FloatFields(fields []FieldTpl) []FieldTpl {
 	var out []FieldTpl
 	for _, f := range fields {
-		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf {
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf && !f.IsDecimal {
 			if f.Type == "float" || f.Type == "double" {
 				out = append(out, f)
 			}
@@ -1728,6 +1771,17 @@ func (g *Generator) RenderTest(out *os.File) error {
 		"hasFloatFields":           HasFloatFields,
 		"floatFields":              FloatFields,
 		"floatIntLit":              FloatIntLit,
+		"anyMsgHasDecimalField":    AnyMsgHasDecimalField,
+		"hasDecimalFields":         HasDecimalFields,
+		"decimalFields":            func(fields []FieldTpl) []FieldTpl {
+			var out []FieldTpl
+			for _, f := range fields {
+				if f.IsDecimal {
+					out = append(out, f)
+				}
+			}
+			return out
+		},
 	}
 	tmpl, err := template.New("pb_test").Funcs(fnMap).Parse(testTemplate)
 	if err != nil {
@@ -1802,6 +1856,7 @@ func (g *Generator) RenderBench(out *os.File) error {
 		"hasAnyRecursiveField":    HasAnyRecursiveField,
 		"benchMapFillRecursive":   BenchMapFillRecursive,
 		"benchSliceFillRecursive": BenchSliceFillRecursive,
+		"anyMsgHasDecimalField":   AnyMsgHasDecimalField,
 	}
 	tmpl, err := template.New("pb_timing_test").Funcs(fnMap).Parse(benchTemplate)
 	if err != nil {

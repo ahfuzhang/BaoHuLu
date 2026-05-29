@@ -349,6 +349,13 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
                         _pos += 4;
                     }
+{{- else if .IsDecimal}}
+                    {
+                        if (!TryReadFixed64(binary, _pos, out ulong _f64v{{.Name}}))
+                            return Error.WithLoc(1, "bad fixed64 {{.Name}}");
+                        this.{{.Name}} = Math.Round((decimal)BitConverter.UInt64BitsToDouble(_f64v{{.Name}}), {{.DecimalRound}}, MidpointRounding.AwayFromZero);
+                        _pos += 8;
+                    }
 {{- else if .IsFixed64}}
                     {
                         if (!TryReadFixed64(binary, _pos, out ulong _f64v{{.Name}}))
@@ -560,6 +567,8 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                     this.{{.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else if .IsEnum}}
                     { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _ev{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_ev{{.Name}}; }
+{{- else if .IsDecimal}}
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = Math.Round((decimal)_dv{{.Name}}, {{.DecimalRound}}, MidpointRounding.AwayFromZero); }
 {{- else if eq .WriterType "double"}}
                     { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _dv{{.Name}}; }
 {{- else if eq .WriterType "float"}}
@@ -864,6 +873,9 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- else if .IsFixed32}}
         if ({{.Name}} != {{csDefault .WriterType}})
             _size += {{tagSize .Number 5}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, 32bit=5) */ + 4;
+{{- else if .IsDecimal}}
+        if ({{.Name}} != 0m)
+            _size += {{tagSize .Number 1}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, 64bit=1) */ + 8;
 {{- else if .IsFixed64}}
         if ({{.Name}} != {{csDefault .WriterType}})
             _size += {{tagSize .Number 1}} /* TagSize({{$goName}}Tags.Tag{{.Name}}, 64bit=1) */ + 8;
@@ -1156,6 +1168,12 @@ public partial struct {{$goName}} : IResettable, IEncoder
             WriteFixed32(ref buf, {{.Name}});
 {{- end}}
         }
+{{- else if .IsDecimal}}
+        if ({{.Name}} != 0m)
+        {
+            WriteTag(ref buf, {{$goName}}Tags.Tag{{.Name}}, WireType64Bit);
+            WriteFixed64(ref buf, BitConverter.DoubleToUInt64Bits((double)Math.Round({{.Name}}, {{.DecimalRound}}, MidpointRounding.AwayFromZero)));
+        }
 {{- else if .IsFixed64}}
         if ({{.Name}} != {{csDefault .WriterType}})
         {
@@ -1330,6 +1348,13 @@ public partial struct {{$goName}} : IResettable, IEncoder
             if (!_first) buf.Append((byte)','); _first = false;
             buf.Append((byte)'"'); buf.Append({{$goName}}Tags.JsonKey{{.Name}}); buf.Append("\":"u8);
             buf.Append((long)(int){{.Name}});
+        }
+{{- else if .IsDecimal}}
+        if ({{.Name}} != 0m)
+        {
+            if (!_first) buf.Append((byte)','); _first = false;
+            buf.Append((byte)'"'); buf.Append({{$goName}}Tags.JsonKey{{.Name}}); buf.Append("\":"u8);
+            buf.Append((double)Math.Round({{.Name}}, {{.DecimalRound}}, MidpointRounding.AwayFromZero));
         }
 {{- else if eq .WriterType "double"}}
         if ({{.Name}} != 0.0)

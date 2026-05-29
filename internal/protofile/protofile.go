@@ -46,6 +46,10 @@ type FieldDef struct {
 	// type participates in a cycle in the message dependency graph. Such fields
 	// must be pointer types in Go to avoid an infinite-size struct.
 	IsRecursive bool
+
+	// DecimalRound, when > 0, marks this field as a financial decimal type with the
+	// specified number of decimal places (@decimal=round:N). Only valid on double fields.
+	DecimalRound int
 }
 
 type MessageDef struct {
@@ -284,15 +288,16 @@ func (g *Generator) CollectMessage(m *proto.Message) {
 				formName = fieldExt.FormName
 			}
 			fd := FieldDef{
-				Name:      name,
-				JsonName:  jsonName,
-				FormName:  formName,
-				Number:    v.Sequence,
-				Type:      v.Type,
-				Repeated:  v.Repeated,
-				Comment:   cleanComments,
-				YamlName:  fieldExt.YamlName,
-				ExtraTags: fieldExt.Tags,
+				Name:         name,
+				JsonName:     jsonName,
+				FormName:     formName,
+				Number:       v.Sequence,
+				Type:         v.Type,
+				Repeated:     v.Repeated,
+				Comment:      cleanComments,
+				YamlName:     fieldExt.YamlName,
+				ExtraTags:    fieldExt.Tags,
+				DecimalRound: fieldExt.DecimalRound,
 			}
 			fd.GoType, fd.IsMsg, fd.IsEnum = g.ProtoTypeToGo(v.Type, v.Repeated)
 			md.Fields = append(md.Fields, fd)

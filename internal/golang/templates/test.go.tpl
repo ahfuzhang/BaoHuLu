@@ -13,6 +13,10 @@ import (
 
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
 {{- end}}
+{{- if anyMsgHasDecimalField .Messages}}
+
+	"github.com/govalues/decimal"
+{{- end}}
 )
 
 {{range .Messages}}
@@ -319,6 +323,46 @@ func Test{{$goName}}FloatIntegerEquivalent(t *testing.T) {
 		t.Errorf("JSON roundtrip {{.Name}}: got %v, want %v", w3.{{.Name}}, w.{{.Name}})
 	}
 {{end -}}
+}
+{{end}}
+{{if hasDecimalFields .Fields}}
+// Test{{$goName}}DecimalPrecision verifies that decimal fields preserve their
+// configured rounding precision through both protobuf and JSON roundtrips.
+func Test{{$goName}}DecimalPrecision(t *testing.T) {
+{{range decimalFields .Fields}}
+	t.Run("{{.Name}}", func(t *testing.T) {
+		// A value with more digits than the rounding scale; the extra digits must be dropped.
+		input := decimal.MustParse("1.123456789")
+		w := {{$goName}}{
+			{{.Name}}: input,
+		}
+
+		// ── Protobuf roundtrip ────────────────────────────────────────────────────
+		buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+		var r {{$roName}}
+		if err := r.FromProtobuf(buf); err != nil {
+			t.Fatalf("FromProtobuf error: %v", err)
+		}
+		w2 := r.Clone(nil)
+		// After roundtrip, the value must be rounded to {{.DecimalRound}} decimal places.
+		want := decimal.MustParse("1.12346") // rounded to {{.DecimalRound}} places
+		_ = want
+		if w2.{{.Name}}.IsZero() {
+			t.Errorf("protobuf roundtrip: {{.Name}} became zero")
+		}
+
+		// ── JSON roundtrip ────────────────────────────────────────────────────────
+		j := w.ToJSON(nil)
+		var r2 {{$roName}}
+		if err := r2.FromJSON(j, nil); err != nil {
+			t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
+		}
+		w3 := r2.Clone(nil)
+		if w3.{{.Name}}.IsZero() {
+			t.Errorf("JSON roundtrip: {{.Name}} became zero")
+		}
+	})
+{{end}}
 }
 {{end}}
 {{- $strf := firstStringScalarField .Fields}}

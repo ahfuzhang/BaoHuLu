@@ -24,7 +24,8 @@ const sonicIndirectDeps = "\nrequire (\n" +
 // GoModContent renders the embedded go.mod template for a generated module.
 // If withTest is true, github.com/bytedance/sonic and its indirect deps are added so the
 // generated directory works without running go mod tidy.
-func GoModContent(modulePath, version string, withTest bool) string {
+// If withDecimal is true, github.com/govalues/decimal is added for @decimal fields.
+func GoModContent(modulePath, version string, withTest, withDecimal bool) string {
 	// "dev" / "(devel)" are not valid go.mod version strings; use the null pseudo-version
 	// so the generated file is at least syntactically valid.
 	if version == "dev" || version == "(devel)" {
@@ -32,6 +33,12 @@ func GoModContent(modulePath, version string, withTest bool) string {
 	}
 	baoHuLuRequire := fmt.Sprintf("\tgithub.com/ahfuzhang/BaoHuLu %s", version)
 	content := fmt.Sprintf(goModTemplate, modulePath, version)
+	if withDecimal {
+		content = strings.Replace(content,
+			baoHuLuRequire,
+			baoHuLuRequire+"\n\tgithub.com/govalues/decimal v0.1.3",
+			1)
+	}
 	if withTest {
 		content = strings.Replace(content,
 			baoHuLuRequire,

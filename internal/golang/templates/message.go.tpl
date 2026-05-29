@@ -13,6 +13,9 @@ import (
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastjson"
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastfloat"
+{{- if anyMsgHasDecimalField .Messages}}
+	"github.com/govalues/decimal"
+{{- end}}
 )
 
 // for build time check
@@ -92,6 +95,8 @@ func (m *{{$goName}}) Reset() {
 {{- end}}
 {{- else if isSliceType .GoType}}
 	m.{{.Name}} = m.{{.Name}}[:0]
+{{- else if .IsDecimal}}
+	m.{{.Name}} = decimal.Decimal{}
 {{- else}}
 	m.{{.Name}} = {{zeroVal .GoType}}
 {{- end}}
@@ -237,6 +242,10 @@ func (m *{{$goName}}) ProtobufSize() int {
 		}
 	}
 {{- end}}
+{{- else if .IsDecimal}}
+	if !m.{{.Name}}.IsZero() {
+		size += {{tagSize .Number 1}} /* TagSize({{$goName}}{{.Name}}Tag, 64bit=1) */ + 8
+	}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
 		size += {{tagSize .Number 1}} /* TagSize({{$goName}}{{.Name}}Tag, 64bit=1) */ + 8
@@ -506,6 +515,12 @@ func (m *{{$goName}}) ToProtobufByAppend(in []byte) []byte {
 		}
 	}
 {{- end}}
+{{- else if .IsDecimal}}
+	if !m.{{.Name}}.IsZero() {
+		_df{{.Name}}, _ := m.{{.Name}}.Round({{.DecimalRound}}).Float64()
+		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType64bit)
+		in = utils.AppendFixed64(in, math.Float64bits(_df{{.Name}}))
+	}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
 		in = utils.AppendTag(in, {{$goName}}{{.Name}}Tag, utils.WireType64bit)
@@ -795,6 +810,20 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
 		dst = append(dst, '"', ':')
 		dst = append(dst, "true"...)
+	}
+{{- else if $f.IsDecimal}}
+	if !m.{{$f.Name}}.IsZero() {
+		if !_jsonFirstField {
+			dst = append(dst, ',')
+		}
+		_jsonFirstField = false
+		dst = append(dst, '"')
+		dst = append(dst, NameOf{{$goName}}{{$f.Name}}...)
+		dst = append(dst, '"', ':')
+		{
+			_df, _ := m.{{$f.Name}}.Round({{decimalRound $f}}).Float64()
+			dst = strconv.AppendFloat(dst, _df, 'f', {{decimalRound $f}}, 64)
+		}
 	}
 {{- else if eq $f.Type "double"}}
 	if m.{{$f.Name}} != 0 {
@@ -1183,6 +1212,8 @@ func (r *Readonly{{$goName}}) Reset() {
 {{- end}}
 {{- else if isSliceType .ReaderType}}
 	r.{{.Name}} = r.{{.Name}}[:0]
+{{- else if .IsDecimal}}
+	r.{{.Name}} = decimal.Decimal{}
 {{- else}}
 	r.{{.Name}} = {{readerZero .ReaderType}}
 {{- end}}
@@ -1350,6 +1381,13 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if err = r.{{.Name}}.FromProtobuf(subData); err != nil {
 				return err
 			}
+{{- else if .IsDecimal}}
+			var _rawDouble{{.Name}} float64
+			_rawDouble{{.Name}}, in, err = utils.ReadDouble(in)
+			if err != nil {
+				return err
+			}
+			r.{{.Name}} = decimal.MustNew(int64(math.Round(_rawDouble{{.Name}} * math.Pow10({{.DecimalRound}}))), {{.DecimalRound}})
 {{- else if eq .Type "double"}}
 			r.{{.Name}}, in, err = utils.ReadDouble(in)
 			if err != nil {
@@ -1846,6 +1884,13 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				return
 			}
 			r.{{.Name}} = {{.ReaderType}}(_iv)
+{{- else if .IsDecimal}}
+			_fv{{.Name}}, _e{{.Name}} := v.Float64()
+			if _e{{.Name}} != nil {
+				visitErr = _e{{.Name}}
+				return
+			}
+			r.{{.Name}} = decimal.MustNew(int64(math.Round(_fv{{.Name}} * math.Pow10({{.DecimalRound}}))), {{.DecimalRound}})
 {{- else}}
 {{- $sc := jsonScalarClass .Type}}
 {{- if eq $sc "string"}}
@@ -2309,6 +2354,21 @@ func (m *{{$goName}}) marshalToSizedBufferVT(dAtA []byte) int {
 		}
 	}
 {{- end}}
+{{- else if .IsDecimal}}
+	if !m.{{.Name}}.IsZero() {
+		_dvdec{{.Name}}, _ := m.{{.Name}}.Round({{.DecimalRound}}).Float64()
+		i -= 8
+		_dv := math.Float64bits(_dvdec{{.Name}})
+		dAtA[i+7] = uint8(_dv >> 56)
+		dAtA[i+6] = uint8(_dv >> 48)
+		dAtA[i+5] = uint8(_dv >> 40)
+		dAtA[i+4] = uint8(_dv >> 32)
+		dAtA[i+3] = uint8(_dv >> 24)
+		dAtA[i+2] = uint8(_dv >> 16)
+		dAtA[i+1] = uint8(_dv >> 8)
+		dAtA[i+0] = uint8(_dv)
+		{{writeTagBytes .Number 1}}
+	}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
 		i -= 8

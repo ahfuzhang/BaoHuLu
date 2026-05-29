@@ -30,15 +30,18 @@ Run "hulu <command> -help" for command-specific flags.
 var Version = "dev"
 
 func init() {
-	if Version != "dev" {
+	if Version != "" && Version != "dev" {
 		return
 	}
 	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return
+	if ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			Version = v
+			return
+		}
 	}
-	if v := info.Main.Version; v != "" && v != "(devel)" {
-		Version = v
+	if Version == "" {
+		Version = "dev"
 	}
 }
 

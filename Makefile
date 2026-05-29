@@ -1,9 +1,12 @@
-Version ?= v0.8.1
+Version ?= v0.8.2
 
 .PHONY: build run test check check-bce
 
 build:
 	go build -ldflags "-X main.Version=$(Version)" -o ./build/hulu ./cmd/hulu/
+
+install:
+	go build -ldflags "-X main.Version=$(Version)" ./cmd/hulu/
 
 test: run
 	go test -v ./... -coverprofile=./build/coverage.out

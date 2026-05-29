@@ -498,12 +498,11 @@ func (g *Generator) readerAlignedFields(fields []FieldTpl) []AlignedField {
 			lines = append(lines, alignLine{name: "rawBuffer", typeStr: "[]byte"})
 			continue
 		}
-		tag := "`json:\"" + f.JsonName + ",omitempty\"`"
 		lines = append(lines, alignLine{
 			comment:   f.Comment,
 			name:      f.Name,
 			typeStr:   g.readerFieldType(f),
-			structTag: tag,
+			structTag: f.StructTag,
 		})
 		if f.Map && f.MapValIsMsg {
 			valGt := protofile.ReadonlyGoTypeName(f.MapVal)

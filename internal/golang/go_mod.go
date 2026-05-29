@@ -25,6 +25,11 @@ const sonicIndirectDeps = "\nrequire (\n" +
 // If withTest is true, github.com/bytedance/sonic and its indirect deps are added so the
 // generated directory works without running go mod tidy.
 func GoModContent(modulePath, version string, withTest bool) string {
+	// "dev" / "(devel)" are not valid go.mod version strings; use the null pseudo-version
+	// so the generated file is at least syntactically valid.
+	if version == "dev" || version == "(devel)" {
+		version = "v0.0.0-00010101000000-000000000000"
+	}
 	baoHuLuRequire := fmt.Sprintf("\tgithub.com/ahfuzhang/BaoHuLu %s", version)
 	content := fmt.Sprintf(goModTemplate, modulePath, version)
 	if withTest {

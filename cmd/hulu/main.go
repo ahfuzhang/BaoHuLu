@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"text/template"
 
@@ -27,6 +28,19 @@ Run "hulu <command> -help" for command-specific flags.
 `
 
 var Version = "dev"
+
+func init() {
+	if Version != "dev" {
+		return
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		Version = v
+	}
+}
 
 func main() {
 	if len(os.Args) < 2 {

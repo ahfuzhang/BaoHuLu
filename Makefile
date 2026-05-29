@@ -6,7 +6,7 @@ build:
 	go build -ldflags "-X main.Version=$(Version)" -o ./build/hulu ./cmd/hulu/
 
 install:
-	go build -ldflags "-X main.Version=$(Version)" ./cmd/hulu/
+	go install -ldflags "-X main.Version=$(Version)" ./cmd/hulu/
 
 test: run
 	go test -v ./... -coverprofile=./build/coverage.out

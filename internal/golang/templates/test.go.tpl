@@ -153,7 +153,14 @@ func Test{{$goName}}JSONRoundtrip(t *testing.T) {
 	w := makeSample{{$goName}}()
 	j := w.ToJSON(nil)
 
-{{if not (skipEncodingJSON .Fields) -}}
+{{if .AsMap -}}
+	// ── Part 1 (encoding/json skipped for @AsMap) ────────────────────────────
+	// For @AsMap messages, ToJSON produces a flat JSON object directly encoding
+	// the map (not wrapped under a field-name key). encoding/json.Unmarshal into
+	// the writer struct cannot recover the map this way, so stdlib verification
+	// is skipped. The custom FromJSON path below validates the JSON output fully.
+	_ = json.Marshal // suppress unused import
+{{else if not (skipEncodingJSON .Fields) -}}
 	// ── Part 1: verify with encoding/json ────────────────────────────────────
 	// Sample values are within JavaScript's safe-integer range, so
 	// encoding/json can decode all numeric fields without precision loss.
@@ -503,7 +510,7 @@ func Test{{$goName}}FromJSONMsgTypeError(t *testing.T) {
 	}
 }
 {{end}}
-{{- if $mapf}}
+{{- if and $mapf (not .AsMap)}}
 // Test{{$goName}}FromJSONMapTypeError verifies that passing null for a map
 // field causes FromJSON to return an error (exercises the outer v.Object()
 // error branch for map fields).
@@ -549,9 +556,15 @@ func Test{{$goName}}FromJSONBytesDecodeError(t *testing.T) {
 func Test{{$goName}}FromJSONMapValueTypeError(t *testing.T) {
 	var r {{$roName}}
 	// Null is not a valid value; the inner mv.Int64()/StringBytes()/etc. must error.
+{{- if .AsMap}}
+	if err := r.FromJSON([]byte(`{"k": null}`), nil); err == nil {
+		t.Error("expected error for null map value in @AsMap message, got nil")
+	}
+{{- else}}
 	if err := r.FromJSON([]byte(`{"{{$skm.JsonName}}": {"k": null}}`), nil); err == nil {
 		t.Errorf("expected error for null map value in field %q, got nil", "{{$skm.JsonName}}")
 	}
+{{- end}}
 }
 {{end}}
 {{- $nkm := firstNumericKeyMapField .Fields}}
@@ -563,9 +576,15 @@ func Test{{$goName}}FromJSONMapValueTypeError(t *testing.T) {
 func Test{{$goName}}FromJSONMapKeyTypeError(t *testing.T) {
 	var r {{$roName}}
 	// "not-a-number" cannot be parsed as the numeric key type.
+{{- if .AsMap}}
+	if err := r.FromJSON([]byte(`{"not-a-number": 1}`), nil); err == nil {
+		t.Error("expected error for non-numeric map key in @AsMap message, got nil")
+	}
+{{- else}}
 	if err := r.FromJSON([]byte(`{"{{$nkm.JsonName}}": {"not-a-number": 1}}`), nil); err == nil {
 		t.Errorf("expected error for non-numeric map key in field %q, got nil", "{{$nkm.JsonName}}")
 	}
+{{- end}}
 }
 {{end}}
 // Test{{$goName}}FromProtobufWithCopyRoundtrip verifies that

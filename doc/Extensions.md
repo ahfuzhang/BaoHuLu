@@ -36,6 +36,47 @@ message 上存在此扩展信息时，相当于没有这个 message，生成代�
 * 对于 map 类型：对 value 部分进行 url decode，然后按照 key-value 的格式写入
 * 对子嵌入的 message 类型：把 value 部分作为子类型的 FromPostForm() 方法的输入。
 
+### @AsMap
+
+当存在这个标签时，把整个 message 理解为 map.
+主要为了解决：
+* protobuf 不支持类似的定义： `repeated map<string, string> data = 2;`
+* 如下的定义会因为 `@AsMap` 标签而重新理解
+
+```protobuf
+// @AsMap
+message MapType {
+  map<string, string> labels = 1;
+}
+
+message Series {
+  repeated MapType data = 1;
+}
+```
+
+上面的 proto 能够描述下面的 json 数据：
+
+```json
+{
+  "data":[
+    {"label1":"value1", "label2":"value2"}
+  ]
+}
+```
+
+struct 的结构仍然不变，只是对 json 的序列化和反序列化做特殊处理:
+
+```go
+type MapType struct {
+  Labels map[string]string
+}
+
+type Series struct {
+  Data []MapType
+}
+```
+
+* 注意：只影响 FromJSON() 和 ToJSON() 的行为，其他不变
 
 ## field 扩展语法
 

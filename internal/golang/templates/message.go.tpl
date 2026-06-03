@@ -592,6 +592,98 @@ func (m *{{$goName}}) ToProtobufByAppend(in []byte) []byte {
 	return in
 }
 
+{{- if .AsMap}}
+{{- $f := index .Fields 0}}
+func (m *{{$goName}}) ToJSON(dst []byte) []byte {
+	dst = append(dst, '{')
+	_jsonFirst := true
+	for _k, _v := range m.{{$f.Name}} {
+		if !_jsonFirst {
+			dst = append(dst, ',')
+		}
+		_jsonFirst = false
+{{- if eq $f.MapKey "string"}}
+		dst = append(dst, '"')
+		dst = utils.EncodeJSONString(_k, dst)
+		dst = append(dst, '"')
+{{- else}}
+		dst = append(dst, '"')
+{{- if eq $f.MapKey "bool"}}
+		if _k {
+			dst = append(dst, "true"...)
+		} else {
+			dst = append(dst, "false"...)
+		}
+{{- else if or (eq $f.MapKey "uint32") (eq $f.MapKey "uint64") (eq $f.MapKey "fixed32") (eq $f.MapKey "fixed64")}}
+		dst = strconv.AppendUint(dst, uint64(_k), 10)
+{{- else}}
+		dst = strconv.AppendInt(dst, int64(_k), 10)
+{{- end}}
+		dst = append(dst, '"')
+{{- end}}
+		dst = append(dst, ':')
+{{- if eq $f.MapVal "string"}}
+		dst = append(dst, '"')
+		dst = utils.EncodeJSONString(_v, dst)
+		dst = append(dst, '"')
+{{- else if eq $f.MapVal "bool"}}
+		if _v {
+			dst = append(dst, "true"...)
+		} else {
+			dst = append(dst, "false"...)
+		}
+{{- else if eq $f.MapVal "double"}}
+		{
+			_fv := _v
+			_iv := int64(_fv)
+			if math.Round(_fv) == _fv && float64(_iv) == _fv {
+				dst = strconv.AppendInt(dst, _iv, 10)
+			} else {
+				dst = strconv.AppendFloat(dst, _fv, 'f', -1, 64)
+			}
+		}
+{{- else if eq $f.MapVal "float"}}
+		{
+			_fv := float64(_v)
+			_iv := int64(_fv)
+			if math.Round(_fv) == _fv && float64(_iv) == _fv {
+				dst = strconv.AppendInt(dst, _iv, 10)
+			} else {
+				dst = strconv.AppendFloat(dst, _fv, 'f', -1, 32)
+			}
+		}
+{{- else if or (eq $f.MapVal "uint32") (eq $f.MapVal "fixed32")}}
+		dst = strconv.AppendUint(dst, uint64(_v), 10)
+{{- else if or (eq $f.MapVal "uint64") (eq $f.MapVal "fixed64")}}
+		if uint64(_v) > 9007199254740991 {
+			dst = append(dst, '"')
+			dst = strconv.AppendUint(dst, uint64(_v), 10)
+			dst = append(dst, '"')
+		} else {
+			dst = strconv.AppendUint(dst, uint64(_v), 10)
+		}
+{{- else if eq $f.MapVal "bytes"}}
+		dst = append(dst, '"')
+		dst = base64.StdEncoding.AppendEncode(dst, _v)
+		dst = append(dst, '"')
+{{- else if mapValIsMsg $f.MapVal}}
+		dst = _v.ToJSON(dst)
+{{- else if or (eq $f.MapVal "int64") (eq $f.MapVal "sint64") (eq $f.MapVal "sfixed64")}}
+		if int64(_v) > 9007199254740991 || int64(_v) < -9007199254740991 {
+			dst = append(dst, '"')
+			dst = strconv.AppendInt(dst, int64(_v), 10)
+			dst = append(dst, '"')
+		} else {
+			dst = strconv.AppendInt(dst, int64(_v), 10)
+		}
+{{- else}}
+		dst = strconv.AppendInt(dst, int64(_v), 10)
+{{- end}}
+	}
+	dst = append(dst, '}')
+	return dst
+}
+{{- else}}
 func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 	dst = append(dst, '{')
 {{- if .Fields}}
@@ -944,6 +1036,7 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 	dst = append(dst, '}')
 	return dst
 }
+{{- end}}
 
 {{msgCommentBlock .Comment}}// Readonly{{$goName}} readonly struct.
 // Fields (including rawBuffer) are sorted with the fieldalignment strategy for
@@ -1236,40 +1329,6 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 		if err != nil {
 			return err
 		}
-		// c1 := in[0]
-		// wt = utils.WireType(c1 & 0x7)
-		// if c1 < 0x80 {
-		// 	fieldNum = int(c1) >> 3
-		// 	in = in[1:]
-		// } else if len(in) > 1 && in[1] < 0x80 {
-		// 	fieldNum = ((int(c1) >> 3) & 15) | (int(in[1]) << 4)
-		// 	in = in[2:]
-		// } else {
-		// 	var x uint64
-		// 	var s uint
-		// 	var found bool
-		// 	for i, c := range in {
-		// 		if i == 10 {
-		// 			return fmt.Errorf("varint overflow")
-		// 		}
-		// 		if c < 0x80 {
-		// 			x |= uint64(c) << s
-		// 			found = true
-		// 			in = in[i+1:]
-		// 			break
-		// 		}
-		// 		x |= uint64(c&0x7f) << s
-		// 		s += 7
-		// 	}
-		// 	if !found {
-		// 		return fmt.Errorf("unexpected EOF reading varint")
-		// 	}
-		// 	fieldNum = int(x >> 3)
-		// 	// fieldNum, _, in, err = utils.ConsumeTag(in)
-		// 	// if err != nil {
-		// 	// 	return err
-		// 	// }
-		// }
 		switch fieldNum {
 {{- range .Fields}}
 		case {{$goName}}{{.Name}}Tag: // {{.Name}}
@@ -1284,6 +1343,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if err != nil {
 				return err
 			}
+			// todo: 提前 count 元素个数
 			//  _mapKeyCount := utils.CountMapKey(entryData)  // 这个没有用，这个值一定是 1
 			var mKey {{mapKeyGoType .MapKey}}
 			{{- if mapValIsMsg .MapVal}}
@@ -1546,7 +1606,185 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 	}
 	return nil
 }
-
+{{- if .AsMap}}
+{{- $f := index .Fields 0}}
+func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjson.Parser) error {
+	var visitErr error
+	if r.{{$f.Name}} == nil {
+		{{- if mapValIsMsg $f.MapVal}}
+		r.{{$f.Name}} = make(map[{{mapKeyGoType $f.MapKey}}]*{{readonlyTypeName $f.MapVal}}, obj.Len())
+		{{- else}}
+		r.{{$f.Name}} = make({{$f.ReaderType}}, obj.Len())
+		{{- end}}
+	}
+{{- if mapValIsMsg $f.MapVal}}
+	if r._{{$f.Name}}Arr == nil {
+		r._{{$f.Name}}Arr = make([]{{readonlyTypeName $f.MapVal}}, 0, obj.Len())
+	} else {
+		if cap(r._{{$f.Name}}Arr) >= obj.Len() {
+			r._{{$f.Name}}Arr = r._{{$f.Name}}Arr[:0]
+		} else {
+			r._{{$f.Name}}Arr = make([]{{readonlyTypeName $f.MapVal}}, 0, obj.Len())
+		}
+	}
+{{- end}}
+	obj.Visit(func(mk []byte, mv *fastjson.Value) {
+		if visitErr != nil {
+			return
+		}
+		var mKey {{mapKeyGoType $f.MapKey}}
+{{- $kc := jsonMapKeyClass $f.MapKey}}
+{{- if eq $kc "string"}}
+		mKey = unsafe.String(unsafe.SliceData(mk), len(mk))
+{{- else if eq $kc "bool"}}
+		mKey = unsafe.String(unsafe.SliceData(mk), len(mk)) == "true"
+{{- else if eq $kc "signed32"}}
+		_mk64, _ek := fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(mk), len(mk)))
+		if _ek != nil {
+			visitErr = _ek
+			return
+		}
+		mKey = {{mapKeyGoType $f.MapKey}}(_mk64)
+{{- else if eq $kc "signed64"}}
+		_mk64, _ek := fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(mk), len(mk)))
+		if _ek != nil {
+			visitErr = _ek
+			return
+		}
+		mKey = _mk64
+{{- else if eq $kc "unsigned32"}}
+		_mku64, _ek := fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(mk), len(mk)))
+		if _ek != nil {
+			visitErr = _ek
+			return
+		}
+		mKey = {{mapKeyGoType $f.MapKey}}(_mku64)
+{{- else if eq $kc "unsigned64"}}
+		_mku64, _ek := fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(mk), len(mk)))
+		if _ek != nil {
+			visitErr = _ek
+			return
+		}
+		mKey = _mku64
+{{- end}}
+{{- if mapValIsMsg $f.MapVal}}
+		r._{{$f.Name}}Arr = r._{{$f.Name}}Arr[:len(r._{{$f.Name}}Arr)+1]
+		_mValIdx := len(r._{{$f.Name}}Arr) - 1
+		_subObj, _eo := mv.Object()
+		if _eo != nil {
+			visitErr = _eo
+			return
+		}
+		sub := &r._{{$f.Name}}Arr[_mValIdx]
+		if _eo2 := sub.fromJSONValue(_subObj, parser); _eo2 != nil {
+			visitErr = _eo2
+			return
+		}
+		r.{{$f.Name}}[mKey] = sub
+{{- else}}
+		var mVal {{mapValGoType $f.MapVal}}
+{{- $vc := jsonScalarClass $f.MapVal}}
+{{- if eq $vc "string"}}
+		_ = mv.Type(parser)
+		_b, _ev := mv.StringBytes()
+		if _ev != nil {
+			visitErr = _ev
+			return
+		}
+		mVal = unsafe.String(unsafe.SliceData(_b), len(_b))
+{{- else if eq $vc "bytes"}}
+		_b64, _ev := mv.StringBytes()
+		if _ev != nil {
+			visitErr = _ev
+			return
+		}
+		var _ev2 error
+		mVal, _ev2 = base64.StdEncoding.AppendDecode(nil, _b64)
+		if _ev2 != nil {
+			visitErr = _ev2
+			return
+		}
+{{- else if eq $vc "bool"}}
+		_bv, _ev := mv.Bool()
+		if _ev != nil {
+			visitErr = _ev
+			return
+		}
+		mVal = _bv
+{{- else if eq $vc "float"}}
+		_fv, _ev := mv.Float64()
+		if _ev != nil {
+			visitErr = _ev
+			return
+		}
+		mVal = {{mapValGoType $f.MapVal}}(_fv)
+{{- else if eq $vc "signed"}}
+		_iv, _ev := mv.Int64()
+		if _ev != nil {
+			visitErr = _ev
+			return
+		}
+		mVal = {{mapValGoType $f.MapVal}}(_iv)
+{{- else if eq $vc "signed64"}}
+		var _iv int64
+		if mv.Type(parser) == fastjson.TypeString {
+			_sb, _ev := mv.StringBytes()
+			if _ev != nil {
+				visitErr = _ev
+				return
+			}
+			var _ev2 error
+			_iv, _ev2 = fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+			if _ev2 != nil {
+				visitErr = _ev2
+				return
+			}
+		} else {
+			var _ev error
+			_iv, _ev = mv.Int64()
+			if _ev != nil {
+				visitErr = _ev
+				return
+			}
+		}
+		mVal = {{mapValGoType $f.MapVal}}(_iv)
+{{- else if eq $vc "unsigned"}}
+		_uv, _ev := mv.Uint64()
+		if _ev != nil {
+			visitErr = _ev
+			return
+		}
+		mVal = {{mapValGoType $f.MapVal}}(_uv)
+{{- else if eq $vc "unsigned64"}}
+		var _uv uint64
+		if mv.Type(parser) == fastjson.TypeString {
+			_sb, _ev := mv.StringBytes()
+			if _ev != nil {
+				visitErr = _ev
+				return
+			}
+			var _ev2 error
+			_uv, _ev2 = fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+			if _ev2 != nil {
+				visitErr = _ev2
+				return
+			}
+		} else {
+			var _ev error
+			_uv, _ev = mv.Uint64()
+			if _ev != nil {
+				visitErr = _ev
+				return
+			}
+		}
+		mVal = {{mapValGoType $f.MapVal}}(_uv)
+{{- end}}
+		r.{{$f.Name}}[mKey] = mVal
+{{- end}}
+	}, parser, {{if eq $f.MapKey "string"}}false{{else}}true{{end}})
+	return visitErr
+}
+{{- else}}
 func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjson.Parser) error {
 	var visitErr error
 	obj.Visit(func(k []byte, v *fastjson.Value) {
@@ -2014,6 +2252,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 	}, parser, true/*skip unescape keys, because all key must by proto field name*/)
 	return visitErr
 }
+{{- end}}
 
 func (r *Readonly{{$goName}}) FromJSON(src []byte, parser *fastjson.Parser) error {
 	r.rawBuffer = src

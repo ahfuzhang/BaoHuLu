@@ -141,6 +141,35 @@ func Check(srcFile string) error {
 					return
 				}
 			}
+			// @AsMap constraint: message must contain exactly one map-type field.
+			var commentLines []string
+			if m.Comment != nil {
+				commentLines = m.Comment.Lines
+			}
+			msgExt, _ := protoextensions.ParseAndStripMessage(commentLines)
+			if msgExt.AsMap {
+				var fieldCount int
+				var hasMapField bool
+				for _, elem := range m.Elements {
+					switch elem.(type) {
+					case *proto.NormalField:
+						fieldCount++
+					case *proto.MapField:
+						fieldCount++
+						hasMapField = true
+					}
+				}
+				if fieldCount != 1 {
+					checkErr = fmt.Errorf("%s:%d: @AsMap message %q must have exactly one field, got %d",
+						srcFile, m.Position.Line, m.Name, fieldCount)
+					return
+				}
+				if !hasMapField {
+					checkErr = fmt.Errorf("%s:%d: @AsMap message %q: the single field must be a map type",
+						srcFile, m.Position.Line, m.Name)
+					return
+				}
+			}
 		}),
 		// 4. service method 中 stream 修饰符不支持
 		proto.WithRPC(func(r *proto.RPC) {

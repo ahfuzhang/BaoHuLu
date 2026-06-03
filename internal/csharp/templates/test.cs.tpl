@@ -202,8 +202,13 @@ public class {{$goName}}Tests
         jBuf2.Dispose();
     }
 
+{{- if not .AsMap}}
     // Verifies that System.Text.Json serialisation and deserialisation preserve
     // every field value on the generated writer object.
+    // Skipped for @AsMap messages: System.Text.Json serialises the writer struct
+    // as {"FieldName": {"k": v}} (with field-name wrapper), but our custom ToJSON
+    // produces {"k": v} (flat map). The formats are incompatible, so stdlib JSON
+    // cannot validate our custom JSON representation. JSONRoundtrip covers that.
     [Fact]
     public void StdlibJSONRoundtrip_PreservesAllFields()
     {
@@ -213,6 +218,7 @@ public class {{$goName}}Tests
 
         {{$baseFileName}}TestValidate.Compare{{$goName}}(expected, actual);
     }
+{{- end}}
 
     // ── Scalar-only coverage ────────────────────────────────────────────────
 

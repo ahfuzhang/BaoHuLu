@@ -106,6 +106,8 @@
     - 允许在编码阶段把 int64 类型改写为 fixed64，当值大于等于  1<<49，用 fixed64 存储，更加节约空间和性能
     - 后果：其他工具实现的编解码，无法与当前的二进制格式兼容。
     - 本质：通过牺牲二进制格式兼容性来换性能
+  - protobuf 无法支持这样的类型：  `repeated map<string, string> data = 2;`
+    - `// @AsMap`
 * csharp
   - 支持 form 提交的解析  ✅  => 还应该更深入的检查一下实现
   - 模仿 fastjson 实现 fastjson.cs  (实现 fastjson.cs，代替 json utf8 reader)

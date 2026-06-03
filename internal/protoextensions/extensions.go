@@ -49,6 +49,9 @@ type MessageExtensions struct {
 	// This annotation is infectious: any message type embedded in an annotated message
 	// also gets the method generated.
 	FromPostForm bool
+	// AsMap, when true (@AsMap annotation present), constrains the message to contain
+	// exactly one field of map type. Validated by protocheck and protofile.
+	AsMap bool
 }
 
 // ParseAndStripField scans comment lines for extension annotations, removes
@@ -143,6 +146,8 @@ func ParseAndStripMessage(lines []string) (MessageExtensions, []string) {
 			ext.Deprecated = true
 		case "from-post-form":
 			ext.FromPostForm = true
+		case "asmap":
+			ext.AsMap = true
 		}
 		// Unknown message-level annotations are silently dropped (not added to clean).
 	}

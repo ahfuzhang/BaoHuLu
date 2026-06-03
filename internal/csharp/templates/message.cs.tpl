@@ -446,6 +446,60 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
                 return Error.WithLoc(1, "expected {");
         }
+{{- if .AsMap}}
+{{- $f := index .Fields 0}}
+        // @AsMap: the JSON object IS the map — iterate keys directly.
+        var _{{$f.Name}}Dict = this.{{$f.Name}} ?? new {{$f.EffLocalType}}();
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                return Error.WithLoc(1, "expected property name");
+{{- if eq $f.MapKeyCS "string"}}
+            string _mke{{$f.Name}} = reader.GetString()!;
+{{- else if eq $f.MapKeyCS "bool"}}
+            bool _mke{{$f.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
+{{- else}}
+            if (!Utf8Parser.TryParse(reader.ValueSpan, out {{$f.MapKeyCS}} _mke{{$f.Name}}, out _))
+                return Error.WithLoc(1, "bad map key {{$f.Name}}");
+{{- end}}
+            reader.Read();
+{{- if $f.MapValIsMsg}}
+            {{$f.ReadonlyMapValCS}} _mvInner{{$f.Name}} = default;
+            var _mvErr{{$f.Name}} = _mvInner{{$f.Name}}.FromJSONReader(ref reader);
+            if (_mvErr{{$f.Name}}.Err()) return _mvErr{{$f.Name}};
+{{- if $f.UseMapValWrapper}}
+            _{{$f.Name}}Dict[_mke{{$f.Name}}] = new {{$f.WrapReadonlyMapValCS}}() { Value = _mvInner{{$f.Name}} };
+{{- else}}
+            _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvInner{{$f.Name}};
+{{- end}}
+{{- else if eq $f.MapVal "string"}}
+            _{{$f.Name}}Dict[_mke{{$f.Name}}] = reader.GetString() ?? string.Empty;
+{{- else if eq $f.MapVal "bytes"}}
+            _{{$f.Name}}Dict[_mke{{$f.Name}}] = reader.GetBytesFromBase64();
+{{- else if eq $f.MapVal "bool"}}
+            _{{$f.Name}}Dict[_mke{{$f.Name}}] = reader.ValueSpan.SequenceEqual("true"u8);
+{{- else if eq $f.MapVal "double"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _mvdv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvdv{{$f.Name}}; }
+{{- else if eq $f.MapVal "float"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _mvfv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvfv{{$f.Name}}; }
+{{- else if eq $f.MapVal "int64"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
+{{- else if eq $f.MapVal "uint64"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvul{{$f.Name}}; }
+{{- else if eq $f.MapVal "sint64"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
+{{- else if eq $f.MapVal "sfixed64"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
+{{- else if eq $f.MapVal "fixed64"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvul{{$f.Name}}; }
+{{- else}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _mviv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = ({{$f.MapValCS}})_mviv{{$f.Name}}; }
+{{- end}}
+        }
+        this.{{$f.Name}} = _{{$f.Name}}Dict;
+        return default;
+    }
+{{- else}}
 
         // local decode variables
 {{- range .Fields}}
@@ -594,6 +648,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
         return default;
     }
+{{- end}}
 
     // ── Clone ─────────────────────────────────────────────────────────────────
 
@@ -1220,6 +1275,54 @@ public partial struct {{$goName}} : IResettable, IEncoder
     public readonly void ToJSON(ref RentedBuffer buf)
     {
         buf.Append((byte)'{');
+{{- if .AsMap}}
+{{- $f := index .Fields 0}}
+        // @AsMap: serialize the map directly without a field-name wrapper.
+        bool _mfirst{{$f.Name}} = true;
+        if ({{$f.Name}} != null)
+            foreach (var _kv{{$f.Name}} in {{$f.Name}})
+            {
+                if (!_mfirst{{$f.Name}}) buf.Append((byte)','); _mfirst{{$f.Name}} = false;
+                buf.Append((byte)'"');
+{{- if eq $f.MapKeyCS "string"}}
+                buf.Append(_kv{{$f.Name}}.Key);  // no need to JSON-escape map keys since protobuf maps only allow simple scalar types as keys
+{{- else if eq $f.MapKeyCS "bool"}}
+                buf.Append(_kv{{$f.Name}}.Key ? "true"u8 : "false"u8);
+{{- else}}
+                buf.Append((long)_kv{{$f.Name}}.Key);
+{{- end}}
+                buf.Append((byte)'"'); buf.Append((byte)':');
+{{- if $f.MapValIsMsg}}
+{{- if $f.UseMapValWrapper}}
+                if (_kv{{$f.Name}}.Value != null) _kv{{$f.Name}}.Value.Value.ToJSON(ref buf); else buf.Append("{}"u8);
+{{- else}}
+                _kv{{$f.Name}}.Value.ToJSON(ref buf);
+{{- end}}
+{{- else if eq $f.MapVal "string"}}
+                buf.Append((byte)'"'); buf.AppendAsJsonEscapedString(_kv{{$f.Name}}.Value); buf.Append((byte)'"');
+{{- else if eq $f.MapVal "bytes"}}
+                buf.Append((byte)'"'); buf.Append(Convert.ToBase64String(_kv{{$f.Name}}.Value)); buf.Append((byte)'"');
+{{- else if eq $f.MapVal "bool"}}
+                buf.Append(_kv{{$f.Name}}.Value);
+{{- else if eq $f.MapVal "double"}}
+                buf.Append(_kv{{$f.Name}}.Value);
+{{- else if eq $f.MapVal "float"}}
+                buf.Append((double)_kv{{$f.Name}}.Value);
+{{- else if eq $f.MapVal "int64"}}
+                buf.Append((byte)'"'); buf.Append((long)_kv{{$f.Name}}.Value); buf.Append((byte)'"');
+{{- else if eq $f.MapVal "uint64"}}
+                buf.Append((byte)'"'); buf.Append(_kv{{$f.Name}}.Value); buf.Append((byte)'"');
+{{- else if eq $f.MapVal "sint64"}}
+                buf.Append((byte)'"'); buf.Append((long)_kv{{$f.Name}}.Value); buf.Append((byte)'"');
+{{- else if eq $f.MapVal "sfixed64"}}
+                buf.Append((byte)'"'); buf.Append((long)_kv{{$f.Name}}.Value); buf.Append((byte)'"');
+{{- else if eq $f.MapVal "fixed64"}}
+                buf.Append((byte)'"'); buf.Append(_kv{{$f.Name}}.Value); buf.Append((byte)'"');
+{{- else}}
+                buf.Append((long)_kv{{$f.Name}}.Value);
+{{- end}}
+            }
+{{- else}}
         bool _first = true;
 {{- range .Fields}}
 {{- if .IsMap}}
@@ -1401,6 +1504,7 @@ public partial struct {{$goName}} : IResettable, IEncoder
             buf.Append((byte)'"'); buf.Append({{$goName}}Tags.JsonKey{{.Name}}); buf.Append("\":"u8);
             buf.Append((long){{.Name}});
         }
+{{- end}}
 {{- end}}
 {{- end}}
         buf.Append((byte)'}');

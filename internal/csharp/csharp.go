@@ -227,6 +227,7 @@ type CsMsgTpl struct {
 	Fields       []CsFieldTpl
 	NeedsWrapper bool // true when this message type needs Wrapper classes generated
 	FromPostForm bool // true when this message needs FromPostForm / FromPostFormString methods
+	AsMap        bool // true when @AsMap annotation present: single map field, JSON is flat map
 }
 
 // ─── generator ────────────────────────────────────────────────────────────────
@@ -347,7 +348,7 @@ func (g *Generator) buildMsgTpls() ([]CsMsgTpl, map[string]protofile.MsgLayoutIn
 		}
 		sortedFields := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedFields, writerSizeOf, writerPtrdataOf)
-		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name)}
+		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), AsMap: md.AsMap}
 		for _, fd := range sortedFields {
 			mt.Fields = append(mt.Fields, g.buildCSField(fd))
 		}

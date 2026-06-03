@@ -551,6 +551,7 @@ type MsgTpl struct {
 	Fields        []FieldTpl // writer fields, sorted for optimal layout
 	ReverseFields []FieldTpl // writer fields in reverse layout order (matches marshalToSizedBufferVT output)
 	ReaderFields  []FieldTpl // readonly fields = Fields + rawBuffer, all sorted
+	AsMap         bool       // true when @AsMap annotation is present: single map field, JSON parsed as direct map
 }
 
 type EnumTpl struct {
@@ -710,7 +711,7 @@ func (g *Generator) Render(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap}
 
 		// --- Writer struct: sort using precomputed writer layouts for IsMsg fields.
 		writerSizeOf := func(fd protofile.FieldDef) int {
@@ -1660,7 +1661,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap}
 
 		writerSizeOf := func(fd protofile.FieldDef) int {
 			if fd.IsMsg && fd.IsRecursive {
@@ -1803,7 +1804,7 @@ func (g *Generator) RenderBench(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap}
 
 		writerSizeOf := func(fd protofile.FieldDef) int {
 			if fd.IsMsg && fd.IsRecursive {
@@ -1882,6 +1883,7 @@ func (g *Generator) RenderCompare(out *os.File) error {
 		msgs = append(msgs, MsgTpl{
 			Name:   md.Name,
 			GoName: protofile.GoTypeName(md.Name),
+			AsMap:  md.AsMap,
 		})
 	}
 	data := CompareRenderData{

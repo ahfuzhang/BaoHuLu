@@ -57,6 +57,7 @@ type MessageDef struct {
 	Fields       []FieldDef
 	Comment      []string // proto comment lines (without leading //), extension lines stripped
 	FromPostForm bool     // @from-post-form annotation: generate FromPostForm method in C#
+	AsMap        bool     // @AsMap annotation: message must contain exactly one map field
 }
 
 type MethodDef struct {
@@ -266,7 +267,7 @@ func (g *Generator) CollectMessage(m *proto.Message) {
 		return // skip deprecated messages entirely
 	}
 
-	md := &MessageDef{Name: m.Name, Comment: cleanMsgComments, FromPostForm: msgExt.FromPostForm}
+	md := &MessageDef{Name: m.Name, Comment: cleanMsgComments, FromPostForm: msgExt.FromPostForm, AsMap: msgExt.AsMap}
 	for _, el := range m.Elements {
 		switch v := el.(type) {
 		case *proto.NormalField:

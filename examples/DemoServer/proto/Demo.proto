@@ -128,3 +128,12 @@ service Demo {
 
   rpc Query(ValueTypes) returns (Child) {}
 }
+
+// @AsMap
+message MapType {
+  map<string, string> labels = 1;
+}
+
+message Series {
+  repeated MapType data = 1;
+}

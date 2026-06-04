@@ -160,6 +160,13 @@ func Test{{$goName}}JSONRoundtrip(t *testing.T) {
 	// the writer struct cannot recover the map this way, so stdlib verification
 	// is skipped. The custom FromJSON path below validates the JSON output fully.
 	_ = json.Marshal // suppress unused import
+{{else if .AsArray -}}
+	// ── Part 1 (encoding/json skipped for @AsArray) ──────────────────────────
+	// For @AsArray messages, ToJSON produces a flat JSON array directly encoding
+	// the repeated field (not wrapped under a field-name key). encoding/json.Unmarshal
+	// into the writer struct cannot recover the repeated field this way, so stdlib
+	// verification is skipped. The custom FromJSON path below validates the JSON output fully.
+	_ = json.Marshal // suppress unused import
 {{else if not (skipEncodingJSON .Fields) -}}
 	// ── Part 1: verify with encoding/json ────────────────────────────────────
 	// Sample values are within JavaScript's safe-integer range, so
@@ -478,9 +485,15 @@ func Test{{$goName}}FromJSONErrors(t *testing.T) {
 	if err := r.FromJSON([]byte("not-json"), nil); err == nil {
 		t.Error("expected error for invalid JSON, got nil")
 	}
+{{- if .AsArray}}
+	if err := r.FromJSON([]byte(`{}`), nil); err == nil {
+		t.Error("expected error for JSON object (not array), got nil")
+	}
+{{- else}}
 	if err := r.FromJSON([]byte(`[1,2,3]`), nil); err == nil {
 		t.Error("expected error for JSON array (not object), got nil")
 	}
+{{- end}}
 }
 {{- $sf := firstScalarField .Fields}}
 {{- $mf := firstMsgField .Fields}}
@@ -523,6 +536,17 @@ func Test{{$goName}}FromJSONMapTypeError(t *testing.T) {
 }
 {{end}}
 {{- if $repf}}
+{{- if .AsArray}}
+// Test{{$goName}}FromJSONArrayTypeError verifies that a null element inside the
+// @AsArray JSON array causes FromJSON to return an error (exercises the
+// per-element parse error branch inside fromJSONArray).
+func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
+	var r {{$roName}}
+	if err := r.FromJSON([]byte(`[null]`), nil); err == nil {
+		t.Error("expected error for null element in @AsArray, got nil")
+	}
+}
+{{- else}}
 // Test{{$goName}}FromJSONArrayTypeError verifies that passing null for a
 // repeated field causes FromJSON to return an error (exercises the v.Array()
 // error branch).
@@ -533,6 +557,7 @@ func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
 		t.Errorf("expected error when repeated field %q receives null, got nil", "{{$repf.JsonName}}")
 	}
 }
+{{- end}}
 {{end}}
 {{- if $bf}}
 // Test{{$goName}}FromJSONBytesDecodeError verifies that an invalid base64

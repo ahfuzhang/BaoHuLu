@@ -170,6 +170,32 @@ func Check(srcFile string) error {
 					return
 				}
 			}
+			// @AsArray constraint: message must contain exactly one repeated NormalField.
+			if msgExt.AsArray {
+				var fieldCount int
+				var hasRepeatedField bool
+				for _, elem := range m.Elements {
+					switch f := elem.(type) {
+					case *proto.NormalField:
+						fieldCount++
+						if f.Repeated {
+							hasRepeatedField = true
+						}
+					case *proto.MapField:
+						fieldCount++
+					}
+				}
+				if fieldCount != 1 {
+					checkErr = fmt.Errorf("%s:%d: @AsArray message %q must have exactly one field, got %d",
+						srcFile, m.Position.Line, m.Name, fieldCount)
+					return
+				}
+				if !hasRepeatedField {
+					checkErr = fmt.Errorf("%s:%d: @AsArray message %q: the single field must be a repeated type",
+						srcFile, m.Position.Line, m.Name)
+					return
+				}
+			}
 		}),
 		// 4. service method 中 stream 修饰符不支持
 		proto.WithRPC(func(r *proto.RPC) {

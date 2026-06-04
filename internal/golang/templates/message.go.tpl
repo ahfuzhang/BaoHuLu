@@ -87,10 +87,6 @@ func (m *{{$goName}}) Reset() {
 {{- range .Fields}}
 {{- if .Map}}
 	clear(m.{{.Name}})
-{{- if (mapValIsMsg .MapVal)}}
-	clear(m._{{.Name}}Arr)
-	m._{{.Name}}Arr = m._{{.Name}}Arr[:0]
-{{- end}}
 {{- else if .Repeated}}
 	m.{{.Name}} = m.{{.Name}}[:0]
 {{- else if .IsMsg}}
@@ -683,6 +679,75 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 	dst = append(dst, '}')
 	return dst
 }
+{{- else if .AsArray}}
+{{- $f := index .Fields 0}}
+func (m *{{$goName}}) ToJSON(dst []byte) []byte {
+	dst = append(dst, '[')
+	for _i, _v := range m.{{$f.Name}} {
+		if _i > 0 {
+			dst = append(dst, ',')
+		}
+{{- if $f.IsMsg}}
+		dst = _v.ToJSON(dst)
+{{- else if eq $f.Type "string"}}
+		dst = append(dst, '"')
+		dst = utils.EncodeJSONString(_v, dst)
+		dst = append(dst, '"')
+{{- else if eq $f.Type "bool"}}
+		if _v {
+			dst = append(dst, "true"...)
+		} else {
+			dst = append(dst, "false"...)
+		}
+{{- else if eq $f.Type "double"}}
+		{
+			_fv := _v
+			_iv := int64(_fv)
+			if math.Round(_fv) == _fv && float64(_iv) == _fv {
+				dst = strconv.AppendInt(dst, _iv, 10)
+			} else {
+				dst = strconv.AppendFloat(dst, _fv, 'f', -1, 64)
+			}
+		}
+{{- else if eq $f.Type "float"}}
+		{
+			_fv := float64(_v)
+			_iv := int64(_fv)
+			if math.Round(_fv) == _fv && float64(_iv) == _fv {
+				dst = strconv.AppendInt(dst, _iv, 10)
+			} else {
+				dst = strconv.AppendFloat(dst, _fv, 'f', -1, 32)
+			}
+		}
+{{- else if or (eq $f.Type "uint32") (eq $f.Type "fixed32")}}
+		dst = strconv.AppendUint(dst, uint64(_v), 10)
+{{- else if or (eq $f.Type "uint64") (eq $f.Type "fixed64")}}
+		if uint64(_v) > 9007199254740991 {
+			dst = append(dst, '"')
+			dst = strconv.AppendUint(dst, uint64(_v), 10)
+			dst = append(dst, '"')
+		} else {
+			dst = strconv.AppendUint(dst, uint64(_v), 10)
+		}
+{{- else if eq $f.Type "bytes"}}
+		dst = append(dst, '"')
+		dst = base64.StdEncoding.AppendEncode(dst, _v)
+		dst = append(dst, '"')
+{{- else if or (eq $f.Type "int64") (eq $f.Type "sint64") (eq $f.Type "sfixed64")}}
+		if int64(_v) > 9007199254740991 || int64(_v) < -9007199254740991 {
+			dst = append(dst, '"')
+			dst = strconv.AppendInt(dst, int64(_v), 10)
+			dst = append(dst, '"')
+		} else {
+			dst = strconv.AppendInt(dst, int64(_v), 10)
+		}
+{{- else}}
+		dst = strconv.AppendInt(dst, int64(_v), 10)
+{{- end}}
+	}
+	dst = append(dst, ']')
+	return dst
+}
 {{- else}}
 func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 	dst = append(dst, '{')
@@ -1075,17 +1140,6 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 		} else {
 			clear(dst.{{.Name}})
 		}
-		{{- if mapValIsMsg .MapVal}}
-		if dst._{{.Name}}Arr == nil {
-			dst._{{.Name}}Arr = make([]{{mapValGoType .MapVal}}, 0, len(r.{{.Name}}))
-		} else {
-			if cap(dst._{{.Name}}Arr) < len(r.{{.Name}}) {
-				dst._{{.Name}}Arr = make([]{{mapValGoType .MapVal}}, 0, len(r.{{.Name}}))
-			} else {
-				dst._{{.Name}}Arr = dst._{{.Name}}Arr[:0]
-			}
-		}
-		{{- end}}
 		for _rk, _rv := range r.{{.Name}} {
 			{{- if eq .MapKey "string"}}
 			{
@@ -1110,8 +1164,7 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 					dst.{{.Name}}[_nk] = nil
 				}
 				{{- else if mapValIsMsg .MapVal}}
-				dst._{{.Name}}Arr = append(dst._{{.Name}}Arr, {{mapValGoType .MapVal}}{})
-				_nv := &dst._{{.Name}}Arr[len(dst._{{.Name}}Arr)-1]
+				_nv := new({{mapValGoType .MapVal}})
 				_rv.Clone(_nv)
 				dst.{{.Name}}[_nk] = _nv
 				{{- else}}
@@ -1138,8 +1191,7 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 					dst.{{.Name}}[_rk] = nil
 				}
 				{{- else if mapValIsMsg .MapVal}}
-				dst._{{.Name}}Arr = append(dst._{{.Name}}Arr, {{mapValGoType .MapVal}}{})
-				_nv := &dst._{{.Name}}Arr[len(dst._{{.Name}}Arr)-1]
+				_nv := new({{mapValGoType .MapVal}})
 				_rv.Clone(_nv)
 				dst.{{.Name}}[_rk] = _nv
 				{{- else}}
@@ -1670,16 +1722,28 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- if mapValIsMsg $f.MapVal}}
 		r._{{$f.Name}}Arr = r._{{$f.Name}}Arr[:len(r._{{$f.Name}}Arr)+1]
 		_mValIdx := len(r._{{$f.Name}}Arr) - 1
+		sub := &r._{{$f.Name}}Arr[_mValIdx]
+{{- if $f.MapValMsgIsAsArray}}
+		_subArr, _eo := mv.Array()
+		if _eo != nil {
+			visitErr = _eo
+			return
+		}
+		if _eo2 := sub.fromJSONArray(_subArr, parser); _eo2 != nil {
+			visitErr = _eo2
+			return
+		}
+{{- else}}
 		_subObj, _eo := mv.Object()
 		if _eo != nil {
 			visitErr = _eo
 			return
 		}
-		sub := &r._{{$f.Name}}Arr[_mValIdx]
 		if _eo2 := sub.fromJSONValue(_subObj, parser); _eo2 != nil {
 			visitErr = _eo2
 			return
 		}
+{{- end}}
 		r.{{$f.Name}}[mKey] = sub
 {{- else}}
 		var mVal {{mapValGoType $f.MapVal}}
@@ -1784,6 +1848,135 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 	}, parser, {{if eq $f.MapKey "string"}}false{{else}}true{{end}})
 	return visitErr
 }
+{{- else if .AsArray}}
+{{- $f := index .Fields 0}}
+func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastjson.Parser) error {
+	if cap(r.{{$f.Name}}) < len(arr) {
+		r.{{$f.Name}} = make({{$f.ReaderType}}, 0, len(arr))
+	} else {
+		r.{{$f.Name}} = r.{{$f.Name}}[:0]
+	}
+{{- if $f.IsMsg}}
+	for _, _item := range arr {
+		var _elem {{elemType $f.ReaderType}}
+{{- if $f.MsgIsAsArray}}
+		_subArr, _eo := _item.Array()
+		if _eo != nil {
+			return _eo
+		}
+		if _eo2 := _elem.fromJSONArray(_subArr, parser); _eo2 != nil {
+			return _eo2
+		}
+{{- else}}
+		_subObj, _eo := _item.Object()
+		if _eo != nil {
+			return _eo
+		}
+		if _eo2 := _elem.fromJSONValue(_subObj, parser); _eo2 != nil {
+			return _eo2
+		}
+{{- end}}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, _elem)
+	}
+{{- else if $f.IsEnum}}
+	for _, _item := range arr {
+		_iv, _ei := _item.Int64()
+		if _ei != nil {
+			return _ei
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, {{elemType $f.ReaderType}}(_iv))
+	}
+{{- else}}
+{{- $sc := jsonScalarClass $f.Type}}
+	for _, _item := range arr {
+{{- if eq $sc "string"}}
+		_ = _item.Type(parser)
+		_b, _ei := _item.StringBytes()
+		if _ei != nil {
+			return _ei
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, unsafe.String(unsafe.SliceData(_b), len(_b)))
+{{- else if eq $sc "bytes"}}
+		_b64, _ei := _item.StringBytes()
+		if _ei != nil {
+			return _ei
+		}
+		var _dec []byte
+		var _ei2 error
+		_dec, _ei2 = base64.StdEncoding.AppendDecode(nil, _b64)
+		if _ei2 != nil {
+			return _ei2
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, _dec)
+{{- else if eq $sc "bool"}}
+		_bv, _ei := _item.Bool()
+		if _ei != nil {
+			return _ei
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, _bv)
+{{- else if eq $sc "float"}}
+		_fv, _ei := _item.Float64()
+		if _ei != nil {
+			return _ei
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, {{elemType $f.ReaderType}}(_fv))
+{{- else if eq $sc "signed"}}
+		_iv, _ei := _item.Int64()
+		if _ei != nil {
+			return _ei
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, {{elemType $f.ReaderType}}(_iv))
+{{- else if eq $sc "signed64"}}
+		var _iv int64
+		if _item.Type(parser) == fastjson.TypeString {
+			_sb, _ei := _item.StringBytes()
+			if _ei != nil {
+				return _ei
+			}
+			var _ei2 error
+			_iv, _ei2 = fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+			if _ei2 != nil {
+				return _ei2
+			}
+		} else {
+			var _ei error
+			_iv, _ei = _item.Int64()
+			if _ei != nil {
+				return _ei
+			}
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, {{elemType $f.ReaderType}}(_iv))
+{{- else if eq $sc "unsigned"}}
+		_uv, _ei := _item.Uint64()
+		if _ei != nil {
+			return _ei
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, {{elemType $f.ReaderType}}(_uv))
+{{- else if eq $sc "unsigned64"}}
+		var _uv uint64
+		if _item.Type(parser) == fastjson.TypeString {
+			_sb, _ei := _item.StringBytes()
+			if _ei != nil {
+				return _ei
+			}
+			var _ei2 error
+			_uv, _ei2 = fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+			if _ei2 != nil {
+				return _ei2
+			}
+		} else {
+			var _ei error
+			_uv, _ei = _item.Uint64()
+			if _ei != nil {
+				return _ei
+			}
+		}
+		r.{{$f.Name}} = append(r.{{$f.Name}}, {{elemType $f.ReaderType}}(_uv))
+{{- end}}
+	}
+{{- end}}
+	return nil
+}
 {{- else}}
 func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjson.Parser) error {
 	var visitErr error
@@ -1866,16 +2059,28 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				// r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
 				r._{{.Name}}Arr = r._{{.Name}}Arr[:len(r._{{.Name}}Arr)+1]
 				_mValIdx := len(r._{{.Name}}Arr) - 1
+				sub := &r._{{.Name}}Arr[_mValIdx]
+{{- if .MapValMsgIsAsArray}}
+				_subArr, _eo := mv.Array()
+				if _eo != nil {
+					visitErr = _eo
+					return
+				}
+				if _eo2 := sub.fromJSONArray(_subArr, parser); _eo2 != nil {
+					visitErr = _eo2
+					return
+				}
+{{- else}}
 				_subObj, _eo := mv.Object()
 				if _eo != nil {
 					visitErr = _eo
 					return
 				}
-				sub := &r._{{.Name}}Arr[_mValIdx]
 				if _eo2 := sub.fromJSONValue(_subObj, parser); _eo2 != nil {
 					visitErr = _eo2
 					return
 				}
+{{- end}}
 				r.{{.Name}}[mKey] = sub
 {{- else}}
 				var mVal {{mapValGoType .MapVal}}
@@ -1994,6 +2199,17 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- if .IsMsg}}
 			for _, _item := range _arr {
 				var _elem {{elemType .ReaderType}}
+{{- if .MsgIsAsArray}}
+				_subArr, _eo := _item.Array()
+				if _eo != nil {
+					visitErr = _eo
+					return
+				}
+				if _eo2 := _elem.fromJSONArray(_subArr, parser); _eo2 != nil {
+					visitErr = _eo2
+					return
+				}
+{{- else}}
 				_subObj, _eo := _item.Object()
 				if _eo != nil {
 					visitErr = _eo
@@ -2003,6 +2219,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					visitErr = _eo2
 					return
 				}
+{{- end}}
 				r.{{.Name}} = append(r.{{.Name}}, _elem)
 			}
 {{- else if .IsEnum}}
@@ -2119,6 +2336,22 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 			}
 {{- end}}
 {{- else if .IsMsg}}
+{{- if .MsgIsAsArray}}
+			_arr, _e := v.Array()
+			if _e != nil {
+				visitErr = _e
+				return
+			}
+{{- if .IsRecursive}}
+			if r.{{.Name}} == nil {
+				r.{{.Name}} = &{{.ReaderType}}{}
+			}
+			r._has{{.Name}} = true
+{{- end}}
+			if _e2 := r.{{.Name}}.fromJSONArray(_arr, parser); _e2 != nil {
+				visitErr = _e2
+			}
+{{- else}}
 			_subObj, _e := v.Object()
 			if _e != nil {
 				visitErr = _e
@@ -2133,6 +2366,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 			if _e2 := r.{{.Name}}.fromJSONValue(_subObj, parser); _e2 != nil {
 				visitErr = _e2
 			}
+{{- end}}
 {{- else if .IsEnum}}
 			_iv, _e := v.Int64()
 			if _e != nil {
@@ -2263,11 +2497,19 @@ func (r *Readonly{{$goName}}) FromJSON(src []byte, parser *fastjson.Parser) erro
 	if err != nil {
 		return err
 	}
+{{- if .AsArray}}
+	arr, err := v.Array()
+	if err != nil {
+		return err
+	}
+	return r.fromJSONArray(arr, parser)
+{{- else}}
 	obj, err := v.Object()  // todo: 函数本身消耗资源为整个函数的 33.86%
 	if err != nil {
 		return err
 	}
 	return r.fromJSONValue(obj, parser)
+{{- end}}
 }
 
 func (r *Readonly{{$goName}}) FromProtobufWithCopy(in []byte) error {

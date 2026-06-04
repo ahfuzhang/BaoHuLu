@@ -106,11 +106,15 @@
     - 允许在编码阶段把 int64 类型改写为 fixed64，当值大于等于  1<<49，用 fixed64 存储，更加节约空间和性能
     - 后果：其他工具实现的编解码，无法与当前的二进制格式兼容。
     - 本质：通过牺牲二进制格式兼容性来换性能
-  - protobuf 无法支持这样的类型：  `repeated map<string, string> data = 2;`
-    - `// @AsMap`
+  - protobuf 无法支持这样的类型：  `repeated map<string, string> data = 2;`   ✅
+    - `// @AsMap`   ✅
+  - protobuf 无法支持这样的类型： `map<string, repeated string> key_to_many_value = 3;`
+    - 支持扩展：`// @AsArray`
 * csharp
   - 支持 form 提交的解析  ✅  => 还应该更深入的检查一下实现
   - 模仿 fastjson 实现 fastjson.cs  (实现 fastjson.cs，代替 json utf8 reader)
+  - 支持 @AsMap
+  - 支持 @AsArray
 * check 功能里：检查 key 不能有特殊字符  ✅
 * 修改 test 程序：
   - 运行一个 test 以后，自动按照我期望的格式输出 benchmark 的结果  ✅
@@ -128,7 +132,7 @@
   - 性能测试报告  50%
   - 选中更多的流行库来做性能对比测试
   - 二进制兼容性测试
-  - 压测程序，增加 xx times / s
+  - 压测程序，增加 xx times / s  ✅
 * 宣传
   - 融入 buf 的生态中，否则很难做到高的使用人数
   - 中文英文双语文档

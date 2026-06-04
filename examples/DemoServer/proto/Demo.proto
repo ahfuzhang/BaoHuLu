@@ -134,6 +134,12 @@ message MapType {
   map<string, string> labels = 1;
 }
 
+// @AsArray
+message ArrayType {
+  repeated string items = 1;
+}
+
 message Series {
   repeated MapType data = 1;
+  map<string, ArrayType> one_to_many = 2;
 }

@@ -78,6 +78,50 @@ type Series struct {
 
 * 注意：只影响 FromJSON() 和 ToJSON() 的行为，其他不变
 
+### @AsArray
+
+当存在这个标签时，把整个 message 理解为数组.
+主要为了解决：
+* protobuf 不支持类似的定义： `map<string, []string> data = 2;`
+* 如下的定义会因为 `@AsArray` 标签而重新理解
+
+```protobuf
+// @AsArray
+message ArrayType {
+  repeated string items = 1;
+}
+
+message OneToMany {
+  map<string, ArrayType> one_to_many = 2;
+}
+```
+
+上面的 proto 能够描述下面的 json 数据：
+
+```json
+{
+  "one_to_many": {
+    "key1":["item1", "item2"],
+    "key2":["item3", "item4"]
+  }
+}
+```
+
+struct 的结构仍然不变，只是对 json 的序列化和反序列化做特殊处理:
+
+```go
+type ArrayType struct {
+  Items []string
+}
+
+type OneToMany struct {
+  OneToMany map[string]*ArrayType
+}
+```
+
+* 注意：只影响 FromJSON() 和 ToJSON() 的行为，其他不变
+
+
 ## field 扩展语法
 
 ### @Deprecated

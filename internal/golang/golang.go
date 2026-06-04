@@ -269,17 +269,12 @@ func maxEnumValLen(vals []protofile.EnumValue) int {
 }
 
 // writerFieldNameMax returns the max length of all field names in a writer struct,
-// including hidden _nameArr and arena fields.
+// including the terminal arena field.
 func writerFieldNameMax(fields []FieldTpl) int {
 	max := len("arena")
 	for _, f := range fields {
 		if n := len(f.Name); n > max {
 			max = n
-		}
-		if f.Map && f.MapValIsMsg {
-			if n := 1 + len(f.Name) + 3; n > max { // "_" + name + "Arr"
-				max = n
-			}
 		}
 	}
 	return max
@@ -486,13 +481,6 @@ func (g *Generator) writerAlignedFields(fields []FieldTpl) []AlignedField {
 			typeStr:   g.writerFieldType(f),
 			structTag: f.StructTag,
 		})
-		if f.Map && f.MapValIsMsg {
-			valGt, _, _ := g.ProtoTypeToGo(f.MapVal, false)
-			lines = append(lines, alignLine{
-				name:    "_" + f.Name + "Arr",
-				typeStr: "[]" + valGt,
-			})
-		}
 	}
 	lines = append(lines, alignLine{name: "arena", typeStr: "[]byte"})
 	return computeAlignedFields(lines)
@@ -535,13 +523,15 @@ func (g *Generator) readerAlignedFields(fields []FieldTpl) []AlignedField {
 
 type FieldTpl struct {
 	protofile.FieldDef
-	WireType        WireTypeVal
-	ReaderType      string
-	IsRawBuf        bool   // synthetic rawBuffer []byte field for readonly structs
-	StructTag       string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
-	MapValIsMsg     bool   // true when MapVal is a message type (not scalar/enum)
-	ElemIsRecursive bool   // true when map/repeated element msg type cycles back to the containing message
-	IsDecimal       bool   // true when field has @decimal=round:N annotation (double → decimal.Decimal)
+	WireType           WireTypeVal
+	ReaderType         string
+	IsRawBuf           bool   // synthetic rawBuffer []byte field for readonly structs
+	StructTag          string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
+	MapValIsMsg        bool   // true when MapVal is a message type (not scalar/enum)
+	MapValMsgIsAsArray bool   // true when MapVal message has @AsArray — JSON value is an array, not an object
+	ElemIsRecursive    bool   // true when map/repeated element msg type cycles back to the containing message
+	IsDecimal          bool   // true when field has @decimal=round:N annotation (double → decimal.Decimal)
+	MsgIsAsArray       bool   // true when IsMsg and the referenced message has @AsArray — JSON value is an array
 }
 
 type MsgTpl struct {
@@ -552,6 +542,7 @@ type MsgTpl struct {
 	ReverseFields []FieldTpl // writer fields in reverse layout order (matches marshalToSizedBufferVT output)
 	ReaderFields  []FieldTpl // readonly fields = Fields + rawBuffer, all sorted
 	AsMap         bool       // true when @AsMap annotation is present: single map field, JSON parsed as direct map
+	AsArray       bool       // true when @AsArray annotation is present: single repeated field, JSON parsed as direct array
 }
 
 type EnumTpl struct {
@@ -683,14 +674,28 @@ func (g *Generator) makeFieldTpl(fd protofile.FieldDef, containingMsgName string
 	if isDecimal && fd.Type != "double" {
 		panic(fmt.Sprintf("@decimal annotation on field %q: only allowed on double fields, got %q", fd.Name, fd.Type))
 	}
+	var msgIsAsArray bool
+	if fd.IsMsg {
+		if msgDef, ok := g.Messages[fd.Type]; ok {
+			msgIsAsArray = msgDef.AsArray
+		}
+	}
+	var mapValMsgIsAsArray bool
+	if fd.Map && fd.MapVal != "" && mapValIsMsg {
+		if msgDef, ok := g.Messages[fd.MapVal]; ok {
+			mapValMsgIsAsArray = msgDef.AsArray
+		}
+	}
 	return FieldTpl{
-		FieldDef:        fd,
-		WireType:        wt,
-		ReaderType:      g.readerGoType(fd),
-		StructTag:       buildStructTag(fd),
-		MapValIsMsg:     mapValIsMsg,
-		ElemIsRecursive: elemIsRecursive,
-		IsDecimal:       isDecimal,
+		FieldDef:           fd,
+		WireType:           wt,
+		ReaderType:         g.readerGoType(fd),
+		StructTag:          buildStructTag(fd),
+		MapValIsMsg:        mapValIsMsg,
+		MapValMsgIsAsArray: mapValMsgIsAsArray,
+		ElemIsRecursive:    elemIsRecursive,
+		IsDecimal:          isDecimal,
+		MsgIsAsArray:       msgIsAsArray,
 	}
 }
 
@@ -711,7 +716,7 @@ func (g *Generator) Render(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray}
 
 		// --- Writer struct: sort using precomputed writer layouts for IsMsg fields.
 		writerSizeOf := func(fd protofile.FieldDef) int {
@@ -1661,7 +1666,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray}
 
 		writerSizeOf := func(fd protofile.FieldDef) int {
 			if fd.IsMsg && fd.IsRecursive {
@@ -1804,7 +1809,7 @@ func (g *Generator) RenderBench(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray}
 
 		writerSizeOf := func(fd protofile.FieldDef) int {
 			if fd.IsMsg && fd.IsRecursive {
@@ -1883,7 +1888,8 @@ func (g *Generator) RenderCompare(out *os.File) error {
 		msgs = append(msgs, MsgTpl{
 			Name:   md.Name,
 			GoName: protofile.GoTypeName(md.Name),
-			AsMap:  md.AsMap,
+			AsMap:   md.AsMap,
+			AsArray: md.AsArray,
 		})
 	}
 	data := CompareRenderData{

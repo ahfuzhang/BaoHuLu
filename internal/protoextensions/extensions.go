@@ -52,6 +52,9 @@ type MessageExtensions struct {
 	// AsMap, when true (@AsMap annotation present), constrains the message to contain
 	// exactly one field of map type. Validated by protocheck and protofile.
 	AsMap bool
+	// AsArray, when true (@AsArray annotation present), constrains the message to contain
+	// exactly one field of repeated type. Validated by protocheck and protofile.
+	AsArray bool
 }
 
 // ParseAndStripField scans comment lines for extension annotations, removes
@@ -148,6 +151,8 @@ func ParseAndStripMessage(lines []string) (MessageExtensions, []string) {
 			ext.FromPostForm = true
 		case "asmap":
 			ext.AsMap = true
+		case "asarray":
+			ext.AsArray = true
 		}
 		// Unknown message-level annotations are silently dropped (not added to clean).
 	}

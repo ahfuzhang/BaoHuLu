@@ -1776,10 +1776,26 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 		}
 		mVal = _bv
 {{- else if eq $vc "float"}}
-		_fv, _ev := mv.Float64()
-		if _ev != nil {
-			visitErr = _ev
-			return
+		var _fv float64
+		if mv.Type(parser) == fastjson.TypeString {
+			_sb, _ev := mv.StringBytes()
+			if _ev != nil {
+				visitErr = _ev
+				return
+			}
+			var _ev2 error
+			_fv, _ev2 = fastfloat.Parse(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+			if _ev2 != nil {
+				visitErr = _ev2
+				return
+			}
+		} else {
+			var _ev error
+			_fv, _ev = mv.Float64()
+			if _ev != nil {
+				visitErr = _ev
+				return
+			}
 		}
 		mVal = {{mapValGoType $f.MapVal}}(_fv)
 {{- else if eq $vc "signed"}}
@@ -1915,9 +1931,23 @@ func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastj
 		}
 		r.{{$f.Name}} = append(r.{{$f.Name}}, _bv)
 {{- else if eq $sc "float"}}
-		_fv, _ei := _item.Float64()
-		if _ei != nil {
-			return _ei
+		var _fv float64
+		if _item.Type(parser) == fastjson.TypeString {
+			_sb, _ei := _item.StringBytes()
+			if _ei != nil {
+				return _ei
+			}
+			var _ei2 error
+			_fv, _ei2 = fastfloat.Parse(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+			if _ei2 != nil {
+				return _ei2
+			}
+		} else {
+			var _ei error
+			_fv, _ei = _item.Float64()
+			if _ei != nil {
+				return _ei
+			}
 		}
 		r.{{$f.Name}} = append(r.{{$f.Name}}, {{elemType $f.ReaderType}}(_fv))
 {{- else if eq $sc "signed"}}
@@ -2113,10 +2143,26 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				mVal = _bv
 {{- else if eq $vc "float"}}
-				_fv, _ev := mv.Float64()
-				if _ev != nil {
-					visitErr = _ev
-					return
+				var _fv float64
+				if mv.Type(parser) == fastjson.TypeString {
+					_sb, _ev := mv.StringBytes()
+					if _ev != nil {
+						visitErr = _ev
+						return
+					}
+					var _ev2 error
+					_fv, _ev2 = fastfloat.Parse(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+					if _ev2 != nil {
+						visitErr = _ev2
+						return
+					}
+				} else {
+					var _ev error
+					_fv, _ev = mv.Float64()
+					if _ev != nil {
+						visitErr = _ev
+						return
+					}
 				}
 				mVal = {{mapValGoType .MapVal}}(_fv)
 {{- else if eq $vc "signed"}}
@@ -2264,10 +2310,26 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				r.{{.Name}} = append(r.{{.Name}}, _bv)
 {{- else if eq $sc "float"}}
-				_fv, _ei := _item.Float64()
-				if _ei != nil {
-					visitErr = _ei
-					return
+				var _fv float64
+				if _item.Type(parser) == fastjson.TypeString {
+					_sb, _ei := _item.StringBytes()
+					if _ei != nil {
+						visitErr = _ei
+						return
+					}
+					var _ei2 error
+					_fv, _ei2 = fastfloat.Parse(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+					if _ei2 != nil {
+						visitErr = _ei2
+						return
+					}
+				} else {
+					var _ei error
+					_fv, _ei = _item.Float64()
+					if _ei != nil {
+						visitErr = _ei
+						return
+					}
 				}
 				r.{{.Name}} = append(r.{{.Name}}, {{elemType .ReaderType}}(_fv))
 {{- else if eq $sc "signed"}}
@@ -2411,10 +2473,26 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 			}
 			r.{{.Name}} = _bv
 {{- else if eq $sc "float"}}
-			_fv, _e := v.Float64()
-			if _e != nil {
-				visitErr = _e
-				return
+			var _fv float64
+			if v.Type(parser) == fastjson.TypeString {
+				_sb, _e := v.StringBytes()
+				if _e != nil {
+					visitErr = _e
+					return
+				}
+				var _e2 error
+				_fv, _e2 = fastfloat.Parse(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
+				if _e2 != nil {
+					visitErr = _e2
+					return
+				}
+			} else {
+				var _e error
+				_fv, _e = v.Float64()
+				if _e != nil {
+					visitErr = _e
+					return
+				}
 			}
 			r.{{.Name}} = {{.ReaderType}}(_fv)
 {{- else if eq $sc "signed"}}

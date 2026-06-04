@@ -11,8 +11,6 @@ import (
 	"testing"
 
 	"github.com/bytedance/sonic"
-
-	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastjson"
 {{- if anyMsgHasDecimalField .Messages}}
 	"github.com/govalues/decimal"
 {{- end}}
@@ -216,10 +214,9 @@ func BenchmarkFromJSON_{{$goName}}_Generated(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	var r {{$roName}}
-	var p fastjson.Parser
 	for i := 0; i < b.N; i++ {
 		r.Reset()
-		if err := r.FromJSON(j, &p); err != nil {
+		if err := r.FromJSON(j); err != nil {
 			b.Fatal(err)
 		}
 	}

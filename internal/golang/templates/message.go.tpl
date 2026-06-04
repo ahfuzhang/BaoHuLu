@@ -1107,6 +1107,7 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 // Fields (including rawBuffer) are sorted with the fieldalignment strategy for
 // minimal memory padding and minimal GC scan range.
 type Readonly{{$goName}} struct {
+	parser                          fastjson.Parser
 {{- range readerAlignedFields .ReaderFields}}
 {{- if .StructTag}}
 {{fieldCommentBlock .Comment}}	{{padRight .Name .NameW}} {{padRight .TypeStr .TypeW}} {{.StructTag}}
@@ -1343,6 +1344,7 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 
 func (r *Readonly{{$goName}}) Reset() {
 	r.rawBuffer = nil
+	r.parser.Reset()
 {{- range .Fields}}
 {{- if .Map}}
 	clear(r.{{.Name}})
@@ -2566,11 +2568,9 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 }
 {{- end}}
 
-func (r *Readonly{{$goName}}) FromJSON(src []byte, parser *fastjson.Parser) error {
+func (r *Readonly{{$goName}}) FromJSON(src []byte) error {
 	r.rawBuffer = src
-	if parser == nil {
-		parser = &fastjson.Parser{}
-	}
+	parser := &r.parser
 	v, err := parser.Parse(unsafe.String(unsafe.SliceData(src), len(src)))
 	if err != nil {
 		return err
@@ -2600,14 +2600,14 @@ func (r *Readonly{{$goName}}) FromProtobufWithCopy(in []byte) error {
 	return r.FromProtobuf(r.rawBuffer)
 }
 
-func (r *Readonly{{$goName}}) FromJSONWithCopy(in []byte, parser *fastjson.Parser) error {
+func (r *Readonly{{$goName}}) FromJSONWithCopy(in []byte) error {
 	if cap(r.rawBuffer) < len(in) {
 		r.rawBuffer = make([]byte, len(in))
 	} else {
 		r.rawBuffer = r.rawBuffer[:len(in)]
 	}
 	copy(r.rawBuffer, in)
-	return r.FromJSON(r.rawBuffer, parser)
+	return r.FromJSON(r.rawBuffer)
 }
 
 // marshalToSizedBufferVT writes m into dAtA using vtprotobuf's backward-fill

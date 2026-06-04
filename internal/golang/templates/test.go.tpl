@@ -192,7 +192,7 @@ func Test{{$goName}}JSONRoundtrip(t *testing.T) {
 {{end -}}
 	// ── Part 2: verify with our custom FromJSON + Clone ───────────────────────
 	var r {{$roName}}
-	if err := r.FromJSON(j, nil); err != nil {
+	if err := r.FromJSON(j); err != nil {
 		t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
 	}
 	w2 := r.Clone(nil)
@@ -252,7 +252,7 @@ func Test{{$goName}}JSONLargeIntegers(t *testing.T) {
 
 	// Our custom FromJSON must recover the exact large values.
 	var r {{$roName}}
-	if err := r.FromJSON(j, nil); err != nil {
+	if err := r.FromJSON(j); err != nil {
 		t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
 	}
 {{range largeIntFields .Fields}}
@@ -328,7 +328,7 @@ func Test{{$goName}}FloatIntegerEquivalent(t *testing.T) {
 	// ── JSON roundtrip ────────────────────────────────────────────────────────
 	j := w.ToJSON(nil)
 	var r2 {{$roName}}
-	if err := r2.FromJSON(j, nil); err != nil {
+	if err := r2.FromJSON(j); err != nil {
 		t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
 	}
 	w3 := r2.Clone(nil)
@@ -368,7 +368,7 @@ func Test{{$goName}}DecimalPrecision(t *testing.T) {
 		// ── JSON roundtrip ────────────────────────────────────────────────────────
 		j := w.ToJSON(nil)
 		var r2 {{$roName}}
-		if err := r2.FromJSON(j, nil); err != nil {
+		if err := r2.FromJSON(j); err != nil {
 			t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
 		}
 		w3 := r2.Clone(nil)
@@ -406,7 +406,7 @@ func Test{{$goName}}StringEscapes(t *testing.T) {
 	// ── JSON roundtrip ────────────────────────────────────────────────────────
 	j := w.ToJSON(nil)
 	var r2 {{$roName}}
-	if err := r2.FromJSON(j, nil); err != nil {
+	if err := r2.FromJSON(j); err != nil {
 		t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
 	}
 	w3 := r2.Clone(nil)
@@ -482,15 +482,15 @@ func Test{{$goName}}FromProtobufSkipError(t *testing.T) {
 
 func Test{{$goName}}FromJSONErrors(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte("not-json"), nil); err == nil {
+	if err := r.FromJSON([]byte("not-json")); err == nil {
 		t.Error("expected error for invalid JSON, got nil")
 	}
 {{- if .AsArray}}
-	if err := r.FromJSON([]byte(`{}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{}`)); err == nil {
 		t.Error("expected error for JSON object (not array), got nil")
 	}
 {{- else}}
-	if err := r.FromJSON([]byte(`[1,2,3]`), nil); err == nil {
+	if err := r.FromJSON([]byte(`[1,2,3]`)); err == nil {
 		t.Error("expected error for JSON array (not object), got nil")
 	}
 {{- end}}
@@ -507,7 +507,7 @@ func Test{{$goName}}FromJSONErrors(t *testing.T) {
 // Field under test: {{$sf.JsonName}} ({{$sf.Type}})
 func Test{{$goName}}FromJSONScalarTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`{"{{$sf.JsonName}}": null}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"{{$sf.JsonName}}": null}`)); err == nil {
 		t.Errorf("expected error when scalar field %q receives null, got nil", "{{$sf.JsonName}}")
 	}
 }
@@ -518,7 +518,7 @@ func Test{{$goName}}FromJSONScalarTypeError(t *testing.T) {
 // Field under test: {{$mf.JsonName}}
 func Test{{$goName}}FromJSONMsgTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`{"{{$mf.JsonName}}": null}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"{{$mf.JsonName}}": null}`)); err == nil {
 		t.Errorf("expected error when msg field %q receives null, got nil", "{{$mf.JsonName}}")
 	}
 }
@@ -530,7 +530,7 @@ func Test{{$goName}}FromJSONMsgTypeError(t *testing.T) {
 // Field under test: {{$mapf.JsonName}}
 func Test{{$goName}}FromJSONMapTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`{"{{$mapf.JsonName}}": null}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"{{$mapf.JsonName}}": null}`)); err == nil {
 		t.Errorf("expected error when map field %q receives null, got nil", "{{$mapf.JsonName}}")
 	}
 }
@@ -542,7 +542,7 @@ func Test{{$goName}}FromJSONMapTypeError(t *testing.T) {
 // per-element parse error branch inside fromJSONArray).
 func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`[null]`), nil); err == nil {
+	if err := r.FromJSON([]byte(`[null]`)); err == nil {
 		t.Error("expected error for null element in @AsArray, got nil")
 	}
 }
@@ -553,7 +553,7 @@ func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
 // Field under test: {{$repf.JsonName}}
 func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
 	var r {{$roName}}
-	if err := r.FromJSON([]byte(`{"{{$repf.JsonName}}": null}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"{{$repf.JsonName}}": null}`)); err == nil {
 		t.Errorf("expected error when repeated field %q receives null, got nil", "{{$repf.JsonName}}")
 	}
 }
@@ -567,7 +567,7 @@ func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
 func Test{{$goName}}FromJSONBytesDecodeError(t *testing.T) {
 	var r {{$roName}}
 	// "!!!" is not valid standard base64.
-	if err := r.FromJSON([]byte(`{"{{$bf.JsonName}}": "!!!"}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"{{$bf.JsonName}}": "!!!"}`)); err == nil {
 		t.Errorf("expected error for invalid base64 in field %q, got nil", "{{$bf.JsonName}}")
 	}
 }
@@ -582,11 +582,11 @@ func Test{{$goName}}FromJSONMapValueTypeError(t *testing.T) {
 	var r {{$roName}}
 	// Null is not a valid value; the inner mv.Int64()/StringBytes()/etc. must error.
 {{- if .AsMap}}
-	if err := r.FromJSON([]byte(`{"k": null}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"k": null}`)); err == nil {
 		t.Error("expected error for null map value in @AsMap message, got nil")
 	}
 {{- else}}
-	if err := r.FromJSON([]byte(`{"{{$skm.JsonName}}": {"k": null}}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"{{$skm.JsonName}}": {"k": null}}`)); err == nil {
 		t.Errorf("expected error for null map value in field %q, got nil", "{{$skm.JsonName}}")
 	}
 {{- end}}
@@ -602,11 +602,11 @@ func Test{{$goName}}FromJSONMapKeyTypeError(t *testing.T) {
 	var r {{$roName}}
 	// "not-a-number" cannot be parsed as the numeric key type.
 {{- if .AsMap}}
-	if err := r.FromJSON([]byte(`{"not-a-number": 1}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"not-a-number": 1}`)); err == nil {
 		t.Error("expected error for non-numeric map key in @AsMap message, got nil")
 	}
 {{- else}}
-	if err := r.FromJSON([]byte(`{"{{$nkm.JsonName}}": {"not-a-number": 1}}`), nil); err == nil {
+	if err := r.FromJSON([]byte(`{"{{$nkm.JsonName}}": {"not-a-number": 1}}`)); err == nil {
 		t.Errorf("expected error for non-numeric map key in field %q, got nil", "{{$nkm.JsonName}}")
 	}
 {{- end}}
@@ -682,7 +682,7 @@ func Test{{$goName}}FromJSONWithCopyRoundtrip(t *testing.T) {
 	copy(wRef, j)
 
 	var r {{$roName}}
-	if err := r.FromJSONWithCopy(j, nil); err != nil {
+	if err := r.FromJSONWithCopy(j); err != nil {
 		t.Fatalf("FromJSONWithCopy error: %v\nJSON: %s", err, j)
 	}
 
@@ -707,7 +707,7 @@ func Test{{$goName}}FromJSONWithCopyAfterReset(t *testing.T) {
 	j := w.ToJSON(nil)
 
 	var r {{$roName}}
-	if err := r.FromJSONWithCopy(j, nil); err != nil {
+	if err := r.FromJSONWithCopy(j); err != nil {
 		t.Fatalf("first FromJSONWithCopy error: %v\nJSON: %s", err, j)
 	}
 	r.Reset()
@@ -715,7 +715,7 @@ func Test{{$goName}}FromJSONWithCopyAfterReset(t *testing.T) {
 	// Second call after Reset with a fresh copy of the same JSON.
 	j2 := make([]byte, len(j))
 	copy(j2, j)
-	if err := r.FromJSONWithCopy(j2, nil); err != nil {
+	if err := r.FromJSONWithCopy(j2); err != nil {
 		t.Fatalf("second FromJSONWithCopy (after reset) error: %v\nJSON: %s", err, j2)
 	}
 	w2 := r.Clone(nil)

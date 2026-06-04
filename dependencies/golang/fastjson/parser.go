@@ -56,7 +56,8 @@ func (p *Parser) ParseBytes(b []byte) (*Value, error) {
 
 type cache struct {
 	vs    []Value
-	arena []byte
+	arena []byte // todo: 这个对象，最好由 ReadonlyXXX 对象来提供，避免 Parser 重用时产生问题
+	// 另一个办法：每个 ReadonlyXXX 中，嵌入一个 Parser 对象
 }
 
 func (c *cache) reset() {
@@ -289,6 +290,7 @@ func (c *cache) unescapeStringBestEffort(s string) string {
 		c.arena = append(c.arena, s...)
 	}
 	b := c.arena[len(c.arena)-len(s):] // It is safe to do, since b is no longer reachable after this line.
+	// 重大 bug: 当 Parser 对象 Reset() 后，解析后的对象中的 string 被清空。或者：parser 重复使用时，字符串的内容被覆盖。
 	b = b[:n]
 	s = s[n+1:]
 	for len(s) > 0 {

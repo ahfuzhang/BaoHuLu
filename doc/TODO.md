@@ -108,8 +108,9 @@
     - 本质：通过牺牲二进制格式兼容性来换性能
   - protobuf 无法支持这样的类型：  `repeated map<string, string> data = 2;`   ✅
     - `// @AsMap`   ✅
-  - protobuf 无法支持这样的类型： `map<string, repeated string> key_to_many_value = 3;`
+  - protobuf 无法支持这样的类型： `map<string, repeated string> key_to_many_value = 3;`   ✅
     - 支持扩展：`// @AsArray`
+  - json decode: 字符串会使用 fastjson 中的 cache: 这里必须拷贝出来。否则 Parser Reset() 后会出现问题。  
 * csharp
   - 支持 form 提交的解析  ✅  => 还应该更深入的检查一下实现
   - 模仿 fastjson 实现 fastjson.cs  (实现 fastjson.cs，代替 json utf8 reader)

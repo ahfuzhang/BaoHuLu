@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastjson"
 )
 
 {{range .Messages}}
@@ -165,10 +164,9 @@ skipJSONEncode:
 	}
 	{
 		var r {{$roName}}
-		var p fastjson.Parser
 		mJDecBHL = runBench(func() int {
 			r.Reset()
-			if err := r.FromJSON(jsonData, &p); err != nil {
+			if err := r.FromJSON(jsonData); err != nil {
 				t.Fatal("FromJSON failed:", err)
 			}
 			return len(jsonData)

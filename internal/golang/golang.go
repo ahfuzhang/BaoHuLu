@@ -875,9 +875,10 @@ func (g *Generator) Render(out *os.File) error {
 			}
 			return false
 		},
-		"hasMapsOrMsgs":           HasMapsOrMsgs,
-		"hasDecimalFields":         HasDecimalFields,
-		"anyMsgHasDecimalField":    AnyMsgHasDecimalField,
+		"hasMapsOrMsgs":              HasMapsOrMsgs,
+		"hasDecimalFields":           HasDecimalFields,
+		"anyMsgHasDecimalField":      AnyMsgHasDecimalField,
+		"hasStringOrBytesFields":     HasStringOrBytesFields,
 		"decimalRound":             func(f FieldTpl) int { return f.DecimalRound },
 		// tagSize computes utils.TagSize(fieldNum, wireType) at template generation time,
 		// so the generated code contains the literal integer instead of a runtime call.
@@ -1227,6 +1228,27 @@ func HasDecimalFields(fields []FieldTpl) bool {
 func AnyMsgHasDecimalField(msgs []MsgTpl) bool {
 	for _, m := range msgs {
 		if HasDecimalFields(m.Fields) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasStringOrBytesFields returns true when any field would cause ReadString or ReadBytes
+// to be called in FromProtobuf — plain string/bytes fields, repeated string/bytes,
+// or map fields with a string/bytes key or value.
+func HasStringOrBytesFields(fields []FieldTpl) bool {
+	for _, f := range fields {
+		if f.IsRawBuf {
+			continue
+		}
+		if f.Map {
+			if f.MapKey == "string" || f.MapVal == "string" || f.MapVal == "bytes" {
+				return true
+			}
+			continue
+		}
+		if f.Type == "string" || f.Type == "bytes" {
 			return true
 		}
 	}

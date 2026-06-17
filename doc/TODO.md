@@ -44,6 +44,7 @@
     - 增加对比测试
     - 增加 benchmark
   - 尝试做 PGO 优化  
+  - map 的 value 是 bytes 的情况似乎未处理
 * CSharp
   - 成员上加上 attribute，支持原生的 json 编解码 ✅
   - 生成 test ✅
@@ -98,7 +99,7 @@
     - 预先扩容到指定大小
     - 使用切片得到某个成员，而不是 append
 * 类型扩展
-  - 支持 decimal 数据类型 => 无意义 ❌ => 需要认真考虑，否则对金融领域的支持就会有限
+  - 支持 decimal 数据类型 => 无意义 ❌ => 需要认真考虑，否则对金融领域的支持就会有限  ✅
 * 扩展语法：
   - @path 支持多次使用  ✅
   - @decimal=round:5   支持 decimal 数据类型，小数位数 5 位  ✅
@@ -111,6 +112,12 @@
   - protobuf 无法支持这样的类型： `map<string, repeated string> key_to_many_value = 3;`   ✅
     - 支持扩展：`// @AsArray`
   - json decode: 字符串会使用 fastjson 中的 cache: 这里必须拷贝出来。否则 Parser Reset() 后会出现问题。  
+  - 生命周期导致的严重 bug:
+    - json decode 时:
+      - json 未转义的字符串：可能因为 request buffer Reset() 而导致字符串被覆盖
+      - json 已经转义的字符串：因为 parser Reset() 而导致字符串被覆盖
+    - protobuf decode 时:
+      - 因为字符串并未复制出来，request buffer 如果 reset，必然导致未来的字符串都被覆盖。 => 只要使用字符串，就会存在这个重大隐患
 * csharp
   - 支持 form 提交的解析  ✅  => 还应该更深入的检查一下实现
   - 模仿 fastjson 实现 fastjson.cs  (实现 fastjson.cs，代替 json utf8 reader)
@@ -134,6 +141,8 @@
   - 选中更多的流行库来做性能对比测试
   - 二进制兼容性测试
   - 压测程序，增加 xx times / s  ✅
+  - 对比的库：
+    - https://github.com/goccy/go-json
 * 宣传
   - 融入 buf 的生态中，否则很难做到高的使用人数
   - 中文英文双语文档

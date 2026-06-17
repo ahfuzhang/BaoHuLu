@@ -1115,6 +1115,10 @@ type Readonly{{$goName}} struct {
 {{fieldCommentBlock .Comment}}	{{padRight .Name .NameW}} {{.TypeStr}}
 {{- end}}
 {{- end}}
+{{- if hasStringOrBytesFields .Fields}}
+	// strLen int
+	strArena *utils.Arena
+{{- end}}
 }
 
 func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
@@ -1371,6 +1375,10 @@ func (r *Readonly{{$goName}}) Reset() {
 	r.{{.Name}} = {{readerZero .ReaderType}}
 {{- end}}
 {{- end}}
+{{- if hasStringOrBytesFields .Fields}}
+	// r.strLen = 0
+	r.strArena = nil  // 让对象不再引用，由 GC 来管理生命周期
+{{- end}}
 }
 
 func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
@@ -1423,6 +1431,13 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 				switch efn {
 				case 1:
 					mKey, entryData, err = {{readFunc .MapKey}}(entryData)
+					{{- if eq .MapKey "string"}}
+					// r.strLen += len(mKey)
+					if r.strArena == nil {
+						r.strArena = utils.NewArena(1024)
+					}
+					mKey = r.strArena.PutString(mKey)  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
+					{{- end}}
 				case 2:
 					{{- if mapValIsMsg .MapVal}}
 					var _subBytes []byte
@@ -1432,7 +1447,14 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 					}
 					err = r._{{.Name}}Arr[_mValIdx].FromProtobuf(_subBytes)
 					{{- else}}
-					mVal, entryData, err = {{readFunc .MapVal}}(entryData)
+					mVal, entryData, err = {{readFunc .MapVal}}(entryData)  // todo: 想办法传入 arena，以便减少对象分配
+					{{- if or (eq .MapVal "string") (eq .MapVal "bytes")}}
+					// r.strLen += len(mVal)
+					if r.strArena == nil {
+						r.strArena = utils.NewArena(1024)
+					}
+					mVal = r.strArena.PutString(mVal)  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
+					{{- end}}
 					{{- end}}
 				default:
 					entryData, err = utils.SkipField(ewt, entryData)
@@ -1478,6 +1500,11 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if err != nil {
 				return err
 			}
+			// r.strLen += len(sv)
+			if r.strArena == nil {
+				r.strArena = utils.NewArena(1024)
+			}
+			sv = r.strArena.PutString(sv)  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
 			r.{{.Name}} = append(r.{{.Name}}, sv)
 {{- else if eq .Type "bytes"}}
 			var bv []byte
@@ -1485,6 +1512,11 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if err != nil {
 				return err
 			}
+			// r.strLen += len(bv)
+			if r.strArena == nil {
+				r.strArena = utils.NewArena(1024)
+			}
+			bv = r.strArena.PutBytes(bv)  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
 			r.{{.Name}} = append(r.{{.Name}}, bv)
 {{- else}}
 			var subData []byte
@@ -1632,15 +1664,27 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 				return err
 			}
 {{- else if eq .Type "string"}}
+			// todo: 这里必须对字符串进行复制
 			r.{{.Name}}, in, err = utils.ReadString(in)
 			if err != nil {
 				return err
 			}
+			// r.strLen += len(r.{{.Name}})
+			if r.strArena == nil {
+				r.strArena = utils.NewArena(1024)
+			}
+			r.{{.Name}} = r.strArena.PutString(r.{{.Name}})  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
 {{- else if eq .Type "bytes"}}
+			// todo: 这里必须对字符串进行复制
 			r.{{.Name}}, in, err = utils.ReadBytes(in)
 			if err != nil {
 				return err
 			}
+			// r.strLen += len(r.{{.Name}})
+			if r.strArena == nil {
+				r.strArena = utils.NewArena(1024)
+			}
+			r.{{.Name}} = r.strArena.PutBytes(r.{{.Name}})  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
 {{- else}}
 			var ev int32
 			ev, in, err = utils.ReadInt32(in)

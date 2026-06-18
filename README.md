@@ -96,35 +96,127 @@
 
 ### Benchmark 数据
 
-* C#, Linux + amd64
+### C#, Linux + amd64
 
 <table border=1>
 <tr>
   <td colspan=2> &nbsp; </td>
-  <td> 64kb json</td>
-  <td> 232 bytes json</td>
+  <td> 64kb json<br/>(All types)</td>
+  <td> 232 bytes json<br/>(Value type only)</td>
 </tr>
 <tr>
   <td rowspan=2>JSON<br/>(对比 StdLib)</td>
   <td>encode</td>
-  <td>快 9.07%</td>
-  <td> 快 26.72% </td>
+  <td><span style="color:red">+9.07%</span></td>
+  <td><span style="color:red">+26.72%</span></td>
 </tr>
 <tr>
   <td>decode</td>
-  <td>快 48.34%</td>
-  <td> 快 18.53% </td>
+  <td><span style="color:red">+48.34%</span></td>
+  <td><span style="color:red">+18.53%</span></td>
 </tr>
 <tr>
   <td rowspan=2>Protobuf<br/>(对比Grpc.Tools)</td>
   <td>encode</td>
-  <td>快 57.30 %</td>
-  <td> 快 31.46 % </td>
+  <td><span style="color:red">+57.30%</span></td>
+  <td><span style="color:red">+31.46%</span></td>
 </tr>
 <tr>
   <td>decode</td>
-  <td>快 2.58 倍</td>
-  <td> 快 2.42 倍 </td>
+  <td><span style="color:red">+258%</span></td>
+  <td><span style="color:red">+242%</span></td>
+</tr>
+</table>
+
+#### golang
+
+<table border=1>
+<tr>
+<td colspan=2> &nbsp; </td>
+<td colspan=2 align="center">Linux Amd64<br/>Intel 4.5GHz</td>
+<td colspan=2 align="center">MacOS Arm64<br/>macbook m2</td>
+</tr>
+<tr>
+  <td colspan=2> &nbsp; </td>
+  <td> 64kb json<br/>(All types)</td>
+  <td> 232 bytes json<br/>(Value type only)</td>
+  <td> 64kb json<br/>(All types)</td>
+  <td> 232 bytes json<br/>(Value type only)</td>
+</tr>
+<tr>
+  <td rowspan=2>JSON<br/></td>
+  <td>encode</td>
+  <td>1.68 GB/s<br>0 allocs/op<br>13068 times/s</td>
+  <td>3.05 GB/s<br>0 allocs/op<br>13157380 times/s</td>
+  <td>966.77 MB/s<br>0 allocs/op<br>7539 times/s</td>
+  <td>1.89 GB/s<br>0 allocs/op<br>8153138 times/s</td>
+</tr>
+<tr>
+  <td>decode</td>
+  <td>466.12 MB/s<br>62 allocs/op<br>3635 times/s</td>
+  <td>964.24 MB/s<br>0 allocs/op<br>4156190 times/s</td>
+  <td>409.16 MB/s<br>62 allocs/op<br>3191 times/s</td>
+  <td>577.07 MB/s<br>0 allocs/op<br>2487367 times/s</td>
+</tr>
+<tr>
+  <td rowspan=2>JSON<br/>(对比 encoding/json)</td>
+  <td>encode</td>
+  <td><span style="color:red">+948.4%</span></td>
+  <td><span style="color:red">+647.1%</span></td>
+  <td><span style="color:red">+561.6%</span></td>
+  <td><span style="color:red">+450.6%</span></td>
+</tr>
+<tr>
+  <td>decode</td>
+  <td><span style="color:red">+222.1%</span></td>
+  <td><span style="color:red">+294.7%</span></td>
+  <td><span style="color:red">+224.4%</span></td>
+  <td><span style="color:red">+231.9%</span></td>
+</tr>
+<tr>
+  <td rowspan=2>JSON<br/>(对比 encoding/json/v2)</td>
+  <td>encode</td>
+  <td><span style="color:red">+342.9%</span></td>
+  <td><span style="color:red">+707.1%</span></td>
+  <td><span style="color:red">+206.5%</span></td>
+  <td><span style="color:red">+465.8%</span></td>
+</tr>
+<tr>
+  <td>decode</td>
+  <td><span style="color:red">+174.8%</span></td>
+  <td><span style="color:red">+239.2%</span></td>
+  <td><span style="color:red">+167.1%</span></td>
+  <td><span style="color:red">+173.4%</span></td>
+</tr>
+<tr>
+  <td rowspan=2>JSON<br/>(对比 bytedance/sonic)</td>
+  <td>encode</td>
+  <td><span style="color:red">+58.7%</span></td>
+  <td><span style="color:red">+158.2%</span></td>
+  <td><span style="color:red">+182.8%</span></td>
+  <td><span style="color:red">+343.0%</span></td>
+</tr>
+<tr>
+  <td>decode</td>
+  <td><span style="color:red">+20.5%</span></td>
+  <td><span style="color:red">+53.0%</span></td>
+  <td><span style="color:green">-3.9%</span></td>
+  <td><span style="color:red">+50.7%</span></td>
+</tr>
+<tr>
+  <td rowspan=2>Protobuf<br/></td>
+  <td>encode</td>
+  <td>1.24 GB/s<br>0 allocs/op<br>15368 times/s</td>
+  <td>1.95 GB/s<br>0 allocs/op<br>33098481 times/s</td>
+  <td>826.31 MB/s<br>0 allocs/op<br>10222 times/s</td>
+  <td>1.52 GB/s<br>0 allocs/op<br>25728175 times/s</td>
+</tr>
+<tr>
+  <td>decode</td>
+  <td>606.00 MB/s<br>66 allocs/op<br>7497 times/s</td>
+  <td>1.38 GB/s<br>0 allocs/op<br>23325147 times/s</td>
+  <td>596.86 MB/s<br>66 allocs/op<br>7384 times/s</td>
+  <td>788.86 MB/s<br>0 allocs/op<br>13370589 times/s</td>
 </tr>
 </table>
 

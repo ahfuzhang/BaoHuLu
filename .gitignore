@@ -4,3 +4,4 @@ test.test
 /.claude/
 *.sln
 /memory/
+.DS_Store

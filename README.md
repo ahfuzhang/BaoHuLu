@@ -96,38 +96,6 @@
 
 ### Benchmark 数据
 
-### C#, Linux + amd64
-
-<table border=1>
-<tr>
-  <td colspan=2> &nbsp; </td>
-  <td> 64kb json<br/>(All types)</td>
-  <td> 232 bytes json<br/>(Value type only)</td>
-</tr>
-<tr>
-  <td rowspan=2>JSON<br/>(对比 StdLib)</td>
-  <td>encode</td>
-  <td><span style="color:red">+9.07%</span></td>
-  <td><span style="color:red">+26.72%</span></td>
-</tr>
-<tr>
-  <td>decode</td>
-  <td><span style="color:red">+48.34%</span></td>
-  <td><span style="color:red">+18.53%</span></td>
-</tr>
-<tr>
-  <td rowspan=2>Protobuf<br/>(对比Grpc.Tools)</td>
-  <td>encode</td>
-  <td><span style="color:red">+57.30%</span></td>
-  <td><span style="color:red">+31.46%</span></td>
-</tr>
-<tr>
-  <td>decode</td>
-  <td><span style="color:red">+258%</span></td>
-  <td><span style="color:red">+242%</span></td>
-</tr>
-</table>
-
 #### golang
 
 <table border=1>
@@ -217,6 +185,38 @@
   <td>1.38 GB/s<br>0 allocs/op<br>23325147 times/s</td>
   <td>596.86 MB/s<br>66 allocs/op<br>7384 times/s</td>
   <td>788.86 MB/s<br>0 allocs/op<br>13370589 times/s</td>
+</tr>
+</table>
+
+#### C#, Linux + amd64
+
+<table border=1>
+<tr>
+  <td colspan=2> &nbsp; </td>
+  <td> 64kb json<br/>(All types)</td>
+  <td> 232 bytes json<br/>(Value type only)</td>
+</tr>
+<tr>
+  <td rowspan=2>JSON<br/>(对比 StdLib)</td>
+  <td>encode</td>
+  <td><span style="color:red">+9.07%</span></td>
+  <td><span style="color:red">+26.72%</span></td>
+</tr>
+<tr>
+  <td>decode</td>
+  <td><span style="color:red">+48.34%</span></td>
+  <td><span style="color:red">+18.53%</span></td>
+</tr>
+<tr>
+  <td rowspan=2>Protobuf<br/>(对比Grpc.Tools)</td>
+  <td>encode</td>
+  <td><span style="color:red">+57.30%</span></td>
+  <td><span style="color:red">+31.46%</span></td>
+</tr>
+<tr>
+  <td>decode</td>
+  <td><span style="color:red">+258%</span></td>
+  <td><span style="color:red">+242%</span></td>
 </tr>
 </table>
 

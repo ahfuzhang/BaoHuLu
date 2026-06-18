@@ -700,3 +700,39 @@ pb decode:    [FromProtobuf] 12.75 GB/s, 0 allocs/op
 |:----------|:-------:|
 | pb encode | 1.52 GB/s<br>0 allocs/op<br>25728175 times/s |
 | pb decode | 788.86 MB/s<br>0 allocs/op<br>13370589 times/s |
+
+# 2026-06-18, linux, amd64
+
+## AllTypes
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 1.68 GB/s<br>0 allocs/op<br>13068 times/s | 159.83 MB/s<br>3878 allocs/op<br>1246 times/s<br><span style="color:red">+948.4%</span> | 378.38 MB/s<br>89 allocs/op<br>2951 times/s<br><span style="color:red">+342.9%</span> | 1.06 GB/s<br>46 allocs/op<br>8231 times/s<br><span style="color:red">+58.7%</span> |
+| json decode | 466.12 MB/s<br>62 allocs/op<br>3635 times/s | 144.73 MB/s<br>1974 allocs/op<br>1129 times/s<br><span style="color:red">+222.1%</span> | 169.63 MB/s<br>1974 allocs/op<br>1323 times/s<br><span style="color:red">+174.8%</span> | 386.88 MB/s<br>1429 allocs/op<br>3017 times/s<br><span style="color:red">+20.5%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 1.24 GB/s<br>0 allocs/op<br>15368 times/s |
+| pb decode | 606.00 MB/s<br>66 allocs/op<br>7497 times/s |
+
+## ValueTypes
+
+### JSON Performance
+
+| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |
+|:----------|:-------:|:-------------:|:----------------:|:---------------:|
+| json encode | 3.05 GB/s<br>0 allocs/op<br>13157380 times/s | 408.61 MB/s<br>3 allocs/op<br>1761243 times/s<br><span style="color:red">+647.1%</span> | 378.19 MB/s<br>3 allocs/op<br>1630148 times/s<br><span style="color:red">+707.1%</span> | 1.18 GB/s<br>3 allocs/op<br>5096373 times/s<br><span style="color:red">+158.2%</span> |
+| json decode | 964.24 MB/s<br>0 allocs/op<br>4156190 times/s | 244.31 MB/s<br>1 allocs/op<br>1053077 times/s<br><span style="color:red">+294.7%</span> | 284.24 MB/s<br>1 allocs/op<br>1225168 times/s<br><span style="color:red">+239.2%</span> | 630.14 MB/s<br>3 allocs/op<br>2716123 times/s<br><span style="color:red">+53.0%</span> |
+
+### Protobuf Performance
+
+| Operation | BaoHuLu |
+|:----------|:-------:|
+| pb encode | 1.95 GB/s<br>0 allocs/op<br>33098481 times/s |
+| pb decode | 1.38 GB/s<br>0 allocs/op<br>23325147 times/s |
+
+

@@ -225,7 +225,7 @@ See: [doc/Performance](./doc/Performance.md)
 ## How to use, 命令行说明
 
 * 安装
-  - `go install github.com/ahfuzhang/BaoHuLu/cmd/hulu@v0.12.0`
+  - `go install github.com/ahfuzhang/BaoHuLu/cmd/hulu@v0.13.0`
 
 * 语法检查
   * `hulu xi ./xx.proto`

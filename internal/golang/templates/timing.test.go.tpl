@@ -14,6 +14,9 @@ import (
 {{- if anyMsgHasDecimalField .Messages}}
 	"github.com/govalues/decimal"
 {{- end}}
+{{- if benchNeedsUtils .Messages}}
+	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
+{{- end}}
 )
 
 {{range .Messages}}

@@ -1,4 +1,4 @@
-package utils
+package fastjson
 
 import "unsafe"
 
@@ -40,4 +40,16 @@ func (a *Arena) PutBytes(bytes []byte) []byte {
 	buf := a.b[start : start+len(bytes)]
 	copy(buf, bytes)
 	return buf
+}
+
+func (a *Arena) Reserve(n int) []byte {
+	start := len(a.b)
+	if cap(a.b) < len(a.b)+n {
+		temp := make([]byte, len(a.b)+n, (len(a.b)+n)*2)
+		copy(temp, a.b)
+		a.b = temp
+	} else {
+		a.b = a.b[:start+n]
+	}
+	return a.b[start : start+n]
 }

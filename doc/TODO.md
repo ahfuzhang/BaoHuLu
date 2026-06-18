@@ -44,7 +44,10 @@
     - 增加对比测试
     - 增加 benchmark
   - 尝试做 PGO 优化  
-  - map 的 value 是 bytes 的情况似乎未处理
+  - map 的 value 是 bytes 的情况未处理 ✅
+  - map 的 value 是 enum 的情况未处理 ✅
+  - map 类型反序列化后，内存踩踏的问题
+  - array 类型反序列化后，内存踩踏的问题
 * CSharp
   - 成员上加上 attribute，支持原生的 json 编解码 ✅
   - 生成 test ✅

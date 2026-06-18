@@ -82,7 +82,7 @@ type {{$goName}} struct {
 }
 
 func (m *{{$goName}}) Reset() {
-	clear(m.arena) // pointer might be cause not GC correctly
+	clear(m.arena) // pointer might be cause not GC correctly, so must use memset(0) to dereference
 	m.arena = m.arena[:0]
 {{- range .Fields}}
 {{- if .Map}}
@@ -103,6 +103,16 @@ func (m *{{$goName}}) Reset() {
 	m.{{.Name}} = {{zeroVal .GoType}}
 {{- end}}
 {{- end}}
+	/*
+	Risk of misuse: After calling `Reset()`, the data in objects referencing the value portion of 
+	a map, as well as members of array types, might be set to \0. If you want this to persist, 
+	be sure to use the `Clone()` method to copy them before calling `Reset()`.
+
+	Reference to string and bytes types is safe, as these types are copied during decoding.
+
+	误用风险：调用 Reset() 后，引用 map 的 value 部分的对象指针，以及引用数组类型中的成员，其内部的数据可能被设置为 \0。如果希望长期有效，一定要在 Reset() 之前使用 Clone() 方法进行复制。
+	引用字符串类型以及 bytes 类型是安全的，这些类型会在 decode 时进行复制。
+	*/
 }
 
 func (m *{{$goName}}) ProtobufSize() int {
@@ -1104,20 +1114,17 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 {{- end}}
 
 {{msgCommentBlock .Comment}}// Readonly{{$goName}} readonly struct.
-// Fields (including rawBuffer) are sorted with the fieldalignment strategy for
+// Fields are sorted with the fieldalignment strategy for
 // minimal memory padding and minimal GC scan range.
 type Readonly{{$goName}} struct {
-	parser                          fastjson.Parser
+	parser    fastjson.Parser
+	strArena *fastjson.Arena
 {{- range readerAlignedFields .ReaderFields}}
 {{- if .StructTag}}
 {{fieldCommentBlock .Comment}}	{{padRight .Name .NameW}} {{padRight .TypeStr .TypeW}} {{.StructTag}}
 {{- else}}
 {{fieldCommentBlock .Comment}}	{{padRight .Name .NameW}} {{.TypeStr}}
 {{- end}}
-{{- end}}
-{{- if hasStringOrBytesFields .Fields}}
-	// strLen int
-	strArena *utils.Arena
 {{- end}}
 }
 
@@ -1129,9 +1136,7 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 		dst = &{{$goName}}{}
 	}
 	if dst.arena == nil {
-		dst.arena = make([]byte, 0, len(r.rawBuffer))
-	} else {
-		dst.arena = dst.arena[:0]
+		dst.arena = make([]byte, 0, r.rawBufferLen)  // todo: 做一个预估大小的函数
 	}
 {{- range .Fields}}
 {{- if .Map}}
@@ -1142,68 +1147,62 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 			{{- else}}
 			dst.{{.Name}} = make({{.GoType}}, len(r.{{.Name}}))
 			{{- end}}
-		} else {
-			clear(dst.{{.Name}})
 		}
 		for _rk, _rv := range r.{{.Name}} {
-			{{- if eq .MapKey "string"}}
-			{
-				_kloc := len(dst.arena)
-				dst.arena = append(dst.arena, _rk...)
-				_nk := unsafe.String(&dst.arena[_kloc], len(_rk))
-				{{- if eq .MapVal "string"}}
-				if len(_rv) > 0 {
-					_vloc := len(dst.arena)
-					dst.arena = append(dst.arena, _rv...)
-					dst.{{.Name}}[_nk] = unsafe.String(&dst.arena[_vloc], len(_rv))
-				} else {
-					dst.{{.Name}}[_nk] = ""
-				}
-				{{- else if eq .MapVal "bytes"}}
-				if len(_rv) > 0 {
-					_vloc := len(dst.arena)
-					dst.arena = append(dst.arena, _rv...)
-					_vend := _vloc + len(_rv)
-					dst.{{.Name}}[_nk] = dst.arena[_vloc:_vend:_vend]
-				} else {
-					dst.{{.Name}}[_nk] = nil
-				}
-				{{- else if mapValIsMsg .MapVal}}
-				_nv := new({{mapValGoType .MapVal}})
-				_rv.Clone(_nv)
-				dst.{{.Name}}[_nk] = _nv
-				{{- else}}
-				dst.{{.Name}}[_nk] = _rv
-				{{- end}}
+		{{- if eq .MapKey "string"}}
+			_kloc := len(dst.arena)
+			dst.arena = append(dst.arena, _rk...)
+			_nk := unsafe.String(&dst.arena[_kloc], len(_rk))
+			{{- if eq .MapVal "string"}}
+			if len(_rv) > 0 {
+				_vloc := len(dst.arena)
+				dst.arena = append(dst.arena, _rv...)
+				dst.{{.Name}}[_nk] = unsafe.String(&dst.arena[_vloc], len(_rv))
+			} else {
+				dst.{{.Name}}[_nk] = ""
 			}
+			{{- else if eq .MapVal "bytes"}}
+			if len(_rv) > 0 {
+				_vloc := len(dst.arena)
+				dst.arena = append(dst.arena, _rv...)
+				_vend := _vloc + len(_rv)
+				dst.{{.Name}}[_nk] = dst.arena[_vloc:_vend:_vend]
+			} else {
+				dst.{{.Name}}[_nk] = nil
+			}
+			{{- else if mapValIsMsg .MapVal}}
+			_nv := new({{mapValGoType .MapVal}})  // todo: 在 arena 中分配，减少对象
+			_rv.Clone(_nv)
+			dst.{{.Name}}[_nk] = _nv
 			{{- else}}
-			{
-				{{- if eq .MapVal "string"}}
-				if len(_rv) > 0 {
-					_vloc := len(dst.arena)
-					dst.arena = append(dst.arena, _rv...)
-					dst.{{.Name}}[_rk] = unsafe.String(&dst.arena[_vloc], len(_rv))
-				} else {
-					dst.{{.Name}}[_rk] = ""
-				}
-				{{- else if eq .MapVal "bytes"}}
-				if len(_rv) > 0 {
-					_vloc := len(dst.arena)
-					dst.arena = append(dst.arena, _rv...)
-					_vend := _vloc + len(_rv)
-					dst.{{.Name}}[_rk] = dst.arena[_vloc:_vend:_vend]
-				} else {
-					dst.{{.Name}}[_rk] = nil
-				}
-				{{- else if mapValIsMsg .MapVal}}
-				_nv := new({{mapValGoType .MapVal}})
-				_rv.Clone(_nv)
-				dst.{{.Name}}[_rk] = _nv
-				{{- else}}
-				dst.{{.Name}}[_rk] = _rv
-				{{- end}}
-			}
+			dst.{{.Name}}[_nk] = _rv
 			{{- end}}
+		{{- else}}
+			{{- if eq .MapVal "string"}}
+			if len(_rv) > 0 {
+				_vloc := len(dst.arena)
+				dst.arena = append(dst.arena, _rv...)
+				dst.{{.Name}}[_rk] = unsafe.String(&dst.arena[_vloc], len(_rv))
+			} else {
+				dst.{{.Name}}[_rk] = ""
+			}
+			{{- else if eq .MapVal "bytes"}}
+			if len(_rv) > 0 {
+				_vloc := len(dst.arena)
+				dst.arena = append(dst.arena, _rv...)
+				_vend := _vloc + len(_rv)
+				dst.{{.Name}}[_rk] = dst.arena[_vloc:_vend:_vend]
+			} else {
+				dst.{{.Name}}[_rk] = nil
+			}
+			{{- else if mapValIsMsg .MapVal}}
+			_nv := new({{mapValGoType .MapVal}})  // todo: 这里可以使用数组，减少对象的数量
+			_rv.Clone(_nv)
+			dst.{{.Name}}[_rk] = _nv
+			{{- else}}
+			dst.{{.Name}}[_rk] = _rv
+			{{- end}}
+		{{- end}}
 		}
 	}
 {{- else if .Repeated}}
@@ -1347,7 +1346,7 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 }
 
 func (r *Readonly{{$goName}}) Reset() {
-	r.rawBuffer = nil
+	r.rawBufferLen = 0
 	r.parser.Reset()
 {{- range .Fields}}
 {{- if .Map}}
@@ -1375,14 +1374,16 @@ func (r *Readonly{{$goName}}) Reset() {
 	r.{{.Name}} = {{readerZero .ReaderType}}
 {{- end}}
 {{- end}}
-{{- if hasStringOrBytesFields .Fields}}
-	// r.strLen = 0
-	r.strArena = nil  // 让对象不再引用，由 GC 来管理生命周期
-{{- end}}
+	r.strArena = nil  // Make the object no longer referenced, and let the GC manage its lifecycle.
 }
 
 func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
-	r.rawBuffer = in
+	r.rawBufferLen = len(in)
+{{- if hasStringOrBytesFields .Fields}}
+	if r.strArena == nil {
+		r.strArena = fastjson.NewArena(r.rawBufferLen)
+	}
+{{- end}}	
 	var err error
 	for len(in) > 0 {
 		var fieldNum int
@@ -1406,7 +1407,6 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 				return err
 			}
 			// todo: 提前 count 元素个数
-			//  _mapKeyCount := utils.CountMapKey(entryData)  // 这个没有用，这个值一定是 1
 			var mKey {{mapKeyGoType .MapKey}}
 			{{- if mapValIsMsg .MapVal}}
 			if cap(r._{{.Name}}Arr) < 16 {
@@ -1432,11 +1432,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 				case 1:
 					mKey, entryData, err = {{readFunc .MapKey}}(entryData)
 					{{- if eq .MapKey "string"}}
-					// r.strLen += len(mKey)
-					if r.strArena == nil {
-						r.strArena = utils.NewArena(1024)
-					}
-					mKey = r.strArena.PutString(mKey)  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
+					mKey = r.strArena.PutString(mKey)  // The string must be copied; otherwise, Reset() may cause the string content to be set to \0.
 					{{- end}}
 				case 2:
 					{{- if mapValIsMsg .MapVal}}
@@ -1445,15 +1441,19 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 					if err != nil {
 						break
 					}
-					err = r._{{.Name}}Arr[_mValIdx].FromProtobuf(_subBytes)
-					{{- else}}
-					mVal, entryData, err = {{readFunc .MapVal}}(entryData)  // todo: 想办法传入 arena，以便减少对象分配
-					{{- if or (eq .MapVal "string") (eq .MapVal "bytes")}}
-					// r.strLen += len(mVal)
-					if r.strArena == nil {
-						r.strArena = utils.NewArena(1024)
+					err = r._{{.Name}}Arr[_mValIdx].FromProtobufWithArena(_subBytes, r.strArena)  // reuse parent message's arena
+					{{- else if mapValIsEnum .MapVal}}
+					{
+						var _ev int32
+						_ev, entryData, err = utils.ReadInt32(entryData)
+						mVal = {{mapValGoType .MapVal}}(_ev)
 					}
-					mVal = r.strArena.PutString(mVal)  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
+					{{- else}}
+					mVal, entryData, err = {{readFunc .MapVal}}(entryData)
+					{{- if eq .MapVal "string"}}
+					mVal = r.strArena.PutString(mVal)  // The string must be copied; otherwise, Reset() may cause the string content to be set to \0.
+					{{- else if eq .MapVal "bytes"}}
+					mVal = r.strArena.PutBytes(mVal)  // The string must be copied; otherwise, Reset() may cause the string content to be set to \0.
 					{{- end}}
 					{{- end}}
 				default:
@@ -1500,11 +1500,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if err != nil {
 				return err
 			}
-			// r.strLen += len(sv)
-			if r.strArena == nil {
-				r.strArena = utils.NewArena(1024)
-			}
-			sv = r.strArena.PutString(sv)  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
+			sv = r.strArena.PutString(sv)  // The string must be copied; otherwise, Reset() may cause the string content to be set to \0.
 			r.{{.Name}} = append(r.{{.Name}}, sv)
 {{- else if eq .Type "bytes"}}
 			var bv []byte
@@ -1512,11 +1508,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			if err != nil {
 				return err
 			}
-			// r.strLen += len(bv)
-			if r.strArena == nil {
-				r.strArena = utils.NewArena(1024)
-			}
-			bv = r.strArena.PutBytes(bv)  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
+			bv = r.strArena.PutBytes(bv)  // The string must be copied; otherwise, Reset() may cause the string content to be set to \0.
 			r.{{.Name}} = append(r.{{.Name}}, bv)
 {{- else}}
 			var subData []byte
@@ -1525,7 +1517,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 				return err
 			}
 			var elem {{readerElemType .}}
-			if err = elem.FromProtobuf(subData); err != nil {
+			if err = elem.FromProtobufWithArena(subData, r.strArena); err != nil {
 				return err
 			}
 			r.{{.Name}} = append(r.{{.Name}}, elem)
@@ -1542,7 +1534,7 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 			}
 			r._has{{.Name}} = true
 {{- end}}
-			if err = r.{{.Name}}.FromProtobuf(subData); err != nil {
+			if err = r.{{.Name}}.FromProtobufWithArena(subData, r.strArena); err != nil {
 				return err
 			}
 {{- else if .IsDecimal}}
@@ -1664,27 +1656,17 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 				return err
 			}
 {{- else if eq .Type "string"}}
-			// todo: 这里必须对字符串进行复制
 			r.{{.Name}}, in, err = utils.ReadString(in)
 			if err != nil {
 				return err
 			}
-			// r.strLen += len(r.{{.Name}})
-			if r.strArena == nil {
-				r.strArena = utils.NewArena(1024)
-			}
-			r.{{.Name}} = r.strArena.PutString(r.{{.Name}})  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
+			r.{{.Name}} = r.strArena.PutString(r.{{.Name}})  // The string must be copied; otherwise, Reset() may cause the string content to be set to \0.
 {{- else if eq .Type "bytes"}}
-			// todo: 这里必须对字符串进行复制
 			r.{{.Name}}, in, err = utils.ReadBytes(in)
 			if err != nil {
 				return err
 			}
-			// r.strLen += len(r.{{.Name}})
-			if r.strArena == nil {
-				r.strArena = utils.NewArena(1024)
-			}
-			r.{{.Name}} = r.strArena.PutBytes(r.{{.Name}})  // 必须复制字符串，否则 Reset() 可能导致字符串内容被清空
+			r.{{.Name}} = r.strArena.PutBytes(r.{{.Name}})  // The string must be copied; otherwise, Reset() may cause the string content to be set to \0.
 {{- else}}
 			var ev int32
 			ev, in, err = utils.ReadInt32(in)
@@ -1706,7 +1688,10 @@ func (r *Readonly{{$goName}}) FromProtobuf(in []byte) error {
 }
 {{- if .AsMap}}
 {{- $f := index .Fields 0}}
-func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjson.Parser) error {
+func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjson.Parser, arena *fastjson.Arena) error {
+	if r.strArena == nil && arena != nil {
+		r.strArena = arena
+	}
 	var visitErr error
 	if r.{{$f.Name}} == nil {
 		{{- if mapValIsMsg $f.MapVal}}
@@ -1726,14 +1711,12 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 		}
 	}
 {{- end}}
-	obj.Visit(func(mk []byte, mv *fastjson.Value) {
-		if visitErr != nil {
-			return
-		}
+	obj.Visit(func(mk []byte, mv *fastjson.Value) (isContinue bool) {
 		var mKey {{mapKeyGoType $f.MapKey}}
 {{- $kc := jsonMapKeyClass $f.MapKey}}
 {{- if eq $kc "string"}}
 		mKey = unsafe.String(unsafe.SliceData(mk), len(mk))
+		mKey = r.strArena.PutString(mKey)  // copy string
 {{- else if eq $kc "bool"}}
 		mKey = unsafe.String(unsafe.SliceData(mk), len(mk)) == "true"
 {{- else if eq $kc "signed32"}}
@@ -1775,7 +1758,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 			visitErr = _eo
 			return
 		}
-		if _eo2 := sub.fromJSONArray(_subArr, parser); _eo2 != nil {
+		if _eo2 := sub.fromJSONArray(_subArr, parser, r.strArena); _eo2 != nil {
 			visitErr = _eo2
 			return
 		}
@@ -1785,7 +1768,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 			visitErr = _eo
 			return
 		}
-		if _eo2 := sub.fromJSONValue(_subObj, parser); _eo2 != nil {
+		if _eo2 := sub.fromJSONValue(_subObj, parser, r.strArena); _eo2 != nil {
 			visitErr = _eo2
 			return
 		}
@@ -1795,13 +1778,12 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 		var mVal {{mapValGoType $f.MapVal}}
 {{- $vc := jsonScalarClass $f.MapVal}}
 {{- if eq $vc "string"}}
-		_ = mv.Type(parser)
-		_b, _ev := mv.StringBytes()
+		_s, _ev := mv.UnescapeString(parser)  // unescape and clone
 		if _ev != nil {
 			visitErr = _ev
 			return
 		}
-		mVal = unsafe.String(unsafe.SliceData(_b), len(_b))
+		mVal = _s
 {{- else if eq $vc "bytes"}}
 		_b64, _ev := mv.StringBytes()
 		if _ev != nil {
@@ -1809,7 +1791,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 			return
 		}
 		var _ev2 error
-		mVal, _ev2 = base64.StdEncoding.AppendDecode(nil, _b64)
+		mVal = r.strArena.Reserve(len(_b64))
+		mVal, _ev2 = base64.StdEncoding.AppendDecode(mVal[:0], _b64)
 		if _ev2 != nil {
 			visitErr = _ev2
 			return
@@ -1907,12 +1890,17 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- end}}
 		r.{{$f.Name}}[mKey] = mVal
 {{- end}}
+		isContinue = true
+		return
 	}, parser, {{if eq $f.MapKey "string"}}false{{else}}true{{end}})
 	return visitErr
 }
 {{- else if .AsArray}}
 {{- $f := index .Fields 0}}
-func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastjson.Parser) error {
+func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastjson.Parser, arena *fastjson.Arena) error {
+	if r.strArena == nil && arena != nil {
+		r.strArena = arena
+	}
 	if cap(r.{{$f.Name}}) < len(arr) {
 		r.{{$f.Name}} = make({{$f.ReaderType}}, 0, len(arr))
 	} else {
@@ -1926,7 +1914,7 @@ func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastj
 		if _eo != nil {
 			return _eo
 		}
-		if _eo2 := _elem.fromJSONArray(_subArr, parser); _eo2 != nil {
+		if _eo2 := _elem.fromJSONArray(_subArr, parser, r.strArena); _eo2 != nil {
 			return _eo2
 		}
 {{- else}}
@@ -1934,7 +1922,7 @@ func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastj
 		if _eo != nil {
 			return _eo
 		}
-		if _eo2 := _elem.fromJSONValue(_subObj, parser); _eo2 != nil {
+		if _eo2 := _elem.fromJSONValue(_subObj, parser, r.strArena); _eo2 != nil {
 			return _eo2
 		}
 {{- end}}
@@ -1952,12 +1940,11 @@ func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastj
 {{- $sc := jsonScalarClass $f.Type}}
 	for _, _item := range arr {
 {{- if eq $sc "string"}}
-		_ = _item.Type(parser)
-		_b, _ei := _item.StringBytes()
+		_s, _ei := _item.UnescapeString(parser)  // Unescape and clone
 		if _ei != nil {
 			return _ei
 		}
-		r.{{$f.Name}} = append(r.{{$f.Name}}, unsafe.String(unsafe.SliceData(_b), len(_b)))
+		r.{{$f.Name}} = append(r.{{$f.Name}}, _s)
 {{- else if eq $sc "bytes"}}
 		_b64, _ei := _item.StringBytes()
 		if _ei != nil {
@@ -1965,7 +1952,8 @@ func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastj
 		}
 		var _dec []byte
 		var _ei2 error
-		_dec, _ei2 = base64.StdEncoding.AppendDecode(nil, _b64)
+		_dec = r.strArena.Reserve(len(_b64))
+		_dec, _ei2 = base64.StdEncoding.AppendDecode(_dec[:0], _b64)
 		if _ei2 != nil {
 			return _ei2
 		}
@@ -2054,12 +2042,12 @@ func (r *Readonly{{$goName}}) fromJSONArray(arr []*fastjson.Value, parser *fastj
 	return nil
 }
 {{- else}}
-func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjson.Parser) error {
+func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjson.Parser, arena *fastjson.Arena) error {
+	if r.strArena == nil && arena != nil {
+		r.strArena = arena
+	}
 	var visitErr error
-	obj.Visit(func(k []byte, v *fastjson.Value) {
-		if visitErr != nil {
-			return
-		}
+	obj.Visit(func(k []byte, v *fastjson.Value) (isContinue bool) {
 		k1 := unsafe.String(unsafe.SliceData(k), len(k))
 		switch k1 {
 {{- range .Fields}}
@@ -2088,18 +2076,15 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 			}
 {{- end}}
-			_mapObj.Visit(func(mk []byte, mv *fastjson.Value) {
-				if visitErr != nil {
-					return
-				}
+			_mapObj.Visit(func(mk []byte, mv *fastjson.Value) (isContinue bool) {
 				var mKey {{mapKeyGoType .MapKey}}
 {{- $kc := jsonMapKeyClass .MapKey}}
 {{- if eq $kc "string"}}
 				mKey = unsafe.String(unsafe.SliceData(mk), len(mk))
+				mKey = r.strArena.PutString(mKey)  // copy string  // todo: 如果 key 存在转义字符，这时候就会导致重复拷贝
 {{- else if eq $kc "bool"}}
 				mKey = unsafe.String(unsafe.SliceData(mk), len(mk)) == "true"
 {{- else if eq $kc "signed32"}}
-				// _mk64, _ek := strconv.ParseInt(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 32)
 				_mk64, _ek := fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(mk), len(mk)))
 				if _ek != nil {
 					visitErr = _ek
@@ -2107,7 +2092,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				mKey = {{mapKeyGoType .MapKey}}(_mk64)
 {{- else if eq $kc "signed64"}}
-				//_mk64, _ek := strconv.ParseInt(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 64)
 				_mk64, _ek := fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(mk), len(mk)))
 				if _ek != nil {
 					visitErr = _ek
@@ -2115,7 +2099,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				mKey = _mk64
 {{- else if eq $kc "unsigned32"}}
-				// _mku64, _ek := strconv.ParseUint(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 32)
 				_mku64, _ek := fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(mk), len(mk)))
 				if _ek != nil {
 					visitErr = _ek
@@ -2123,7 +2106,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				mKey = {{mapKeyGoType .MapKey}}(_mku64)
 {{- else if eq $kc "unsigned64"}}
-				// _mku64, _ek := strconv.ParseUint(unsafe.String(unsafe.SliceData(mk), len(mk)), 10, 64)
 				_mku64, _ek := fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(mk), len(mk)))
 				if _ek != nil {
 					visitErr = _ek
@@ -2132,7 +2114,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				mKey = _mku64
 {{- end}}
 {{- if mapValIsMsg .MapVal}}
-				// r._{{.Name}}Arr = append(r._{{.Name}}Arr, {{readonlyTypeName .MapVal}}{})
 				r._{{.Name}}Arr = r._{{.Name}}Arr[:len(r._{{.Name}}Arr)+1]
 				_mValIdx := len(r._{{.Name}}Arr) - 1
 				sub := &r._{{.Name}}Arr[_mValIdx]
@@ -2142,7 +2123,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					visitErr = _eo
 					return
 				}
-				if _eo2 := sub.fromJSONArray(_subArr, parser); _eo2 != nil {
+				if _eo2 := sub.fromJSONArray(_subArr, parser, r.strArena); _eo2 != nil {
 					visitErr = _eo2
 					return
 				}
@@ -2152,7 +2133,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					visitErr = _eo
 					return
 				}
-				if _eo2 := sub.fromJSONValue(_subObj, parser); _eo2 != nil {
+				if _eo2 := sub.fromJSONValue(_subObj, parser, r.strArena); _eo2 != nil {
 					visitErr = _eo2
 					return
 				}
@@ -2162,13 +2143,12 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				var mVal {{mapValGoType .MapVal}}
 {{- $vc := jsonScalarClass .MapVal}}
 {{- if eq $vc "string"}}
-				_ = mv.Type(parser)
-				_b, _ev := mv.StringBytes()
+				_s, _ev := mv.UnescapeString(parser)  // unescape and clone
 				if _ev != nil {
 					visitErr = _ev
 					return
 				}
-				mVal = unsafe.String(unsafe.SliceData(_b), len(_b))
+				mVal = _s
 {{- else if eq $vc "bytes"}}
 				_b64, _ev := mv.StringBytes()
 				if _ev != nil {
@@ -2176,7 +2156,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					return
 				}
 				var _ev2 error
-				mVal, _ev2 = base64.StdEncoding.AppendDecode(nil, _b64)
+				mVal = r.strArena.Reserve(len(_b64))
+				mVal, _ev2 = base64.StdEncoding.AppendDecode(mVal[:0], _b64)
 				if _ev2 != nil {
 					visitErr = _ev2
 					return
@@ -2227,7 +2208,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ev2 error
-					// _iv, _ev2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 					_iv, _ev2 = fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 					if _ev2 != nil {
 						visitErr = _ev2
@@ -2258,7 +2238,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ev2 error
-					// _uv, _ev2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 					_uv, _ev2 = fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 					if _ev2 != nil {
 						visitErr = _ev2
@@ -2276,6 +2255,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- end}}
 				r.{{.Name}}[mKey] = mVal
 {{- end}}
+				isContinue = true
+				return
 			}, parser, {{if eq .MapKey "string"}}false{{else}}true{{end}})
 {{- else if .Repeated}}
 			_arr, _e := v.Array()
@@ -2297,7 +2278,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					visitErr = _eo
 					return
 				}
-				if _eo2 := _elem.fromJSONArray(_subArr, parser); _eo2 != nil {
+				if _eo2 := _elem.fromJSONArray(_subArr, parser, r.strArena); _eo2 != nil {
 					visitErr = _eo2
 					return
 				}
@@ -2307,7 +2288,7 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					visitErr = _eo
 					return
 				}
-				if _eo2 := _elem.fromJSONValue(_subObj, parser); _eo2 != nil {
+				if _eo2 := _elem.fromJSONValue(_subObj, parser, r.strArena); _eo2 != nil {
 					visitErr = _eo2
 					return
 				}
@@ -2327,13 +2308,12 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- $sc := jsonScalarClass .Type}}
 			for _, _item := range _arr {
 {{- if eq $sc "string"}}
-				_ = _item.Type(parser)
-				_b, _ei := _item.StringBytes()
+				_s, _ei := _item.UnescapeString(parser)  // unescape and clone
 				if _ei != nil {
 					visitErr = _ei
 					return
 				}
-				r.{{.Name}} = append(r.{{.Name}}, unsafe.String(unsafe.SliceData(_b), len(_b)))
+				r.{{.Name}} = append(r.{{.Name}}, _s)
 {{- else if eq $sc "bytes"}}
 				_b64, _ei := _item.StringBytes()
 				if _ei != nil {
@@ -2342,7 +2322,8 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 				}
 				var _dec []byte
 				var _ei2 error
-				_dec, _ei2 = base64.StdEncoding.AppendDecode(nil, _b64)
+				_dec = r.strArena.Reserve(len(_b64))
+				_dec, _ei2 = base64.StdEncoding.AppendDecode(_dec[:0], _b64)
 				if _ei2 != nil {
 					visitErr = _ei2
 					return
@@ -2394,7 +2375,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ei2 error
-					// _iv, _ei2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 					_iv, _ei2 = fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 					if _ei2 != nil {
 						visitErr = _ei2
@@ -2425,7 +2405,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 						return
 					}
 					var _ei2 error
-					// _uv, _ei2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 					_uv, _ei2 = fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 					if _ei2 != nil {
 						visitErr = _ei2
@@ -2456,8 +2435,9 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 			}
 			r._has{{.Name}} = true
 {{- end}}
-			if _e2 := r.{{.Name}}.fromJSONArray(_arr, parser); _e2 != nil {
+			if _e2 := r.{{.Name}}.fromJSONArray(_arr, parser, r.strArena); _e2 != nil {
 				visitErr = _e2
+				return
 			}
 {{- else}}
 			_subObj, _e := v.Object()
@@ -2471,8 +2451,9 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 			}
 			r._has{{.Name}} = true
 {{- end}}
-			if _e2 := r.{{.Name}}.fromJSONValue(_subObj, parser); _e2 != nil {
+			if _e2 := r.{{.Name}}.fromJSONValue(_subObj, parser, r.strArena); _e2 != nil {
 				visitErr = _e2
+				return
 			}
 {{- end}}
 {{- else if .IsEnum}}
@@ -2492,13 +2473,12 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- else}}
 {{- $sc := jsonScalarClass .Type}}
 {{- if eq $sc "string"}}
-			_ = v.Type(parser)
-			_b, _e := v.StringBytes()
+			_s, _e := v.UnescapeString(parser)
 			if _e != nil {
 				visitErr = _e
 				return
 			}
-			r.{{.Name}} = unsafe.String(unsafe.SliceData(_b), len(_b))
+			r.{{.Name}} = _s
 {{- else if eq $sc "bytes"}}
 			_b64, _e := v.StringBytes()
 			if _e != nil {
@@ -2557,7 +2537,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					return
 				}
 				var _e2 error
-				// _iv, _e2 = strconv.ParseInt(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 				_iv, _e2 = fastfloat.ParseInt64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 				if _e2 != nil {
 					visitErr = _e2
@@ -2588,7 +2567,6 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 					return
 				}
 				var _e2 error
-				// _uv, _e2 = strconv.ParseUint(unsafe.String(unsafe.SliceData(_sb), len(_sb)), 10, 64)
 				_uv, _e2 = fastfloat.ParseUint64(unsafe.String(unsafe.SliceData(_sb), len(_sb)))
 				if _e2 != nil {
 					visitErr = _e2
@@ -2607,15 +2585,22 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- end}}
 {{- end}}
 		}
+		isContinue = true
+		return
 	}, parser, true/*skip unescape keys, because all key must by proto field name*/)
 	return visitErr
 }
 {{- end}}
 
 func (r *Readonly{{$goName}}) FromJSON(src []byte) error {
-	r.rawBuffer = src
+	r.rawBufferLen = len(src)
 	parser := &r.parser
-	v, err := parser.Parse(unsafe.String(unsafe.SliceData(src), len(src)))
+{{- if hasStringOrBytesFields .Fields}}
+	if r.strArena == nil {
+		r.strArena = fastjson.NewArena(r.rawBufferLen)
+	}
+{{- end}}
+	v, err := parser.Parse(unsafe.String(unsafe.SliceData(src), len(src)), r.strArena)
 	if err != nil {
 		return err
 	}
@@ -2624,34 +2609,19 @@ func (r *Readonly{{$goName}}) FromJSON(src []byte) error {
 	if err != nil {
 		return err
 	}
-	return r.fromJSONArray(arr, parser)
+	return r.fromJSONArray(arr, parser, r.strArena)
 {{- else}}
-	obj, err := v.Object()  // todo: 函数本身消耗资源为整个函数的 33.86%
+	obj, err := v.Object()
 	if err != nil {
 		return err
 	}
-	return r.fromJSONValue(obj, parser)
+	return r.fromJSONValue(obj, parser, r.strArena)
 {{- end}}
 }
 
-func (r *Readonly{{$goName}}) FromProtobufWithCopy(in []byte) error {
-	if cap(r.rawBuffer) < len(in) {
-		r.rawBuffer = make([]byte, len(in))
-	} else {
-		r.rawBuffer = r.rawBuffer[:len(in)]
-	}
-	copy(r.rawBuffer, in)
-	return r.FromProtobuf(r.rawBuffer)
-}
-
-func (r *Readonly{{$goName}}) FromJSONWithCopy(in []byte) error {
-	if cap(r.rawBuffer) < len(in) {
-		r.rawBuffer = make([]byte, len(in))
-	} else {
-		r.rawBuffer = r.rawBuffer[:len(in)]
-	}
-	copy(r.rawBuffer, in)
-	return r.FromJSON(r.rawBuffer)
+func (r *Readonly{{$goName}}) FromProtobufWithArena(in []byte, arena *fastjson.Arena) error {
+	r.strArena = arena
+	return r.FromProtobuf(in)
 }
 
 // marshalToSizedBufferVT writes m into dAtA using vtprotobuf's backward-fill

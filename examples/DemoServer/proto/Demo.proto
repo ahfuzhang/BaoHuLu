@@ -72,6 +72,7 @@ message AllTypes {
   //map<double, int32> m11 = 1100;  // 不支持以 double 为 key
   //map<float, int32> m12 = 1101;  // 不支持以 float 为 key
   map<string, bytes> m13 = 1102;
+  map<string, Status> m14 = 1103;
 
   // 先注释掉这行：这里会导致 sonic 库反序列化失败
   //map<bool, int32> m11 = 1010;

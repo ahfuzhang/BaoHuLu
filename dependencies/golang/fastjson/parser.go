@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf16"
+	"unsafe"
 
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/fastfloat"
 )
@@ -25,10 +26,11 @@ type Parser struct {
 // The returned value is valid until the next call to Parse*.
 //
 // Use Scanner if a stream of JSON values must be parsed.
-func (p *Parser) Parse(s string) (*Value, error) {
+func (p *Parser) Parse(s string, arena *Arena) (*Value, error) {
 	s = skipWS(s)
 	// p.b = append(p.b[:0], s...) // don't copy
-	p.c.reset()
+	//p.c.reset()   // 使用者在使用之前记得 reset
+	p.c.arena = arena
 
 	v, tail, err := p.c.parseValue(s, 0)
 	if err != nil {
@@ -50,14 +52,15 @@ func (p *Parser) Reset() {
 // The returned Value is valid until the next call to Parse*.
 //
 // Use Scanner if a stream of JSON values must be parsed.
-func (p *Parser) ParseBytes(b []byte) (*Value, error) {
-	return p.Parse(b2s(b))
+func (p *Parser) ParseBytes(b []byte, arena *Arena) (*Value, error) {
+	return p.Parse(b2s(b), arena)
 }
 
 type cache struct {
-	vs    []Value
-	arena []byte // todo: 这个对象，最好由 ReadonlyXXX 对象来提供，避免 Parser 重用时产生问题
+	vs []Value
+	//arena []byte // todo: 这个对象，最好由 ReadonlyXXX 对象来提供，避免 Parser 重用时产生问题
 	// 另一个办法：每个 ReadonlyXXX 中，嵌入一个 Parser 对象
+	arena *Arena
 }
 
 func (c *cache) reset() {
@@ -66,7 +69,8 @@ func (c *cache) reset() {
 		vs[i].reset()
 	}
 	c.vs = vs[:0]
-	c.arena = c.arena[:0]
+	//c.arena = c.arena[:0]
+	c.arena = nil
 }
 
 func (c *cache) getValue() *Value {
@@ -275,21 +279,24 @@ func (c *cache) parseObject(s string, depth int) (*Value, string, error) {
 }
 
 // 资源占用 14.32%
-func (c *cache) unescapeStringBestEffort(s string) string {
+func (c *cache) unescapeStringBestEffort(s string) (bool, string) {
 	n := strings.IndexByte(s, '\\')
 	if n < 0 {
 		// Fast path - nothing to unescape.
-		return s
+		return false, s
 	}
 
 	// Slow path - unescape string.
-	if cap(c.arena)-len(c.arena) >= len(s) {
-		c.arena = c.arena[:len(c.arena)+len(s)]
-		copy(c.arena[len(c.arena)-len(s):], s)
-	} else {
-		c.arena = append(c.arena, s...)
-	}
-	b := c.arena[len(c.arena)-len(s):] // It is safe to do, since b is no longer reachable after this line.
+	/*
+		if cap(c.arena)-len(c.arena) >= len(s) {
+			c.arena = c.arena[:len(c.arena)+len(s)]
+			copy(c.arena[len(c.arena)-len(s):], s)
+		} else {
+			c.arena = append(c.arena, s...)
+		}
+		b := c.arena[len(c.arena)-len(s):] // It is safe to do, since b is no longer reachable after this line.
+	*/
+	b := c.arena.PutBytes(unsafe.Slice(unsafe.StringData(s), len(s)))
 	// 重大 bug: 当 Parser 对象 Reset() 后，解析后的对象中的 string 被清空。或者：parser 重复使用时，字符串的内容被覆盖。
 	b = b[:n]
 	s = s[n+1:]
@@ -360,7 +367,7 @@ func (c *cache) unescapeStringBestEffort(s string) string {
 		b = append(b, s[:n]...)
 		s = s[n+1:]
 	}
-	return b2s(b)
+	return true, b2s(b)
 }
 
 // parseRawKey is similar to parseRawString, but is optimized
@@ -467,9 +474,13 @@ func (o *Object) unescapeKeys(p *Parser) {
 		return
 	}
 	kvs := o.kvs
+	//var escaped bool
 	for i := range kvs {
 		kv := &kvs[i]
-		kv.k = p.c.unescapeStringBestEffort(kv.k)
+		_, kv.k = p.c.unescapeStringBestEffort(kv.k)
+		// if !escaped {
+		// 	kv.k = p.c.arena.PutString(kv.k)
+		// }
 	}
 	o.keysUnescaped = true
 }
@@ -483,7 +494,7 @@ func (o *Object) Len() int {
 // of the parsed JSON.
 //
 // f cannot hold key and/or v after returning.
-func (o *Object) Visit(f func(key []byte, v *Value), p *Parser, skipUnescapeKeys bool) {
+func (o *Object) Visit(f func(key []byte, v *Value) bool, p *Parser, skipUnescapeKeys bool) {
 	if o == nil {
 		return
 	}
@@ -497,7 +508,9 @@ func (o *Object) Visit(f func(key []byte, v *Value), p *Parser, skipUnescapeKeys
 	kvs := o.kvs
 	for i := range kvs {
 		kv := &kvs[i]
-		f(s2b(kv.k), kv.v)
+		if !f(s2b(kv.k), kv.v) {
+			break
+		}
 	}
 }
 
@@ -580,10 +593,21 @@ func (t Type) String() string {
 // Type returns the type of the v.
 func (v *Value) Type(p *Parser) Type {
 	if v.t == typeRawString {
-		v.s = p.c.unescapeStringBestEffort(v.s)
+		_, v.s = p.c.unescapeStringBestEffort(v.s)
 		v.t = TypeString
 	}
 	return v.t
+}
+
+func (v *Value) UnescapeString(p *Parser) (string, error) {
+	if v.t != typeRawString {
+		return "", fmt.Errorf("value doesn't contain string; it contains %s", v.t)
+	}
+	escaped, s := p.c.unescapeStringBestEffort(v.s)
+	if escaped {
+		return s, nil
+	}
+	return p.c.arena.PutString(s), nil
 }
 
 // Object returns the underlying JSON object for the v.

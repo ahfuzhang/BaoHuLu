@@ -281,9 +281,9 @@ func writerFieldNameMax(fields []FieldTpl) int {
 }
 
 // readerFieldNameMax returns the max length of all field names in a reader struct,
-// including hidden _nameArr, _hasName, and rawBuffer fields.
+// including hidden _nameArr, _hasName, and rawBufferLen fields.
 func readerFieldNameMax(fields []FieldTpl) int {
-	max := len("rawBuffer")
+	max := len("rawBufferLen")
 	for _, f := range fields {
 		if f.IsRawBuf {
 			continue
@@ -326,7 +326,7 @@ func (g *Generator) writerFieldType(f FieldTpl) string {
 // matching what go.tpl generates.
 func (g *Generator) readerFieldType(f FieldTpl) string {
 	if f.IsRawBuf {
-		return "[]byte"
+		return "int"
 	}
 	if f.IsDecimal {
 		return "decimal.Decimal"
@@ -487,13 +487,13 @@ func (g *Generator) writerAlignedFields(fields []FieldTpl) []AlignedField {
 }
 
 // readerAlignedFields returns a flat AlignedField list for all lines in the reader
-// (Readonly) struct body: rawBuffer, visible fields, hidden _nameArr / _hasName lines.
-// It processes .ReaderFields which already includes the synthetic rawBuffer entry.
+// (Readonly) struct body: rawBufferLen, visible fields, hidden _nameArr / _hasName lines.
+// It processes .ReaderFields which already includes the synthetic rawBufferLen entry.
 func (g *Generator) readerAlignedFields(fields []FieldTpl) []AlignedField {
 	var lines []alignLine
 	for _, f := range fields {
 		if f.IsRawBuf {
-			lines = append(lines, alignLine{name: "rawBuffer", typeStr: "[]byte"})
+			lines = append(lines, alignLine{name: "rawBufferLen", typeStr: "int"})
 			continue
 		}
 		lines = append(lines, alignLine{
@@ -525,7 +525,7 @@ type FieldTpl struct {
 	protofile.FieldDef
 	WireType           WireTypeVal
 	ReaderType         string
-	IsRawBuf           bool   // synthetic rawBuffer []byte field for readonly structs
+	IsRawBuf           bool   // synthetic rawBufferLen int field for readonly structs
 	StructTag          string // pre-computed struct tag, e.g. `json:"foo,omitempty" yaml:"foo"`
 	MapValIsMsg        bool   // true when MapVal is a message type (not scalar/enum)
 	MapValMsgIsAsArray bool   // true when MapVal message has @AsArray — JSON value is an array, not an object
@@ -540,7 +540,7 @@ type MsgTpl struct {
 	Comment       []string   // proto comment lines (without leading //)
 	Fields        []FieldTpl // writer fields, sorted for optimal layout
 	ReverseFields []FieldTpl // writer fields in reverse layout order (matches marshalToSizedBufferVT output)
-	ReaderFields  []FieldTpl // readonly fields = Fields + rawBuffer, all sorted
+	ReaderFields  []FieldTpl // readonly fields = Fields + rawBufferLen, all sorted
 	AsMap         bool       // true when @AsMap annotation is present: single map field, JSON parsed as direct map
 	AsArray       bool       // true when @AsArray annotation is present: single repeated field, JSON parsed as direct array
 }
@@ -754,9 +754,9 @@ func (g *Generator) Render(out *os.File) error {
 			mt.ReverseFields = append(mt.ReverseFields, mt.Fields[j])
 		}
 
-		// --- Readonly struct: include rawBuffer in the sort, and use precomputed
-		// readonly layouts for IsMsg fields (readonly types are larger due to rawBuffer).
-		rawBufDef := protofile.FieldDef{Name: "rawBuffer", Type: "bytes", GoType: "[]byte"}
+		// --- Readonly struct: include rawBufferLen in the sort, and use precomputed
+		// readonly layouts for IsMsg fields (readonly types are larger due to rawBufferLen).
+		rawBufDef := protofile.FieldDef{Name: "rawBufferLen", Type: "int64", GoType: "int"}
 		readerDefs := make([]protofile.FieldDef, 0, len(md.Fields)+1)
 		readerDefs = append(readerDefs, rawBufDef)
 		readerDefs = append(readerDefs, md.Fields...)
@@ -791,7 +791,7 @@ func (g *Generator) Render(out *os.File) error {
 			if fd.Name == rawBufDef.Name && fd.Number == 0 {
 				mt.ReaderFields = append(mt.ReaderFields, FieldTpl{
 					FieldDef:   fd,
-					ReaderType: "[]byte",
+					ReaderType: "int",
 					IsRawBuf:   true,
 				})
 			} else {
@@ -844,6 +844,7 @@ func (g *Generator) Render(out *os.File) error {
 		"mapKeyGoType":        func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
 		"mapValGoType":        func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
 		"mapValIsMsg":         func(s string) bool { _, isMsg, _ := g.ProtoTypeToGo(s, false); return isMsg },
+		"mapValIsEnum":        func(s string) bool { _, _, isEnum := g.ProtoTypeToGo(s, false); return isEnum },
 		"upperFirst":          protofile.UpperFirst,
 		"enumValueGoName":     EnumValueGoName,
 		"padRight":            padRight,
@@ -1013,7 +1014,7 @@ func SampleFieldLiteral(ft FieldTpl) string {
 		if ft.MapVal == "bool" {
 			valLit = "true"
 		} else {
-			valLit = SampleScalarLiteral(ft.MapVal, "int32")
+			valLit = SampleScalarLiteral(ft.MapVal, protofile.GoTypeName(ft.MapVal))
 		}
 		return fmt.Sprintf("%s{%s: %s}", ft.GoType, keyLit, valLit)
 	}
@@ -1178,7 +1179,7 @@ func LargeIntLit(ft FieldTpl) string {
 }
 
 // FirstScalarField returns the first plain (non-map, non-repeated, non-msg,
-// non-rawBuffer, non-decimal) field, or nil when no such field exists. The returned field
+// non-rawBufferLen, non-decimal) field, or nil when no such field exists. The returned field
 // is used by the test template to generate JSON-type-error tests.
 func FirstScalarField(fields []FieldTpl) *FieldTpl {
 	for i := range fields {
@@ -1246,13 +1247,68 @@ func HasStringOrBytesFields(fields []FieldTpl) bool {
 			if f.MapKey == "string" || f.MapVal == "string" || f.MapVal == "bytes" {
 				return true
 			}
+			if f.MapValIsMsg {
+				return true
+			}
 			continue
 		}
 		if f.Type == "string" || f.Type == "bytes" {
 			return true
 		}
+		if f.IsMsg {
+			return true
+		}
 	}
 	return false
+}
+
+// ScalarStringFields returns non-map, non-repeated, non-msg string fields.
+// Used to generate memory-stomping tests that detect unsafe.String aliasing.
+func ScalarStringFields(fields []FieldTpl) []FieldTpl {
+	var out []FieldTpl
+	for i := range fields {
+		f := &fields[i]
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf && f.Type == "string" {
+			out = append(out, *f)
+		}
+	}
+	return out
+}
+
+// ScalarBytesFields returns non-map, non-repeated, non-msg bytes fields.
+func ScalarBytesFields(fields []FieldTpl) []FieldTpl {
+	var out []FieldTpl
+	for i := range fields {
+		f := &fields[i]
+		if !f.Map && !f.Repeated && !f.IsMsg && !f.IsRawBuf && f.Type == "bytes" {
+			out = append(out, *f)
+		}
+	}
+	return out
+}
+
+// RepeatedStringFields returns repeated (non-map) string fields.
+func RepeatedStringFields(fields []FieldTpl) []FieldTpl {
+	var out []FieldTpl
+	for i := range fields {
+		f := &fields[i]
+		if f.Repeated && !f.Map && f.Type == "string" {
+			out = append(out, *f)
+		}
+	}
+	return out
+}
+
+// RepeatedBytesFields returns repeated (non-map) bytes fields.
+func RepeatedBytesFields(fields []FieldTpl) []FieldTpl {
+	var out []FieldTpl
+	for i := range fields {
+		f := &fields[i]
+		if f.Repeated && !f.Map && f.Type == "bytes" {
+			out = append(out, *f)
+		}
+	}
+	return out
 }
 
 // FirstMsgField returns the first embedded-message field, or nil.
@@ -1459,7 +1515,7 @@ func FloatIntLit(ft FieldTpl) string {
 }
 
 // FirstStringScalarField returns the first plain string scalar field
-// (not map, not repeated, not msg, not rawBuffer), or nil.
+// (not map, not repeated, not msg, not rawBufferLen), or nil.
 func FirstStringScalarField(fields []FieldTpl) *FieldTpl {
 	for i := range fields {
 		f := &fields[i]
@@ -1522,8 +1578,9 @@ func benchScalarMapValLit(mapVal string) string {
 	case "bytes":
 		return `utils.UnsafeBytesFromString("v")`
 	default:
-		// Enum or message type – use the Go type name.
-		return fmt.Sprintf("benchBuild%s()", protofile.GoTypeName(mapVal))
+		// Enum type – cast integer 1 to the Go enum type.
+		// (Message types are handled by BenchMapFill before calling this function.)
+		return fmt.Sprintf("%s(1)", protofile.GoTypeName(mapVal))
 	}
 }
 
@@ -1631,12 +1688,29 @@ func BenchNeedsStrconv(msgs []MsgTpl) bool {
 	return false
 }
 
+// BenchNeedsUtils returns true when any message in msgs has a map field
+// with bytes value or a repeated bytes field, both of which call
+// utils.UnsafeBytesFromString in the generated fill loops.
+func BenchNeedsUtils(msgs []MsgTpl) bool {
+	for _, msg := range msgs {
+		for _, f := range msg.Fields {
+			if f.Map && f.MapVal == "bytes" {
+				return true
+			}
+			if f.Repeated && f.Type == "bytes" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ExcludeFromCompare returns true for fields that must be skipped during the
 // encoding/json vs custom-decoder field-level comparison:
 //   - map[bool]T: encoding/json cannot unmarshal bool map keys
 //   - plain []byte (proto bytes): comparison requires bytes.Equal; easier to
 //     verify correctness via the ToJSON round-trip rather than direct field compare
-//   - rawBuffer synthetic field
+//   - rawBufferLen synthetic field
 func ExcludeFromCompare(ft FieldTpl) bool {
 	if ft.IsRawBuf {
 		return true
@@ -1723,7 +1797,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 			mt.ReverseFields = append(mt.ReverseFields, mt.Fields[j])
 		}
 
-		rawBufDef := protofile.FieldDef{Name: "rawBuffer", Type: "bytes", GoType: "[]byte"}
+		rawBufDef := protofile.FieldDef{Name: "rawBufferLen", Type: "int64", GoType: "int"}
 		readerDefs := make([]protofile.FieldDef, 0, len(md.Fields)+1)
 		readerDefs = append(readerDefs, rawBufDef)
 		readerDefs = append(readerDefs, md.Fields...)
@@ -1757,7 +1831,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 			if fd.Name == rawBufDef.Name && fd.Number == 0 {
 				mt.ReaderFields = append(mt.ReaderFields, FieldTpl{
 					FieldDef:   fd,
-					ReaderType: "[]byte",
+					ReaderType: "int",
 					IsRawBuf:   true,
 				})
 			} else {
@@ -1810,6 +1884,10 @@ func (g *Generator) RenderTest(out *os.File) error {
 			}
 			return out
 		},
+		"scalarStringFields":   ScalarStringFields,
+		"scalarBytesFields":    ScalarBytesFields,
+		"repeatedStringFields": RepeatedStringFields,
+		"repeatedBytesFields":  RepeatedBytesFields,
 	}
 	tmpl, err := template.New("pb_test").Funcs(fnMap).Parse(testTemplate)
 	if err != nil {
@@ -1880,6 +1958,7 @@ func (g *Generator) RenderBench(out *os.File) error {
 		"benchMapFill":            BenchMapFill,
 		"benchSliceFill":          BenchSliceFill,
 		"benchNeedsStrconv":       BenchNeedsStrconv,
+		"benchNeedsUtils":         BenchNeedsUtils,
 		"mapWriterGoType":         MapWriterGoType,
 		"hasAnyRecursiveField":    HasAnyRecursiveField,
 		"benchMapFillRecursive":   BenchMapFillRecursive,

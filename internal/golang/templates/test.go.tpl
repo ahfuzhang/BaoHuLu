@@ -612,118 +612,6 @@ func Test{{$goName}}FromJSONMapKeyTypeError(t *testing.T) {
 {{- end}}
 }
 {{end}}
-// Test{{$goName}}FromProtobufWithCopyRoundtrip verifies that
-// FromProtobufWithCopy produces the correct result and that mutating the
-// original input buffer after the call does not affect the parsed data (the
-// internal copy is independent of the caller's buffer).
-func Test{{$goName}}FromProtobufWithCopyRoundtrip(t *testing.T) {
-	w := makeSample{{$goName}}()
-	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
-
-	// Keep a pristine reference before we corrupt the source buffer.
-	ref := make([]byte, len(buf))
-	copy(ref, buf)
-
-	var r {{$roName}}
-	if err := r.FromProtobufWithCopy(buf); err != nil {
-		t.Fatalf("FromProtobufWithCopy error: %v", err)
-	}
-
-	// Overwrite every byte in the original buffer; the parsed data must not change.
-	for i := range buf {
-		buf[i] = 0xFF
-	}
-
-	w2 := r.Clone(nil)
-	got := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
-	if !bytes.Equal(ref, got) {
-		t.Fatalf("FromProtobufWithCopy: data changed after source mutation\n  want %v\n  got  %v", ref, got)
-	}
-}
-
-// Test{{$goName}}FromProtobufWithCopyAfterReset verifies the common struct-reuse
-// pattern: parse → use → Reset → parse again. After Reset(), all fields are
-// zeroed and rawBuffer is cleared, so the second call re-allocates and the
-// result must be identical to the first call.
-func Test{{$goName}}FromProtobufWithCopyAfterReset(t *testing.T) {
-	w := makeSample{{$goName}}()
-	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
-	if len(buf) != w.ProtobufSize(){
-		t.Fatal("len(buf) != w.ProtobufSize()")
-	}
-	var r {{$roName}}
-	if err := r.FromProtobufWithCopy(buf); err != nil {
-		t.Fatalf("first FromProtobufWithCopy error: %v", err)
-	}
-	r.Reset()
-
-	// Second call after Reset with a fresh copy of the same payload.
-	buf2 := make([]byte, len(buf))
-	copy(buf2, buf)
-	if err := r.FromProtobufWithCopy(buf2); err != nil {
-		t.Fatalf("second FromProtobufWithCopy (after reset) error: %v", err)
-	}
-	w2 := r.Clone(nil)
-	got := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
-	if !bytes.Equal(buf, got) {
-		t.Fatalf("FromProtobufWithCopy after reset: roundtrip mismatch\n  want %v\n  got  %v", buf, got)
-	}
-}
-
-// Test{{$goName}}FromJSONWithCopyRoundtrip verifies that FromJSONWithCopy
-// produces the correct result and that mutating the original input buffer
-// after the call does not affect the parsed data.
-func Test{{$goName}}FromJSONWithCopyRoundtrip(t *testing.T) {
-	w := makeSample{{$goName}}()
-	j := w.ToJSON(nil)
-
-	// Keep a pristine reference JSON before we corrupt the source buffer.
-	wRef := make([]byte, len(j))
-	copy(wRef, j)
-
-	var r {{$roName}}
-	if err := r.FromJSONWithCopy(j); err != nil {
-		t.Fatalf("FromJSONWithCopy error: %v\nJSON: %s", err, j)
-	}
-
-	// Overwrite every byte of the original buffer; the parsed data must not change.
-	for i := range j {
-		j[i] = 0xFF
-	}
-
-	w2 := r.Clone(nil)
-	got := w2.ToJSON(nil)
-	if !bytes.Equal(wRef, got) {
-		t.Fatalf("FromJSONWithCopy: data changed after source mutation\n  want: %s\n  got:  %s", wRef, got)
-	}
-}
-
-// Test{{$goName}}FromJSONWithCopyAfterReset verifies the common struct-reuse
-// pattern: parse → use → Reset → parse again. After Reset(), all fields are
-// zeroed and rawBuffer is cleared, so the second call re-allocates and the
-// result must be identical to the first call.
-func Test{{$goName}}FromJSONWithCopyAfterReset(t *testing.T) {
-	w := makeSample{{$goName}}()
-	j := w.ToJSON(nil)
-
-	var r {{$roName}}
-	if err := r.FromJSONWithCopy(j); err != nil {
-		t.Fatalf("first FromJSONWithCopy error: %v\nJSON: %s", err, j)
-	}
-	r.Reset()
-
-	// Second call after Reset with a fresh copy of the same JSON.
-	j2 := make([]byte, len(j))
-	copy(j2, j)
-	if err := r.FromJSONWithCopy(j2); err != nil {
-		t.Fatalf("second FromJSONWithCopy (after reset) error: %v\nJSON: %s", err, j2)
-	}
-	w2 := r.Clone(nil)
-	got := w2.ToJSON(nil)
-	if !bytes.Equal(j, got) {
-		t.Fatalf("FromJSONWithCopy after reset: roundtrip mismatch\n  want: %s\n  got:  %s", j, got)
-	}
-}
 
 func Test{{$goName}}CloneNilDst(t *testing.T) {
 	w := makeSample{{$goName}}()
@@ -787,6 +675,156 @@ func Test{{$goName}}CloneReuseDst(t *testing.T) {
 	if !bytes.Equal(buf, buf3) {
 		t.Fatalf("Clone(reuse dst) roundtrip mismatch:\n  want %v\n  got  %v", buf, buf3)
 	}
+}
+{{end}}
+{{- $ssf := scalarStringFields .Fields}}
+{{- $sbf := scalarBytesFields .Fields}}
+{{- $rsf := repeatedStringFields .Fields}}
+{{- $rbf := repeatedBytesFields .Fields}}
+{{if or $ssf $sbf $rsf $rbf}}
+// Test{{$goName}}JSONMemoryStomping verifies that string/bytes fields decoded by
+// FromJSON do not alias the input buffer or the internal parser arena.
+// Direct references (not deep copies) to all reference-type fields are saved,
+// then the input buffer is zeroed and the same object is reset and re-decoded
+// with different data.  If any field was backed by an unsafe alias the
+// comparison will fail and expose the memory-stomping bug.
+func Test{{$goName}}JSONMemoryStomping(t *testing.T) {
+	w := makeSample{{$goName}}()
+	j := w.ToJSON(nil)
+	var r {{$roName}}
+	if err := r.FromJSON(j); err != nil {
+		t.Fatalf("FromJSON error: %v", err)
+	}
+	// expected: deep copy via Clone — independent of j and the parser arena.
+	expected := r.Clone(nil)
+
+	// Hold direct references to reference-type fields (NOT deep copies).
+	// These may alias the input buffer j or the parser's internal arena.
+{{range $ssf}}
+	strRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $sbf}}
+	bytRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $rsf}}
+	slStrRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $rbf}}
+	slBytRef{{.Name}} := r.{{.Name}}
+{{end}}
+	// Zero the input buffer: any field aliasing j via unsafe.String/Slice will
+	// immediately expose corrupt content through the reference variables above.
+	clear(j)
+
+	// Reset + re-decode with a different (empty) payload to exercise arena reuse:
+	// the parser may overwrite its internal buffer, corrupting old aliases.
+	r.Reset()
+	if err := r.FromJSON((&{{$goName}}{}).ToJSON(nil)); err != nil {
+		t.Fatalf("FromJSON (second) error: %v", err)
+	}
+
+	// All saved references must still equal the expected values.
+{{range $ssf}}
+	if strRef{{.Name}} != expected.{{.Name}} {
+		t.Errorf("JSON memory stomping: {{.Name}} corrupted after buffer clear + re-decode:\n  got  %q\n  want %q", strRef{{.Name}}, expected.{{.Name}})
+	}
+{{end}}
+{{range $sbf}}
+	if !bytes.Equal(bytRef{{.Name}}, expected.{{.Name}}) {
+		t.Errorf("JSON memory stomping: {{.Name}} corrupted after buffer clear + re-decode:\n  got  %q\n  want %q", bytRef{{.Name}}, expected.{{.Name}})
+	}
+{{end}}
+{{range $rsf}}
+	if len(slStrRef{{.Name}}) != len(expected.{{.Name}}) {
+		t.Errorf("JSON memory stomping: {{.Name}} length changed: got %d, want %d", len(slStrRef{{.Name}}), len(expected.{{.Name}}))
+	} else {
+		for _i := range slStrRef{{.Name}} {
+			if slStrRef{{.Name}}[_i] != expected.{{.Name}}[_i] {
+				t.Errorf("JSON memory stomping: {{.Name}}[%d] corrupted:\n  got  %q\n  want %q", _i, slStrRef{{.Name}}[_i], expected.{{.Name}}[_i])
+			}
+		}
+	}
+{{end}}
+{{range $rbf}}
+	if len(slBytRef{{.Name}}) != len(expected.{{.Name}}) {
+		t.Errorf("JSON memory stomping: {{.Name}} length changed: got %d, want %d", len(slBytRef{{.Name}}), len(expected.{{.Name}}))
+	} else {
+		for _i := range slBytRef{{.Name}} {
+			if !bytes.Equal(slBytRef{{.Name}}[_i], expected.{{.Name}}[_i]) {
+				t.Errorf("JSON memory stomping: {{.Name}}[%d] corrupted:\n  got  %q\n  want %q", _i, slBytRef{{.Name}}[_i], expected.{{.Name}}[_i])
+			}
+		}
+	}
+{{end}}
+}
+
+// Test{{$goName}}ProtobufMemoryStomping is the protobuf-decode counterpart of
+// Test{{$goName}}JSONMemoryStomping.
+func Test{{$goName}}ProtobufMemoryStomping(t *testing.T) {
+	w := makeSample{{$goName}}()
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+	var r {{$roName}}
+	if err := r.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+	expected := r.Clone(nil)
+
+{{range $ssf}}
+	strRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $sbf}}
+	bytRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $rsf}}
+	slStrRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $rbf}}
+	slBytRef{{.Name}} := r.{{.Name}}
+{{end}}
+	// Zero the raw protobuf buffer: strings aliased directly from the wire bytes
+	// (rather than copied into an independent arena) would become corrupt.
+	clear(buf)
+
+	// Reset + re-decode with an empty struct to exercise arena reuse.
+	r.Reset()
+	_emptyW := {{$goName}}{}
+	buf2 := testToProtobuf{{$goName}}(t, &_emptyW, nil)
+	if err := r.FromProtobuf(buf2); err != nil {
+		t.Fatalf("FromProtobuf (second) error: %v", err)
+	}
+
+{{range $ssf}}
+	if strRef{{.Name}} != expected.{{.Name}} {
+		t.Errorf("protobuf memory stomping: {{.Name}} corrupted after buffer clear + re-decode:\n  got  %q\n  want %q", strRef{{.Name}}, expected.{{.Name}})
+	}
+{{end}}
+{{range $sbf}}
+	if !bytes.Equal(bytRef{{.Name}}, expected.{{.Name}}) {
+		t.Errorf("protobuf memory stomping: {{.Name}} corrupted after buffer clear + re-decode:\n  got  %q\n  want %q", bytRef{{.Name}}, expected.{{.Name}})
+	}
+{{end}}
+{{range $rsf}}
+	if len(slStrRef{{.Name}}) != len(expected.{{.Name}}) {
+		t.Errorf("protobuf memory stomping: {{.Name}} length changed: got %d, want %d", len(slStrRef{{.Name}}), len(expected.{{.Name}}))
+	} else {
+		for _i := range slStrRef{{.Name}} {
+			if slStrRef{{.Name}}[_i] != expected.{{.Name}}[_i] {
+				t.Errorf("protobuf memory stomping: {{.Name}}[%d] corrupted:\n  got  %q\n  want %q", _i, slStrRef{{.Name}}[_i], expected.{{.Name}}[_i])
+			}
+		}
+	}
+{{end}}
+{{range $rbf}}
+	if len(slBytRef{{.Name}}) != len(expected.{{.Name}}) {
+		t.Errorf("protobuf memory stomping: {{.Name}} length changed: got %d, want %d", len(slBytRef{{.Name}}), len(expected.{{.Name}}))
+	} else {
+		for _i := range slBytRef{{.Name}} {
+			if !bytes.Equal(slBytRef{{.Name}}[_i], expected.{{.Name}}[_i]) {
+				t.Errorf("protobuf memory stomping: {{.Name}}[%d] corrupted:\n  got  %q\n  want %q", _i, slBytRef{{.Name}}[_i], expected.{{.Name}}[_i])
+			}
+		}
+	}
+{{end}}
 }
 {{end}}
 {{end}}

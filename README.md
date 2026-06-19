@@ -245,6 +245,8 @@ See: [doc/Performance](./doc/Performance.md)
     - `-csharp_out=$dir`: 把 csharp 代码输出到某个目录
       - `-csharp_out.with.test`:   生成 csharp 的测试代码
       - `-csharp_out.with.bench`: 生成 csharp 的 benchmark 代码
+      - `-src.csharp_template.dir=$dir`: 自定义 template, 作为输入的模板
+      - `-dst.csharp_template.out_dir=$dir`: 对于自定义输入，设定对应的输出目录
 
   ![](./doc/images/2.png)
 
@@ -300,7 +302,7 @@ See: [TODO 及其完成的情况](./doc/TODO.md)
 
 ## AI 使用声明
 
-本项目 99% 以上的代码由 AI 生成。
+本项目大多数代码由 AI 生成。
 
 
 ## License

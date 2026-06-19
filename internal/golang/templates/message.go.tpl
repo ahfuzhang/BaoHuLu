@@ -165,7 +165,10 @@ func (m *{{$goName}}) ProtobufSize() int {
 		}
 		{{- else if mapValIsMsg .MapVal}}
 		{
-			sub := v.ProtobufSize()
+			var sub int
+			if v != nil {
+				sub = v.ProtobufSize()
+			}
 			entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + (bits.Len64((uint64(sub))|1) + 6) / 7 + sub
 		}
 		{{- else if eq .MapVal "double"}}
@@ -357,7 +360,10 @@ func (m *{{$goName}}) ToProtobufByAppend(in []byte) []byte {
 			entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + (bits.Len64((uint64(vn))|1) + 6) / 7 + vn
 		}
 		{{- else if (mapValIsMsg .MapVal)}}
-		valMsgSize := v.ProtobufSize()
+		var valMsgSize int
+		if v != nil {
+			valMsgSize = v.ProtobufSize()
+		}
 		entrySize += {{tagSize 2 2}} /* TagSize(2, LenDelim=2) */ + (bits.Len64((uint64(valMsgSize))|1) + 6) / 7 + valMsgSize
 		{{- else if eq .MapVal "double"}}
 		entrySize += {{tagSize 2 1}} /* TagSize(2, 64bit=1) */ + 8
@@ -413,7 +419,9 @@ func (m *{{$goName}}) ToProtobufByAppend(in []byte) []byte {
 		in = utils.AppendLenDelim(in, v)
 		{{- else if (mapValIsMsg .MapVal)}}
 		in = utils.AppendVarint(in, uint64(valMsgSize))
-		in = v.ToProtobuf(in)
+		if v != nil {
+			in = v.ToProtobuf(in)
+		}
 		{{- else if eq .MapVal "double"}}
 		in = utils.AppendFixed64(in, math.Float64bits(v))
 		{{- else if eq .MapVal "float"}}
@@ -673,7 +681,11 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 		dst = base64.StdEncoding.AppendEncode(dst, _v)
 		dst = append(dst, '"')
 {{- else if mapValIsMsg $f.MapVal}}
-		dst = _v.ToJSON(dst)
+		if _v != nil {
+			dst = _v.ToJSON(dst)
+		} else {
+			dst = append(dst, "null"...)
+		}
 {{- else if or (eq $f.MapVal "int64") (eq $f.MapVal "sint64") (eq $f.MapVal "sfixed64")}}
 		if int64(_v) > 9007199254740991 || int64(_v) < -9007199254740991 {
 			dst = append(dst, '"')
@@ -846,7 +858,11 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 				dst = base64.StdEncoding.AppendEncode(dst, _v)
 				dst = append(dst, '"')
 {{- else if mapValIsMsg $f.MapVal}}
-				dst = _v.ToJSON(dst)
+				if _v != nil {
+					dst = _v.ToJSON(dst)
+				} else {
+					dst = append(dst, "null"...)
+				}
 {{- else if or (eq $f.MapVal "int64") (eq $f.MapVal "sint64") (eq $f.MapVal "sfixed64")}}
 				if int64(_v) > 9007199254740991 || int64(_v) < -9007199254740991 {
 					dst = append(dst, '"')

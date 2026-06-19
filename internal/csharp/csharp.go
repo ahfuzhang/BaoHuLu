@@ -723,7 +723,7 @@ func (g *Generator) RenderCSTest(out *os.File, namespace, baseFileName string) e
 // String values use LargeString (≥100 bytes with escape chars) to match Go benchmark.
 func benchCsMapValLit(f CsFieldTpl) string {
 	if f.MapValIsMsg {
-		return fmt.Sprintf("BenchBuild.Build%s()", f.MapValCS)
+		return fmt.Sprintf("new %s { Value = Build%s() }", f.WrapMapValCS, f.MapValCS)
 	}
 	switch f.MapValCS {
 	case "bool":
@@ -754,7 +754,7 @@ func benchCsMapValLit(f CsFieldTpl) string {
 // there is no loop variable available (used for bool-keyed maps).
 func benchCsFixedMapValLit(f CsFieldTpl) string {
 	if f.MapValIsMsg {
-		return fmt.Sprintf("BenchBuild.Build%s()", f.MapValCS)
+		return fmt.Sprintf("new %s { Value = Build%s() }", f.WrapMapValCS, f.MapValCS)
 	}
 	switch f.MapValCS {
 	case "bool":
@@ -807,7 +807,7 @@ func BenchCsMapFill(f CsFieldTpl) string {
 // String elements use LargeString (≥100 bytes with escape chars) to match Go benchmark.
 func benchCsElemLit(f CsFieldTpl) string {
 	if f.ElemIsMsg {
-		return fmt.Sprintf("BenchBuild.Build%s()", f.ElemTypeCS)
+		return fmt.Sprintf("Build%s()", f.ElemTypeCS)
 	}
 	switch f.ElemTypeCS {
 	case "bool":

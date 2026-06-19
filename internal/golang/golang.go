@@ -1391,6 +1391,48 @@ func FirstNumericKeyMapField(fields []FieldTpl) *FieldTpl {
 	return nil
 }
 
+// FirstMsgValMapField returns the first map field whose value type is a message
+// pointer (*MsgType), or nil when no such field exists. Used by the test template
+// to generate nil-map-value serialisation tests.
+func FirstMsgValMapField(fields []FieldTpl) *FieldTpl {
+	for i := range fields {
+		f := &fields[i]
+		if f.Map && f.MapValIsMsg {
+			return f
+		}
+	}
+	return nil
+}
+
+// MapKeyZeroLit returns a Go zero-value literal for the map key proto type of ft.
+// Used by the test template to construct a map literal whose value is nil.
+func MapKeyZeroLit(ft FieldTpl) string {
+	switch ft.MapKey {
+	case "string":
+		return `""`
+	case "bool":
+		return "false"
+	default:
+		keyGoType, ok := protofile.ScalarProtoToGo[ft.MapKey]
+		if !ok {
+			return "0"
+		}
+		return keyGoType + "(0)"
+	}
+}
+
+// MsgValMapGoType returns the correct Go map type string for a map whose value
+// is a message pointer, e.g. "map[string]*ValueTypes".
+// GoType for map fields omits the pointer; this function adds it explicitly.
+func MsgValMapGoType(ft FieldTpl) string {
+	msgGoName := protofile.GoTypeName(ft.MapVal)
+	keyGoType, ok := protofile.ScalarProtoToGo[ft.MapKey]
+	if !ok {
+		keyGoType = ft.MapKey // string or bool
+	}
+	return fmt.Sprintf("map[%s]*%s", keyGoType, msgGoName)
+}
+
 // ─── boundary and string-escape test helpers ─────────────────────────────────
 
 // BoundaryCase represents a single boundary-value test case for a numeric field.
@@ -1865,6 +1907,9 @@ func (g *Generator) RenderTest(out *os.File) error {
 		"firstBytesField":          FirstBytesField,
 		"firstStringKeyMapField":   FirstStringKeyMapField,
 		"firstNumericKeyMapField":  FirstNumericKeyMapField,
+		"firstMsgValMapField":      FirstMsgValMapField,
+		"mapKeyZeroLit":            MapKeyZeroLit,
+		"msgValMapGoType":          MsgValMapGoType,
 		"hasNumericBoundaryFields": HasNumericBoundaryFields,
 		"numericBoundaryCases":     NumericBoundaryCases,
 		"firstStringScalarField":   FirstStringScalarField,

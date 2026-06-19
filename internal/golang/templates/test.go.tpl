@@ -69,7 +69,18 @@ func testToProtobuf{{$goName}}(t *testing.T, m *{{$goName}}, dst []byte) []byte 
 	if !bytes.Equal(vtOut, abOut) {
 		t.Fatalf("ToProtobufVT and ToProtobufByAppend produced different output:\n  VT:       %v\n  ByAppend: %v", vtOut, abOut)
 	}
-	return m.ToProtobuf(dst)
+	expectedSize := m.ProtobufSize()
+	if len(vtOut) != expectedSize {
+		t.Fatalf("ToProtobufVT produced %d bytes but ProtobufSize()=%d", len(vtOut), expectedSize)
+	}
+	if len(abOut) != expectedSize {
+		t.Fatalf("ToProtobufByAppend produced %d bytes but ProtobufSize()=%d", len(abOut), expectedSize)
+	}
+	result := m.ToProtobuf(dst)
+	if len(result)-len(dst) != expectedSize {
+		t.Fatalf("ToProtobuf appended %d bytes but ProtobufSize()=%d", len(result)-len(dst), expectedSize)
+	}
+	return result
 }
 
 func Test{{$goName}}Empty(t *testing.T) {
@@ -610,6 +621,22 @@ func Test{{$goName}}FromJSONMapKeyTypeError(t *testing.T) {
 		t.Errorf("expected error for non-numeric map key in field %q, got nil", "{{$nkm.JsonName}}")
 	}
 {{- end}}
+}
+{{end}}
+{{- $mvmf := firstMsgValMapField .Fields}}
+{{if $mvmf}}
+// Test{{$goName}}MapNilMsgValue verifies that ToProtobuf and ToJSON do not panic
+// when a map field whose value type is a message pointer contains a nil entry.
+// Field under test: {{$mvmf.JsonName}} ({{msgValMapGoType $mvmf}})
+func Test{{$goName}}MapNilMsgValue(t *testing.T) {
+	w := {{$goName}}{}
+	w.{{$mvmf.Name}} = {{msgValMapGoType $mvmf}}{ {{mapKeyZeroLit $mvmf}}: nil }
+
+	// ToProtobuf must not panic when a map value pointer is nil.
+	_ = testToProtobuf{{$goName}}(t, &w, nil)
+
+	// ToJSON must not panic when a map value pointer is nil.
+	_ = w.ToJSON(nil)
 }
 {{end}}
 

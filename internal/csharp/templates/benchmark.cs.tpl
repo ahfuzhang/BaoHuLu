@@ -72,7 +72,7 @@ internal static class {{.BaseFileName}}BenchBuild
         // Skip bool-keyed maps in benchmarks: JSON object keys must be strings.
 {{- else}}
         {
-            var dict = new {{.WriterType}}();
+            var dict = new {{.EffWriterType}}();
             {{benchCsMapFill .}}
             w.{{.Name}} = dict;
         }
@@ -84,7 +84,11 @@ internal static class {{.BaseFileName}}BenchBuild
             w.{{.Name}} = lst;
         }
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        w.{{.Name}} = new {{.EffWriterType}} { Value = Build{{.WriterType}}() };
+{{- else}}
         w.{{.Name}} = Build{{.WriterType}}();
+{{- end}}
 {{- else if .IsString}}
         w.{{.Name}} = LargeString;
 {{- else if .IsBytes}}
@@ -152,7 +156,11 @@ internal static class {{.BaseFileName}}BenchValidate
                     throw new InvalidOperationException("Field {{.Name}} mismatch: missing map key.");
                 }
 {{- if .MapValIsMsg}}
+{{- if .UseMapValWrapper}}
+                Compare{{.MapValCS}}(kv.Value.Value, actualVal.Value);
+{{- else}}
                 Compare{{.MapValCS}}(kv.Value, actualVal);
+{{- end}}
 {{- else if eq .MapValCS "byte[]"}}
                 if (!ByteArrayEqual(kv.Value, actualVal))
                 {
@@ -202,7 +210,11 @@ internal static class {{.BaseFileName}}BenchValidate
             }
         }
 {{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        Compare{{.WriterType}}(expected.{{.Name}}.Value, actual.{{.Name}}.Value);
+{{- else}}
         Compare{{.WriterType}}(expected.{{.Name}}, actual.{{.Name}});
+{{- end}}
 {{- else if .IsBytes}}
         if (!ByteArrayEqual(expected.{{.Name}}, actual.{{.Name}}))
         {

@@ -1,5 +1,6 @@
 * proto 文件中， import 一个 public.proto
   - 命令行参数支持 -include=   => 计划不支持 ❌
+  - 跨 namespace 引用类型，如何支持?
 * csharp 的代码所依赖的公共库，放在哪儿？
   - 是否需要先把 QiWa.framework 先发布出去?   ✅
 * 测试
@@ -19,9 +20,11 @@
   - 性能测试报告  50%
   - 选中更多的流行库来做性能对比测试
   - 二进制兼容性测试
+    - 谷歌官方版本
   - 压测程序，增加 xx times / s  ✅
   - 对比的库：
     - https://github.com/goccy/go-json
+    - simd json
 * 是否要支持批量输入多个 proto 文件?
   - 是否要支持按照文件夹输入?   => 计划不支持 ❌
 * 各个语言的 namespace 如何处理？
@@ -137,9 +140,6 @@
     - 先计算出元素个数
     - 预先扩容到指定大小
     - 使用切片得到某个成员，而不是 append
-
-
-
 * check 功能里：检查 key 不能有特殊字符  ✅
 * 支持查看版本号
   - hulu --version  ✅
@@ -149,6 +149,11 @@
 * 格式支持
   - 考虑支持 yaml 格式
     - FromYAML() 时，对 map 使用 perfect hash，让读具备极高的性能
+  - yaml 格式  ✅
+    - 把 proto 文件中的注释，放到 yaml 中，增加 yaml 的可读性
+    - csharp 代码增加 yaml 格式
+    - golang: @yamlName 要能够影响生成的 yaml
+  - url encode 格式      ✅
 * 宣传
   - 融入 buf 的生态中，否则很难做到高的使用人数
   - 融入 protoc 的工具链

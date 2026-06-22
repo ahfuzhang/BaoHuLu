@@ -26,9 +26,6 @@ internal struct {{$goName}}Tags
 {{- range .Fields}}
     internal static ReadOnlySpan<byte> JsonKey{{.Name}} => "{{.JsonName}}"u8;
 {{- end}}
-{{- range .Fields}}
-    internal const string FormKey{{.Name}} = "{{.FormName}}";
-{{- end}}
 }
 {{end}}
 {{- define "CsReadonlyBlock"}}

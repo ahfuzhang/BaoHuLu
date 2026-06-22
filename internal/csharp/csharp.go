@@ -177,23 +177,24 @@ type CsFieldTpl struct {
 	// identity
 	Name     string // PascalCase name
 	JsonName string // original proto name (JSON key)
-	FormName string // form key for FromPostForm (@formName > @jsonName > proto field name)
 	Number   int    // proto field number
 	// type classification
-	IsMap      bool
-	IsRepeated bool
-	IsMsg      bool
-	IsEnum     bool
-	IsString   bool
-	IsBytes    bool
-	IsBool     bool
-	IsSint32   bool // sint32
-	IsSint64   bool // sint64
-	IsFixed32  bool // float, fixed32, sfixed32
-	IsFixed64  bool // double, fixed64, sfixed64
-	IsPackable bool // repeated packable numeric
-	IsDecimal  bool // @decimal=round:N annotation: double → System.Decimal
-	DecimalRound int // rounding precision for @decimal fields
+	IsMap        bool
+	IsRepeated   bool
+	IsMsg        bool
+	IsEnum       bool
+	IsString     bool
+	IsBytes      bool
+	IsBool       bool
+	IsSint32     bool // sint32
+	IsSint64     bool // sint64
+	IsFixed32    bool // float, fixed32, sfixed32
+	IsFixed64    bool // double, fixed64, sfixed64
+	IsPackable   bool // repeated packable numeric
+	IsDecimal    bool // @decimal=round:N annotation: double → System.Decimal
+	DecimalRound int  // rounding precision for @decimal fields
+	// yaml
+	YamlName string // @yamlName override; non-empty overrides yaml key
 	// C# type strings
 	WriterType         string // C# type for mutable struct field
 	ReadonlyType       string // C# type for readonly struct field
@@ -204,6 +205,7 @@ type CsFieldTpl struct {
 	MapValCS           string // C# map value type
 	ReadonlyMapValCS   string // readonly C# map value type
 	MapValIsMsg        bool
+	MapValIsEnum       bool // map value type is an enum
 	ElemIsMsg          bool // repeated element is a message
 	// proto meta
 	MapKey string // proto key type (for map entry decode)
@@ -226,8 +228,9 @@ type CsMsgTpl struct {
 	GoName       string // stripped name (used as C# type name)
 	Fields       []CsFieldTpl
 	NeedsWrapper bool // true when this message type needs Wrapper classes generated
-	FromPostForm bool // true when this message needs FromPostForm / FromPostFormString methods
 	AsMap        bool // true when @AsMap annotation present: single map field, JSON is flat map
+	UrlValues    bool // true when @UrlValues annotation present: generate ToURLValues/FromURLValues
+	Yaml         bool // true when @yaml annotation present: generate ToYAML/FromYAML methods
 }
 
 // ─── generator ────────────────────────────────────────────────────────────────
@@ -245,7 +248,6 @@ func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 	f := CsFieldTpl{
 		Name:               fd.Name,
 		JsonName:           fd.JsonName,
-		FormName:           fd.FormName,
 		Number:             fd.Number,
 		IsMap:              fd.Map,
 		IsRepeated:         fd.Repeated,
@@ -269,12 +271,13 @@ func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 		Type:               fd.Type,
 		IsDecimal:          isDecimal,
 		DecimalRound:       fd.DecimalRound,
+		YamlName:           fd.YamlName,
 	}
 	if fd.Map {
 		f.MapKeyCS = g.csScalarType(fd.MapKey)
 		f.MapValCS = g.csValType(fd.MapVal)
 		f.ReadonlyMapValCS = g.csReadonlyValType(fd.MapVal)
-		_, f.MapValIsMsg, _ = g.ProtoTypeToGo(fd.MapVal, false)
+		_, f.MapValIsMsg, f.MapValIsEnum = g.ProtoTypeToGo(fd.MapVal, false)
 	}
 	if fd.Repeated {
 		f.ElemIsMsg = fd.IsMsg
@@ -348,7 +351,7 @@ func (g *Generator) buildMsgTpls() ([]CsMsgTpl, map[string]protofile.MsgLayoutIn
 		}
 		sortedFields := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedFields, writerSizeOf, writerPtrdataOf)
-		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), AsMap: md.AsMap}
+		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), AsMap: md.AsMap, UrlValues: md.UrlValues, Yaml: md.Yaml}
 		for _, fd := range sortedFields {
 			mt.Fields = append(mt.Fields, g.buildCSField(fd))
 		}
@@ -390,43 +393,6 @@ func (g *Generator) buildMsgTpls() ([]CsMsgTpl, map[string]protofile.MsgLayoutIn
 				f.EffLocalType = f.LocalType
 			}
 		}
-	}
-
-	// Third pass: propagate @from-post-form annotation infectiously.
-	// If message A has FromPostForm and contains embedded message B, B also gets it.
-	// This includes plain fields, repeated message fields, and map fields with message values.
-	fromPostFormSet := make(map[string]bool)
-	for _, name := range g.Order {
-		if g.Messages[name].FromPostForm {
-			fromPostFormSet[name] = true
-		}
-	}
-	for changed := true; changed; {
-		changed = false
-		for _, name := range g.Order {
-			if !fromPostFormSet[name] {
-				continue
-			}
-			md := g.Messages[name]
-			for _, fd := range md.Fields {
-				if !fd.IsMsg {
-					continue
-				}
-				msgType := fd.Type
-				if fd.Map {
-					msgType = fd.MapVal
-				}
-				if !fromPostFormSet[msgType] {
-					if _, exists := g.Messages[msgType]; exists {
-						fromPostFormSet[msgType] = true
-						changed = true
-					}
-				}
-			}
-		}
-	}
-	for i := range msgs {
-		msgs[i].FromPostForm = fromPostFormSet[msgs[i].Name]
 	}
 
 	return msgs, writerLayouts
@@ -503,17 +469,28 @@ func (g *Generator) RenderCSFiles(outDir, baseFileName, namespace string) error 
 			return fmt.Errorf("render %s: %w", readonlyPath, err)
 		}
 
-		// ReadonlyXx.FromPostForm — only when the message carries @from-post-form
-		if mt.FromPostForm {
-			fpfPath := filepath.Join(outDir, baseFileName+".Readonly"+mt.GoName+".FromPostForm.cs")
-			fpf, err := os.Create(fpfPath)
+		// Xx.UrlValues and ReadonlyXx.UrlValues — only when @UrlValues annotation present.
+		if mt.UrlValues {
+			writerUVPath := filepath.Join(outDir, baseFileName+"."+mt.GoName+".UrlValues.cs")
+			wuv, err := os.Create(writerUVPath)
 			if err != nil {
-				return fmt.Errorf("create %s: %w", fpfPath, err)
+				return fmt.Errorf("create %s: %w", writerUVPath, err)
 			}
-			err = renderCSFromPostForm(fpf, data)
-			fpf.Close()
+			err = renderCSUrlValuesTmpl(wuv, "CsUrlValuesWriterFile", data)
+			wuv.Close()
 			if err != nil {
-				return fmt.Errorf("render %s: %w", fpfPath, err)
+				return fmt.Errorf("render %s: %w", writerUVPath, err)
+			}
+
+			readonlyUVPath := filepath.Join(outDir, baseFileName+".Readonly"+mt.GoName+".UrlValues.cs")
+			ruv, err := os.Create(readonlyUVPath)
+			if err != nil {
+				return fmt.Errorf("create %s: %w", readonlyUVPath, err)
+			}
+			err = renderCSUrlValuesTmpl(ruv, "CsUrlValuesReadonlyFile", data)
+			ruv.Close()
+			if err != nil {
+				return fmt.Errorf("render %s: %w", readonlyUVPath, err)
 			}
 		}
 	}
@@ -690,6 +667,12 @@ func (g *Generator) RenderCSTest(out *os.File, namespace, baseFileName string) e
 	}
 
 	msgs, _ := g.buildMsgTpls()
+	needsYaml := g.csYamlNeedsSet()
+	for i := range msgs {
+		// YAML methods are also generated for message types referenced by an
+		// @yaml root, so their tests must follow the same transitive closure.
+		msgs[i].Yaml = needsYaml[msgs[i].Name]
+	}
 
 	data := CsRenderData{
 		Namespace:    namespace,
@@ -900,13 +883,48 @@ func (g *Generator) RenderCSBench(out *os.File, namespace, baseFileName string) 
 	return tmpl.Execute(out, data)
 }
 
-// renderCSFromPostForm executes the frompostform template with the given message data into w.
-func renderCSFromPostForm(w io.Writer, data CsOneTypeData) error {
-	tmpl, err := template.New("frompostform").Parse(csFromPostFormTemplate)
-	if err != nil {
-		return fmt.Errorf("parse frompostform template: %w", err)
+// ─── URL values helpers ───────────────────────────────────────────────────────
+
+// csUrlKeyParse returns a C# statement that parses the loop variable _k (string)
+// into a typed local variable _key of the given C# map-key type. Returns Error on failure.
+func csUrlKeyParse(keyCS, fieldJsonName string) string {
+	errExpr := `return Error.WithLoc(1, "bad key ` + fieldJsonName + `");`
+	switch keyCS {
+	case "string":
+		return "var _key = _k;"
+	case "bool":
+		return `var _key = _k == "true" || _k == "1";`
+	case "long":
+		return "if (!long.TryParse(_k, out long _key)) " + errExpr
+	case "ulong":
+		return "if (!ulong.TryParse(_k, out ulong _key)) " + errExpr
+	case "uint":
+		return "if (!uint.TryParse(_k, out uint _key)) " + errExpr
+	default: // int (int32, sint32, sfixed32, fixed32)
+		return "if (!int.TryParse(_k, out int _key)) " + errExpr
 	}
-	return tmpl.Execute(w, data)
+}
+
+// buildCSUrlValuesTmpl compiles the URL-values template.
+func buildCSUrlValuesTmpl() (*template.Template, error) {
+	fnMap := template.FuncMap{
+		"csUrlKeyParse": csUrlKeyParse,
+		"csDefault":     csDefaultValue,
+	}
+	tmpl, err := template.New("cs_urlvalues").Funcs(fnMap).Parse(csUrlValuesCodeTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse cs_urlvalues template: %w", err)
+	}
+	return tmpl, nil
+}
+
+// renderCSUrlValuesTmpl executes the named URL-values sub-template with data into w.
+func renderCSUrlValuesTmpl(w io.Writer, name string, data CsOneTypeData) error {
+	tmpl, err := buildCSUrlValuesTmpl()
+	if err != nil {
+		return err
+	}
+	return tmpl.ExecuteTemplate(w, name, data)
 }
 
 // ─── C# code template ─────────────────────────────────────────────────────────
@@ -920,5 +938,112 @@ var csTestCodeTemplate string
 //go:embed templates/benchmark.cs.tpl
 var csBenchCodeTemplate string
 
-//go:embed templates/frompostform.cs.tpl
-var csFromPostFormTemplate string
+//go:embed templates/url.values.cs.tpl
+var csUrlValuesCodeTemplate string
+
+//go:embed templates/message.yaml.cs.tpl
+var csYamlCodeTemplate string
+
+// ─── C# YAML helpers ──────────────────────────────────────────────────────────
+
+// buildCSYamlTmpl compiles the YAML template with its FuncMap.
+func buildCSYamlTmpl() (*template.Template, error) {
+	fnMap := template.FuncMap{
+		"csDefault": csDefaultValue,
+		"yamlKey": func(f CsFieldTpl) string {
+			if f.YamlName != "" {
+				return f.YamlName
+			}
+			return f.JsonName
+		},
+	}
+	tmpl, err := template.New("cs_yaml").Funcs(fnMap).Parse(csYamlCodeTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse cs_yaml template: %w", err)
+	}
+	return tmpl, nil
+}
+
+// renderCSYamlTmpl executes the named YAML sub-template with data into w.
+func renderCSYamlTmpl(w io.Writer, name string, data CsOneTypeData) error {
+	tmpl, err := buildCSYamlTmpl()
+	if err != nil {
+		return err
+	}
+	return tmpl.ExecuteTemplate(w, name, data)
+}
+
+// csYamlNeedsSet computes the transitive closure of message names that need
+// YAML methods generated. It starts with @yaml-annotated messages, then
+// expands to all transitively referenced message types.
+func (g *Generator) csYamlNeedsSet() map[string]bool {
+	needs := make(map[string]bool)
+	for name, md := range g.Messages {
+		if md.Yaml {
+			needs[name] = true
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for name := range needs {
+			for _, fd := range g.Messages[name].Fields {
+				var ref string
+				if fd.Map {
+					if _, ok := g.Messages[fd.MapVal]; ok {
+						ref = fd.MapVal
+					}
+				} else if fd.IsMsg {
+					ref = fd.Type
+				}
+				if ref != "" && !needs[ref] {
+					needs[ref] = true
+					changed = true
+				}
+			}
+		}
+	}
+	return needs
+}
+
+// RenderCSYAMLFiles generates one pair of .cs files per @yaml-annotated message
+// (and every message transitively referenced) into outDir:
+//   - "{base}.{GoName}.yaml.cs"         — ToYAML on the mutable writer struct
+//   - "{base}.Readonly{GoName}.yaml.cs" — FromYAML on the readonly struct
+func (g *Generator) RenderCSYAMLFiles(outDir, baseFileName, namespace string) error {
+	needsYaml := g.csYamlNeedsSet()
+	if len(needsYaml) == 0 {
+		return nil
+	}
+
+	msgs, _ := g.buildMsgTpls()
+
+	for _, mt := range msgs {
+		if !needsYaml[mt.Name] {
+			continue
+		}
+		data := CsOneTypeData{Namespace: namespace, Msg: mt}
+
+		writerPath := filepath.Join(outDir, baseFileName+"."+mt.GoName+".yaml.cs")
+		wf, err := os.Create(writerPath)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", writerPath, err)
+		}
+		err = renderCSYamlTmpl(wf, "CsYamlWriterFile", data)
+		wf.Close()
+		if err != nil {
+			return fmt.Errorf("render %s: %w", writerPath, err)
+		}
+
+		readonlyPath := filepath.Join(outDir, baseFileName+".Readonly"+mt.GoName+".yaml.cs")
+		rf, err := os.Create(readonlyPath)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", readonlyPath, err)
+		}
+		err = renderCSYamlTmpl(rf, "CsYamlReadonlyFile", data)
+		rf.Close()
+		if err != nil {
+			return fmt.Errorf("render %s: %w", readonlyPath, err)
+		}
+	}
+	return nil
+}

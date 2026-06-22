@@ -28,9 +28,6 @@ type FieldExtensions struct {
 	VarName string
 	// JsonName overrides the json tag key (and the JSON name constant value).
 	JsonName string
-	// FormName overrides the form key constant used in FromPostForm. Falls back to JsonName,
-	// then to the original proto field name when absent.
-	FormName string
 	// YamlName, when non-empty, adds a yaml struct tag and a YAML name constant.
 	YamlName string
 	// Tags holds arbitrary extra struct tags produced by @tag=Name:Value.
@@ -44,17 +41,18 @@ type FieldExtensions struct {
 type MessageExtensions struct {
 	// When true (@Deprecated annotation present), the message is omitted from generated code.
 	Deprecated bool
-	// FromPostForm, when true (@from-post-form annotation present), causes a
-	// FromPostForm(ReadOnlySpan<byte>) method to be generated on the C# readonly struct.
-	// This annotation is infectious: any message type embedded in an annotated message
-	// also gets the method generated.
-	FromPostForm bool
 	// AsMap, when true (@AsMap annotation present), constrains the message to contain
 	// exactly one field of map type. Validated by protocheck and protofile.
 	AsMap bool
 	// AsArray, when true (@AsArray annotation present), constrains the message to contain
 	// exactly one field of repeated type. Validated by protocheck and protofile.
 	AsArray bool
+	// UrlValues, when true (@UrlValues annotation present), generates ToURLValues() on the
+	// mutable struct and FromURLValues() on the readonly struct.
+	UrlValues bool
+	// Yaml, when true (@yaml annotation present), generates ToYAML() on the mutable struct
+	// and FromYAML() on the readonly struct.
+	Yaml bool
 }
 
 // ParseAndStripField scans comment lines for extension annotations, removes
@@ -77,8 +75,6 @@ func ParseAndStripField(lines []string) (FieldExtensions, []string) {
 			ext.VarName = value
 		case "jsonname":
 			ext.JsonName = value
-		case "formname":
-			ext.FormName = value
 		case "yamlname":
 			ext.YamlName = value
 		case "tag":
@@ -147,12 +143,14 @@ func ParseAndStripMessage(lines []string) (MessageExtensions, []string) {
 		switch key {
 		case "deprecated":
 			ext.Deprecated = true
-		case "from-post-form":
-			ext.FromPostForm = true
 		case "asmap":
 			ext.AsMap = true
 		case "asarray":
 			ext.AsArray = true
+		case "urlvalues":
+			ext.UrlValues = true
+		case "yaml":
+			ext.Yaml = true
 		}
 		// Unknown message-level annotations are silently dropped (not added to clean).
 	}

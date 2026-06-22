@@ -3,8 +3,10 @@ package golang
 import (
 	_ "embed"
 	"fmt"
+	"io"
 	"math/bits"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -543,6 +545,15 @@ type MsgTpl struct {
 	ReaderFields  []FieldTpl // readonly fields = Fields + rawBufferLen, all sorted
 	AsMap         bool       // true when @AsMap annotation is present: single map field, JSON parsed as direct map
 	AsArray       bool       // true when @AsArray annotation is present: single repeated field, JSON parsed as direct array
+	UrlValues     bool       // true when @UrlValues annotation is present: generate ToURLValues/FromURLValues methods
+	Yaml          bool       // true when @yaml annotation is present: generate ToYAML/FromYAML methods
+}
+
+// GoOneTypeData is passed to per-message URL-values templates so they can
+// render a single message's encode/decode helpers into its own file.
+type GoOneTypeData struct {
+	Package string
+	Msg     MsgTpl
 }
 
 type EnumTpl struct {
@@ -716,7 +727,7 @@ func (g *Generator) Render(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray, UrlValues: md.UrlValues, Yaml: md.Yaml}
 
 		// --- Writer struct: sort using precomputed writer layouts for IsMsg fields.
 		writerSizeOf := func(fd protofile.FieldDef) int {
@@ -1595,6 +1606,16 @@ func AnyMsgHasBytesField(msgs []MsgTpl) bool {
 	return false
 }
 
+// AnyMsgHasYaml reports whether any message in msgs has @yaml annotation.
+func AnyMsgHasYaml(msgs []MsgTpl) bool {
+	for _, msg := range msgs {
+		if msg.Yaml {
+			return true
+		}
+	}
+	return false
+}
+
 // ─── benchmark template helpers ──────────────────────────────────────────────
 
 // benchScalarMapValLit returns a Go literal for the given proto map-value type.
@@ -1804,7 +1825,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray, UrlValues: md.UrlValues, Yaml: md.Yaml}
 
 		writerSizeOf := func(fd protofile.FieldDef) int {
 			if fd.IsMsg && fd.IsRecursive {
@@ -1915,6 +1936,7 @@ func (g *Generator) RenderTest(out *os.File) error {
 		"firstStringScalarField":   FirstStringScalarField,
 		"anyMsgHasNumericBoundary": AnyMsgHasNumericBoundary,
 		"anyMsgHasBytesField":      AnyMsgHasBytesField,
+		"anyMsgHasYaml":            AnyMsgHasYaml,
 		"hasFloatFields":           HasFloatFields,
 		"floatFields":              FloatFields,
 		"floatIntLit":              FloatIntLit,
@@ -1954,7 +1976,7 @@ func (g *Generator) RenderBench(out *os.File) error {
 	var msgs []MsgTpl
 	for _, name := range g.Order {
 		md := g.Messages[name]
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray, UrlValues: md.UrlValues, Yaml: md.Yaml}
 
 		writerSizeOf := func(fd protofile.FieldDef) int {
 			if fd.IsMsg && fd.IsRecursive {
@@ -2062,3 +2084,228 @@ var benchTemplate string
 
 //go:embed templates/compare.test.go.tpl
 var compareTemplate string
+
+//go:embed templates/url.values.go.tpl
+var goUrlValuesCodeTemplate string
+
+//go:embed templates/yaml.go.tpl
+var goYamlCodeTemplate string
+
+// ─── URL values rendering ─────────────────────────────────────────────────────
+
+// buildGoUrlValuesTmpl compiles the Go URL-values template with its FuncMap.
+func (g *Generator) buildGoUrlValuesTmpl() (*template.Template, error) {
+	fnMap := template.FuncMap{
+		"mapKeyGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"readonlyTypeName": protofile.ReadonlyGoTypeName,
+		"elemType":         func(s string) string { return strings.TrimPrefix(s, "[]") },
+		"decimalRound":     func(f FieldTpl) int { return f.DecimalRound },
+		"hasDecimalFields": HasDecimalFields,
+	}
+	tmpl, err := template.New("go_urlvalues").Funcs(fnMap).Parse(goUrlValuesCodeTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse go_urlvalues template: %w", err)
+	}
+	return tmpl, nil
+}
+
+// renderGoUrlValuesTmpl executes the named URL-values sub-template with data into w.
+func (g *Generator) renderGoUrlValuesTmpl(w io.Writer, data GoOneTypeData) error {
+	tmpl, err := g.buildGoUrlValuesTmpl()
+	if err != nil {
+		return err
+	}
+	return tmpl.ExecuteTemplate(w, "GoUrlValuesFile", data)
+}
+
+// RenderGoURLValuesFiles generates one .go file per @UrlValues-annotated message into outDir.
+// The file name follows the pattern: {baseFileName}.{GoName}.url.values.go
+// Each file contains ToURLValues() on the mutable struct and FromURLValues() on the readonly struct.
+func (g *Generator) RenderGoURLValuesFiles(outDir, baseFileName string) error {
+	var msgs []MsgTpl
+	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
+	for _, name := range g.Order {
+		md := g.Messages[name]
+		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8
+			}
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Size
+				}
+			}
+			return protofile.FieldGoSize(fd)
+		}
+		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8
+			}
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Ptrdata
+				}
+			}
+			return protofile.FieldPtrdata(fd)
+		}
+		sortedDefs := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
+		writerLayouts[name] = protofile.ComputeStructLayout(sortedDefs, writerSizeOf, writerPtrdataOf)
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray, UrlValues: md.UrlValues, Yaml: md.Yaml}
+		for _, fd := range sortedDefs {
+			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
+		}
+		msgs = append(msgs, mt)
+	}
+
+	for _, mt := range msgs {
+		if !mt.UrlValues {
+			continue
+		}
+		p := filepath.Join(outDir, baseFileName+"."+mt.GoName+".url.values.go")
+		f, err := os.Create(p)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", p, err)
+		}
+		err = g.renderGoUrlValuesTmpl(f, GoOneTypeData{Package: g.Pkg, Msg: mt})
+		f.Close()
+		if err != nil {
+			return fmt.Errorf("render %s: %w", p, err)
+		}
+		fmt.Printf("generated %s\n", p)
+	}
+	return nil
+}
+
+// ─── YAML rendering ───────────────────────────────────────────────────────────
+
+// buildGoYamlTmpl compiles the YAML template with its FuncMap.
+func (g *Generator) buildGoYamlTmpl() (*template.Template, error) {
+	fnMap := template.FuncMap{
+		"mapKeyGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"mapValGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
+		"readonlyTypeName": protofile.ReadonlyGoTypeName,
+		"elemType":         func(s string) string { return strings.TrimPrefix(s, "[]") },
+		"decimalRound":     func(f FieldTpl) int { return f.DecimalRound },
+		"hasDecimalFields": HasDecimalFields,
+		"yamlKey": func(f FieldTpl) string {
+			if f.YamlName != "" {
+				return f.YamlName
+			}
+			return f.JsonName
+		},
+	}
+	tmpl, err := template.New("go_yaml").Funcs(fnMap).Parse(goYamlCodeTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse go_yaml template: %w", err)
+	}
+	return tmpl, nil
+}
+
+// renderGoYamlTmpl executes the YAML sub-template with data into w.
+func (g *Generator) renderGoYamlTmpl(w io.Writer, data GoOneTypeData) error {
+	tmpl, err := g.buildGoYamlTmpl()
+	if err != nil {
+		return err
+	}
+	return tmpl.ExecuteTemplate(w, "GoYamlFile", data)
+}
+
+// yamlNeedsSet computes the transitive closure of message names that require
+// YAML code generated. It starts with messages explicitly annotated with @yaml,
+// then expands to every message type referenced by those messages (directly or
+// indirectly), because ToYAML / FromYAML methods call the same methods on any
+// embedded message field — so all referenced message types must also have them.
+func (g *Generator) yamlNeedsSet() map[string]bool {
+	needs := make(map[string]bool)
+	for name, md := range g.Messages {
+		if md.Yaml {
+			needs[name] = true
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for name := range needs {
+			for _, fd := range g.Messages[name].Fields {
+				var ref string
+				if fd.Map {
+					// Check whether the map value type is a known message.
+					if _, ok := g.Messages[fd.MapVal]; ok {
+						ref = fd.MapVal
+					}
+				} else if fd.IsMsg {
+					ref = fd.Type
+				}
+				if ref != "" && !needs[ref] {
+					needs[ref] = true
+					changed = true
+				}
+			}
+		}
+	}
+	return needs
+}
+
+// RenderGoYAMLFiles generates one .go file per @yaml-annotated message (and
+// every message type transitively referenced by those messages) into outDir.
+// The file name follows the pattern: {baseFileName}.{GoName}.yaml.go
+// Each file contains ToYAML() on the mutable struct and FromYAML() on the readonly struct.
+func (g *Generator) RenderGoYAMLFiles(outDir, baseFileName string) error {
+	needsYaml := g.yamlNeedsSet()
+	if len(needsYaml) == 0 {
+		return nil
+	}
+
+	var msgs []MsgTpl
+	writerLayouts := make(map[string]protofile.MsgLayoutInfo)
+	for _, name := range g.Order {
+		md := g.Messages[name]
+		writerSizeOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8
+			}
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Size
+				}
+			}
+			return protofile.FieldGoSize(fd)
+		}
+		writerPtrdataOf := func(fd protofile.FieldDef) int {
+			if fd.IsMsg && fd.IsRecursive {
+				return 8
+			}
+			if fd.IsMsg {
+				if li, ok := writerLayouts[fd.Type]; ok {
+					return li.Ptrdata
+				}
+			}
+			return protofile.FieldPtrdata(fd)
+		}
+		sortedDefs := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
+		writerLayouts[name] = protofile.ComputeStructLayout(sortedDefs, writerSizeOf, writerPtrdataOf)
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray, UrlValues: md.UrlValues, Yaml: md.Yaml}
+		for _, fd := range sortedDefs {
+			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
+		}
+		msgs = append(msgs, mt)
+	}
+
+	for _, mt := range msgs {
+		if !needsYaml[mt.Name] {
+			continue
+		}
+		p := filepath.Join(outDir, baseFileName+"."+mt.GoName+".yaml.go")
+		f, err := os.Create(p)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", p, err)
+		}
+		err = g.renderGoYamlTmpl(f, GoOneTypeData{Package: g.Pkg, Msg: mt})
+		f.Close()
+		if err != nil {
+			return fmt.Errorf("render %s: %w", p, err)
+		}
+		fmt.Printf("generated %s\n", p)
+	}
+	return nil
+}

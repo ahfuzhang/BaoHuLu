@@ -19,7 +19,7 @@ message NotUse {
   int64 a = 1;
 }
 
-// @from-post-form
+// @UrlValues
 message Child {
   // @varName=ChildID
   // @jsonName=childid
@@ -35,6 +35,7 @@ message Child {
 }
 
 // 这个类型尝试所有的 protobuf 类型，以便测试时可以充分覆盖。
+// @yaml
 message AllTypes {
   double DoubleValue = 1;
   float FloatValue = 2;
@@ -94,7 +95,7 @@ message AllTypes {
   // double price = 1013;  // encoding/json 库序列化时会失败
 }
 
-// @from-post-form
+// @UrlValues
 message ValueTypes {
   double DoubleValue = 1;
   float FloatValue = 2;

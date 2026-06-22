@@ -99,6 +99,83 @@ internal static class {{.BaseFileName}}TestValidate
         Assert.Equal(expected.{{.Name}}, actual.{{.Name}});
 {{- end}}
 {{end}}    }
+
+    internal static void CompareReadonly{{$goName}}({{$goName}} expected, Readonly{{$goName}} actual)
+    {
+{{range .Fields}}
+{{- if .IsMap}}
+        if (expected.{{.Name}} == null)
+        {
+            Assert.Null(actual.{{.Name}});
+        }
+        else
+        {
+            Assert.NotNull(actual.{{.Name}});
+            Assert.Equal(expected.{{.Name}}.Count, actual.{{.Name}}.Count);
+            foreach (var kv in expected.{{.Name}})
+            {
+                Assert.True(actual.{{.Name}}.TryGetValue(kv.Key, out var actualVal), "Field {{.Name}} mismatch: missing map key.");
+{{- if .MapValIsMsg}}
+{{- if .UseMapValWrapper}}
+                if (kv.Value == null)
+                {
+                    Assert.Null(actualVal);
+                }
+                else
+                {
+                    Assert.NotNull(actualVal);
+                    CompareReadonly{{.MapValCS}}(kv.Value.Value, actualVal!.Value);
+                }
+{{- else}}
+                CompareReadonly{{.MapValCS}}(kv.Value, actualVal);
+{{- end}}
+{{- else if eq .MapValCS "byte[]"}}
+                CompareByteArray(kv.Value, actualVal, "{{.Name}}");
+{{- else}}
+                Assert.Equal(kv.Value, actualVal);
+{{- end}}
+            }
+        }
+{{- else if .IsRepeated}}
+        if (expected.{{.Name}} == null)
+        {
+            Assert.Null(actual.{{.Name}});
+        }
+        else
+        {
+            Assert.NotNull(actual.{{.Name}});
+            Assert.Equal(expected.{{.Name}}.Count, actual.{{.Name}}.Count);
+            for (var i = 0; i < expected.{{.Name}}.Count; i++)
+            {
+{{- if .ElemIsMsg}}
+                CompareReadonly{{.ElemTypeCS}}(expected.{{.Name}}[i], actual.{{.Name}}[i]);
+{{- else if eq .ElemTypeCS "byte[]"}}
+                CompareByteArray(expected.{{.Name}}[i], actual.{{.Name}}[i], "{{.Name}}");
+{{- else}}
+                Assert.Equal(expected.{{.Name}}[i], actual.{{.Name}}[i]);
+{{- end}}
+            }
+        }
+{{- else if .IsMsg}}
+{{- if .UseDirectWrapper}}
+        if (expected.{{.Name}} == null)
+        {
+            Assert.Null(actual.{{.Name}});
+        }
+        else
+        {
+            Assert.NotNull(actual.{{.Name}});
+            CompareReadonly{{.WriterType}}(expected.{{.Name}}.Value, actual.{{.Name}}!.Value);
+        }
+{{- else}}
+        CompareReadonly{{.WriterType}}(expected.{{.Name}}, actual.{{.Name}});
+{{- end}}
+{{- else if .IsBytes}}
+        CompareByteArray(expected.{{.Name}}, actual.{{.Name}}, "{{.Name}}");
+{{- else}}
+        Assert.Equal(expected.{{.Name}}, actual.{{.Name}});
+{{- end}}
+{{end}}    }
 {{end}}
 }
 {{$baseFileName := .BaseFileName}}{{range .Messages}}
@@ -201,6 +278,25 @@ public class {{$goName}}Tests
         jBuf.Dispose();
         jBuf2.Dispose();
     }
+
+{{- if .Yaml}}
+    // Verifies that ToYAML → FromYAML preserves every field value without loss.
+    [Fact]
+    public void YAMLRoundtrip_PreservesAllFields()
+    {
+        var expected = MakeSample{{$goName}}();
+        var yamlBuf = new RentedBuffer(256);
+        expected.ToYAML(ref yamlBuf, 0);
+
+        var r = new {{$roName}}();
+        var err = r.FromYAML(yamlBuf.AsSpan());
+        Assert.False(err.Err(), err.Message);
+
+        {{$baseFileName}}TestValidate.CompareReadonly{{$goName}}(expected, r);
+
+        yamlBuf.Dispose();
+    }
+{{- end}}
 
 {{- if not .AsMap}}
     // Verifies that System.Text.Json serialisation and deserialisation preserve

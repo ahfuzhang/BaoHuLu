@@ -191,6 +191,14 @@ func generateGoOutput(pg *protofile.Generator, goOut, goBase string, withTest, w
 		}
 	}
 
+	if err := gen.RenderGoURLValuesFiles(goOut, goBase); err != nil {
+		return err
+	}
+
+	if err := gen.RenderGoYAMLFiles(goOut, goBase); err != nil {
+		return err
+	}
+
 	modPath := filepath.Join(goOut, "go.mod")
 	if err := writeGoMod(modPath, pg.GoPackage, pg.PackageName, withTest, hasDecimalFields(pg)); err != nil {
 		return fmt.Errorf("write %s: %w", modPath, err)
@@ -394,6 +402,10 @@ func runTu(args []string) {
 		csGen := csharp.NewGenerator(pg)
 		if err := csGen.RenderCSFiles(*csOut, csBase, ns); err != nil {
 			fmt.Fprintf(os.Stderr, "renderCS: %v\n", err)
+			os.Exit(1)
+		}
+		if err := csGen.RenderCSYAMLFiles(*csOut, csBase, ns); err != nil {
+			fmt.Fprintf(os.Stderr, "renderCSYAML: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Printf("generated %s/*.cs\n", *csOut)

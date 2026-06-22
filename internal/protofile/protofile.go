@@ -38,7 +38,6 @@ type FieldDef struct {
 	Comment  []string // proto comment lines (without leading //), extension lines stripped
 
 	// Extension annotations (@keyword=value in proto comments).
-	FormName  string                   // form key used in FromPostForm: @formName > @jsonName > proto field name
 	YamlName  string                   // @yamlName override; non-empty adds yaml struct tag + constant
 	ExtraTags []protoextensions.TagExt // @tag=Name:Value extra struct tags
 
@@ -56,9 +55,10 @@ type MessageDef struct {
 	Name         string
 	Fields       []FieldDef
 	Comment      []string // proto comment lines (without leading //), extension lines stripped
-	FromPostForm bool     // @from-post-form annotation: generate FromPostForm method in C#
 	AsMap        bool     // @AsMap annotation: message must contain exactly one map field
 	AsArray      bool     // @AsArray annotation: message must contain exactly one repeated field
+	UrlValues    bool     // @UrlValues annotation: generate ToURLValues / FromURLValues methods
+	Yaml         bool     // @yaml annotation: generate ToYAML / FromYAML methods
 }
 
 type MethodDef struct {
@@ -268,7 +268,7 @@ func (g *Generator) CollectMessage(m *proto.Message) {
 		return // skip deprecated messages entirely
 	}
 
-	md := &MessageDef{Name: m.Name, Comment: cleanMsgComments, FromPostForm: msgExt.FromPostForm, AsMap: msgExt.AsMap, AsArray: msgExt.AsArray}
+	md := &MessageDef{Name: m.Name, Comment: cleanMsgComments, AsMap: msgExt.AsMap, AsArray: msgExt.AsArray, UrlValues: msgExt.UrlValues, Yaml: msgExt.Yaml}
 	for _, el := range m.Elements {
 		switch v := el.(type) {
 		case *proto.NormalField:
@@ -285,14 +285,9 @@ func (g *Generator) CollectMessage(m *proto.Message) {
 			if fieldExt.JsonName != "" {
 				jsonName = fieldExt.JsonName
 			}
-			formName := jsonName
-			if fieldExt.FormName != "" {
-				formName = fieldExt.FormName
-			}
 			fd := FieldDef{
 				Name:         name,
 				JsonName:     jsonName,
-				FormName:     formName,
 				Number:       v.Sequence,
 				Type:         v.Type,
 				Repeated:     v.Repeated,
@@ -317,16 +312,11 @@ func (g *Generator) CollectMessage(m *proto.Message) {
 			if fieldExt.JsonName != "" {
 				jsonName = fieldExt.JsonName
 			}
-			formName := jsonName
-			if fieldExt.FormName != "" {
-				formName = fieldExt.FormName
-			}
 			keyGo, _, _ := g.ProtoTypeToGo(v.KeyType, false)
 			valGo, _, _ := g.ProtoTypeToGo(v.Type, false)
 			fd := FieldDef{
 				Name:      name,
 				JsonName:  jsonName,
-				FormName:  formName,
 				Number:    v.Sequence,
 				Type:      "map",
 				GoType:    fmt.Sprintf("map[%s]%s", keyGo, valGo),

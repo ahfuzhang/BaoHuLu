@@ -27,14 +27,36 @@
 
 message 上存在此扩展信息时，相当于没有这个 message，生成代码时跳过此 message.
 
-### @from-post-form
+### @UrlValues
 
-当存在这个标签时， Readonly${message_name} 这个类型上，新增 FromPostForm() 方法，可以解析通过 `application/x-www-form-urlencoded` 编码提交的数据。
-* 对数据进行 url decode
-* 逐个字段赋值到 Readonly${message_name} 中的字段中
-* 对于数组类型，把 key 存在重复的数据，作为数组处理
-* 对于 map 类型：对 value 部分进行 url decode，然后按照 key-value 的格式写入
-* 对子嵌入的 message 类型：把 value 部分作为子类型的 FromPostForm() 方法的输入。
+当存在这个标签时，为类型提供 url encode 的序列化和反序列化支持
+* ${message_name} 的类型上支持 ToURLValues() 方法
+  - 逐个字段进行格式化
+  - key 的名字与 json 的名字一样
+  - value 部分格式化为字符串
+    - 如果是 bytes 类型，进行 base64 encode
+    - 如果是 数组类型，写成连续的多个 key 的格式： k1=value1&k1=value2
+    - 如果是 map 类型，先把所有的 key-value 转换为 `k1=v1&k2=v2` 这样的字符串，然后整个字符串再 url encode 后作为 value 赋值给 key
+* Readonly${message_name} 的类型上支持 FromURLValues() 方法
+  - 对数据进行 url decode
+  - 逐个字段赋值到 Readonly${message_name} 中的字段中
+  - 对于数组类型，把 key 存在重复的数据作为数组处理
+  - 对于 map 类型：对 value 部分进行 url decode，然后按照 key-value 的格式写入
+  - 对子嵌入的 message 类型：把 value 部分作为子类型的 FromPostForm() 方法的输入。
+  - 对于 bytes 类型，认为内部是 base64 编码的
+
+### @yaml
+
+当存在这个标签是，为类型提供 yaml 格式的序列化和反序列化。
+* ${message_name} 的类型上支持 ToYAML() 方法
+  - 函数原型为： `func (t *TypeName) ToYAML(dst []byte, indent int) []byte`
+    - indent 参数为缩进的空格数
+  - 缩进为两个空格，下一级缩进在上一级缩进的基础上增加两个空格
+  - 逐个字段追加到 dst 中，不使用任何 yaml 的代码库
+* Readonly${message_name} 的类型上支持 FromYAML() 方法
+  - 函数原型为： `func (t *ReadonlyTypeName) FromYAML(src []byte) error`
+  - 逐行读取，根据前导的空格来逐层解析
+  - 不使用任何 yaml 的代码库
 
 ### @AsMap
 

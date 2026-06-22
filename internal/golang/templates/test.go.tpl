@@ -9,6 +9,9 @@ import (
 	"math"
 {{- end}}
 	"testing"
+{{- if anyMsgHasYaml .Messages}}
+	"os"
+{{- end}}
 {{- if anyMsgHasBytesField .Messages}}
 
 	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
@@ -852,6 +855,33 @@ func Test{{$goName}}ProtobufMemoryStomping(t *testing.T) {
 		}
 	}
 {{end}}
+}
+{{end}}
+{{if .Yaml}}
+// Test{{$goName}}YAMLRoundtrip encodes a sample {{$goName}} to YAML, writes the
+// output to {{$goName}}.yaml for visual inspection, then decodes back via
+// FromYAML and re-encodes to verify byte-identical output.
+func Test{{$goName}}YAMLRoundtrip(t *testing.T) {
+	w := makeSample{{$goName}}()
+	yamlOut := w.ToYAML(nil, 0)
+
+	// Write to disk so the output can be inspected after the test run.
+	if err := os.WriteFile("{{$goName}}.yaml", yamlOut, 0o644); err != nil {
+		t.Logf("could not write {{$goName}}.yaml: %v", err)
+	}
+
+	// Decode from YAML.
+	var r {{$roName}}
+	if err := r.FromYAML(yamlOut); err != nil {
+		t.Fatalf("FromYAML error: %v\nYAML:\n%s", err, yamlOut)
+	}
+
+	// Re-encode via Clone → ToYAML and compare byte-for-byte.
+	w2 := r.Clone(nil)
+	yamlOut2 := w2.ToYAML(nil, 0)
+	if !bytes.Equal(yamlOut, yamlOut2) {
+		t.Fatalf("YAML roundtrip mismatch:\n--- want ---\n%s\n--- got ---\n%s", yamlOut, yamlOut2)
+	}
 }
 {{end}}
 {{end}}

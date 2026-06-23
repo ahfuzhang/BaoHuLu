@@ -29,6 +29,41 @@ var (
 )
 
 {{- $goName := .GoName}}
+{{- $hasYamlNames := hasYamlFields .Fields}}
+{{- if $hasYamlNames}}
+
+// yaml field key constants for {{$goName}}.
+const (
+{{- range .Fields}}
+{{- if .IsRawBuf}}{{continue}}{{end}}
+	_{{$goName}}_{{.Name}}_yamlKey = "{{yamlKey .}}"
+{{- end}}
+)
+{{end}}
+{{- $msgCmtNums := .CommentLineNums}}
+{{- if hasAnyYamlComments .}}
+
+// yaml comment constants for {{$goName}}.
+const (
+{{- range $i, $line := .Comment}}
+{{- if gt (index $msgCmtNums $i) 0}}
+	_yamlCommentLine{{index $msgCmtNums $i}} = {{printf "%q" (printf "%s\n" $line)}}
+{{- end}}
+{{- end}}
+{{- range .Fields}}
+{{- if .IsRawBuf}}{{continue}}{{end}}
+{{- $f := .}}
+{{- range $i, $line := .Comment}}
+{{- if gt (index $f.CommentLineNums $i) 0}}
+	_yamlCommentLine{{index $f.CommentLineNums $i}} = {{printf "%q" (printf "%s\n" $line)}}
+{{- end}}
+{{- end}}
+{{- if gt .InlineCommentLineNum 0}}
+	_yamlInlineCommentLine{{.InlineCommentLineNum}} = {{printf "%q" (printf "%s\n" .InlineComment)}}
+{{- end}}
+{{- end}}
+)
+{{end}}
 // ============================================================================
 // {{$goName}} — ToYAML serialization
 // ============================================================================
@@ -58,12 +93,150 @@ func (m *{{$goName}}) ToYAML(dst []byte, indent int) []byte {
 		return append(dst, s...)
 	}
 	_ = _strVal
+{{- if .AsMap}}
+{{- $f0 := index .Fields 0}}
+{{- if .Comment}}
+	if len(m.{{$f0.Name}}) > 0 {
+{{- range $i, $line := .Comment}}
+		dst = append(dst, sp...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $msgCmtNums $i $line}}...)
+{{- end}}
+	}
+{{- end}}
+	for _k, _v := range m.{{$f0.Name}} {
+		dst = append(dst, sp...)
+{{- if eq $f0.MapKey "string"}}
+		dst = _strVal(dst, _k)
+{{- else if eq $f0.MapKey "bool"}}
+		if _k {
+			dst = append(dst, "true"...)
+		} else {
+			dst = append(dst, "false"...)
+		}
+{{- else if or (eq $f0.MapKey "uint64") (eq $f0.MapKey "fixed64")}}
+		dst = strconv.AppendUint(dst, uint64(_k), 10)
+{{- else if or (eq $f0.MapKey "uint32") (eq $f0.MapKey "fixed32")}}
+		dst = strconv.AppendUint(dst, uint64(_k), 10)
+{{- else if or (eq $f0.MapKey "int64") (eq $f0.MapKey "sint64") (eq $f0.MapKey "sfixed64")}}
+		dst = strconv.AppendInt(dst, int64(_k), 10)
+{{- else}}
+		dst = strconv.AppendInt(dst, int64(_k), 10)
+{{- end}}
+		dst = append(dst, ": "...)
+{{- if $f0.MapValIsMsg}}
+		if _v != nil {
+			dst = append(dst, '\n')
+			dst = _v.ToYAML(dst, indent+2)
+		} else {
+			dst = append(dst, '\n')
+		}
+{{- else if eq $f0.MapVal "string"}}
+		dst = _strVal(dst, _v)
+		dst = append(dst, '\n')
+{{- else if eq $f0.MapVal "bytes"}}
+		dst = append(dst, base64.StdEncoding.EncodeToString(_v)...)
+		dst = append(dst, '\n')
+{{- else if eq $f0.MapVal "bool"}}
+		if _v {
+			dst = append(dst, "true\n"...)
+		} else {
+			dst = append(dst, "false\n"...)
+		}
+{{- else if eq $f0.MapVal "double"}}
+		dst = strconv.AppendFloat(dst, _v, 'f', -1, 64)
+		dst = append(dst, '\n')
+{{- else if eq $f0.MapVal "float"}}
+		dst = strconv.AppendFloat(dst, float64(_v), 'f', -1, 32)
+		dst = append(dst, '\n')
+{{- else if or (eq $f0.MapVal "uint64") (eq $f0.MapVal "fixed64")}}
+		dst = strconv.AppendUint(dst, uint64(_v), 10)
+		dst = append(dst, '\n')
+{{- else if or (eq $f0.MapVal "uint32") (eq $f0.MapVal "fixed32")}}
+		dst = strconv.AppendUint(dst, uint64(_v), 10)
+		dst = append(dst, '\n')
+{{- else if or (eq $f0.MapVal "int64") (eq $f0.MapVal "sint64") (eq $f0.MapVal "sfixed64")}}
+		dst = strconv.AppendInt(dst, int64(_v), 10)
+		dst = append(dst, '\n')
+{{- else}}
+		dst = strconv.AppendInt(dst, int64(_v), 10)
+		dst = append(dst, '\n')
+{{- end}}
+	}
+{{- else if .AsArray}}
+{{- $fa := index .Fields 0}}
+{{- if .Comment}}
+	if len(m.{{$fa.Name}}) > 0 {
+{{- range $i, $line := .Comment}}
+		dst = append(dst, sp...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $msgCmtNums $i $line}}...)
+{{- end}}
+	}
+{{- end}}
+	for _, _v := range m.{{$fa.Name}} {
+		dst = append(dst, sp...)
+		dst = append(dst, "- "...)
+{{- if $fa.IsMsg}}
+		dst = append(dst, '\n')
+		dst = _v.ToYAML(dst, indent+2)
+{{- else if eq $fa.Type "string"}}
+		dst = _strVal(dst, _v)
+		dst = append(dst, '\n')
+{{- else if eq $fa.Type "bytes"}}
+		dst = append(dst, base64.StdEncoding.EncodeToString(_v)...)
+		dst = append(dst, '\n')
+{{- else if eq $fa.Type "bool"}}
+		if _v {
+			dst = append(dst, "true\n"...)
+		} else {
+			dst = append(dst, "false\n"...)
+		}
+{{- else if eq $fa.Type "double"}}
+		dst = strconv.AppendFloat(dst, _v, 'f', -1, 64)
+		dst = append(dst, '\n')
+{{- else if eq $fa.Type "float"}}
+		dst = strconv.AppendFloat(dst, float64(_v), 'f', -1, 32)
+		dst = append(dst, '\n')
+{{- else if or (eq $fa.Type "uint64") (eq $fa.Type "fixed64")}}
+		dst = strconv.AppendUint(dst, uint64(_v), 10)
+		dst = append(dst, '\n')
+{{- else if or (eq $fa.Type "uint32") (eq $fa.Type "fixed32")}}
+		dst = strconv.AppendUint(dst, uint64(_v), 10)
+		dst = append(dst, '\n')
+{{- else if or (eq $fa.Type "int64") (eq $fa.Type "sint64") (eq $fa.Type "sfixed64")}}
+		dst = strconv.AppendInt(dst, int64(_v), 10)
+		dst = append(dst, '\n')
+{{- else}}
+		dst = strconv.AppendInt(dst, int64(_v), 10)
+		dst = append(dst, '\n')
+{{- end}}
+	}
+{{- else}}
+{{- range $i, $line := .Comment}}
+	dst = append(dst, sp...)
+	dst = append(dst, '#')
+	dst = append(dst, {{yamlCommentExpr $msgCmtNums $i $line}}...)
+{{- end}}
 {{range .Fields}}
 {{- if .IsRawBuf}}{{continue}}{{end}}
+{{- $cmt := .Comment}}
+{{- $cmtNums := .CommentLineNums}}
 {{- if .Map}}
 	if len(m.{{.Name}}) > 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}:\n"...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ":  "}}...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ":\n"}}...)
+{{- end}}
 		for _k, _v := range m.{{.Name}} {
 			dst = append(dst, sp2...)
 {{- if eq .MapKey "string"}}
@@ -122,8 +295,19 @@ func (m *{{$goName}}) ToYAML(dst []byte, indent int) []byte {
 	}
 {{- else if .Repeated}}
 	if len(m.{{.Name}}) > 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}:\n"...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ":  "}}...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ":\n"}}...)
+{{- end}}
 		for _, _v := range m.{{.Name}} {
 			dst = append(dst, sp2...)
 			dst = append(dst, "- "...)
@@ -168,8 +352,19 @@ func (m *{{$goName}}) ToYAML(dst []byte, indent int) []byte {
 	if m.{{.Name}} != nil {
 		_sub{{.Name}} := m.{{.Name}}.ToYAML(nil, indent+2)
 		if len(_sub{{.Name}}) > 0 {
+{{- range $i, $line := $cmt}}
 			dst = append(dst, sp...)
-			dst = append(dst, "{{yamlKey .}}:\n"...)
+			dst = append(dst, '#')
+			dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+			dst = append(dst, sp...)
+{{- if gt .InlineCommentLineNum 0}}
+			dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ":  "}}...)
+			dst = append(dst, '#')
+			dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
+			dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ":\n"}}...)
+{{- end}}
 			dst = append(dst, _sub{{.Name}}...)
 		}
 	}
@@ -177,83 +372,206 @@ func (m *{{$goName}}) ToYAML(dst []byte, indent int) []byte {
 	{
 		_sub{{.Name}} := m.{{.Name}}.ToYAML(nil, indent+2)
 		if len(_sub{{.Name}}) > 0 {
+{{- range $i, $line := $cmt}}
 			dst = append(dst, sp...)
-			dst = append(dst, "{{yamlKey .}}:\n"...)
+			dst = append(dst, '#')
+			dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+			dst = append(dst, sp...)
+{{- if gt .InlineCommentLineNum 0}}
+			dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ":  "}}...)
+			dst = append(dst, '#')
+			dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
+			dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ":\n"}}...)
+{{- end}}
 			dst = append(dst, _sub{{.Name}}...)
 		}
 	}
 {{- end}}
 {{- else if .IsDecimal}}
 	if !m.{{.Name}}.IsZero() {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		_df{{.Name}}, _ := m.{{.Name}}.Round({{decimalRound .}}).Float64()
 		dst = strconv.AppendFloat(dst, _df{{.Name}}, 'f', {{decimalRound .}}, 64)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- else if eq .Type "bool"}}
 	if m.{{.Name}} {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: true\n"...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": true  "}}...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": true\n"}}...)
+{{- end}}
 	}
 {{- else if eq .Type "string"}}
 	if m.{{.Name}} != "" {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		dst = _strVal(dst, m.{{.Name}})
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- else if eq .Type "bytes"}}
 	if len(m.{{.Name}}) > 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		dst = append(dst, base64.StdEncoding.EncodeToString(m.{{.Name}})...)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- else if eq .Type "double"}}
 	if m.{{.Name}} != 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		dst = strconv.AppendFloat(dst, m.{{.Name}}, 'f', -1, 64)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- else if eq .Type "float"}}
 	if m.{{.Name}} != 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		dst = strconv.AppendFloat(dst, float64(m.{{.Name}}), 'f', -1, 32)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- else if or (eq .Type "uint64") (eq .Type "fixed64")}}
 	if m.{{.Name}} != 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		dst = strconv.AppendUint(dst, m.{{.Name}}, 10)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- else if or (eq .Type "uint32") (eq .Type "fixed32")}}
 	if m.{{.Name}} != 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		dst = strconv.AppendUint(dst, uint64(m.{{.Name}}), 10)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- else if or (eq .Type "int64") (eq .Type "sint64") (eq .Type "sfixed64")}}
 	if m.{{.Name}} != 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		dst = strconv.AppendInt(dst, m.{{.Name}}, 10)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- else}}
 	if m.{{.Name}} != 0 {
+{{- range $i, $line := $cmt}}
 		dst = append(dst, sp...)
-		dst = append(dst, "{{yamlKey .}}: "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlCommentExpr $cmtNums $i $line}}...)
+{{- end}}
+		dst = append(dst, sp...)
+		dst = append(dst, {{yamlKeyAppendExpr $hasYamlNames $goName . ": "}}...)
 		dst = strconv.AppendInt(dst, int64(m.{{.Name}}), 10)
+{{- if gt .InlineCommentLineNum 0}}
+		dst = append(dst, "  "...)
+		dst = append(dst, '#')
+		dst = append(dst, {{yamlInlineCommentExpr .}}...)
+{{- else}}
 		dst = append(dst, '\n')
+{{- end}}
 	}
 {{- end}}
-{{end}}	return dst
+{{end}}
+{{- end}}
+	return dst
 }
 
 // ============================================================================
@@ -318,6 +636,120 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 		return _sub
 	}
 	_ = _collectBlock
+{{- if .AsArray}}
+{{- $fa := index .Fields 0}}
+{{- if $fa.IsMsg}}
+	{
+		_list := make([]{{readonlyTypeName $fa.Type}}, 0)
+		for _j := 0; _j < len(_lines); _j++ {
+			_sl := bytes.TrimRight(_lines[_j], "\r\n")
+			_st := bytes.TrimSpace(_sl)
+			if len(_st) == 0 || !bytes.HasPrefix(_st, []byte("-")) {
+				continue
+			}
+			var _itemBytes []byte
+			_j2 := _j + 1
+			_itemBase := -1
+			for _j2 < len(_lines) {
+				_ssl := bytes.TrimRight(_lines[_j2], "\r\n")
+				if len(bytes.TrimSpace(_ssl)) == 0 {
+					_itemBytes = append(_itemBytes, _lines[_j2]...)
+					_j2++
+					continue
+				}
+				_sst := bytes.TrimLeft(_ssl, " ")
+				_ssi := len(_ssl) - len(_sst)
+				if _itemBase < 0 && _ssi > _baseIndent+2 {
+					_itemBase = _ssi
+				}
+				if _itemBase < 0 || _ssi >= _itemBase {
+					_itemBytes = append(_itemBytes, _lines[_j2]...)
+					_j2++
+				} else {
+					break
+				}
+			}
+			_j = _j2 - 1
+			var _elem {{readonlyTypeName $fa.Type}}
+			if _e := _elem.FromYAML(_itemBytes); _e != nil {
+				return fmt.Errorf("item: %w", _e)
+			}
+			_list = append(_list, _elem)
+		}
+		r.{{$fa.Name}} = _list
+	}
+{{- else}}
+	{
+		_list := make({{$fa.ReaderType}}, 0)
+		for _, _sl := range _lines {
+			_ss := bytes.TrimRight(_sl, "\r\n")
+			_st := bytes.TrimSpace(_ss)
+			if len(_st) == 0 || !bytes.HasPrefix(_st, []byte("- ")) {
+				continue
+			}
+			_item := bytes.TrimSpace(_st[2:])
+{{- if eq $fa.Type "string"}}
+			_list = append(_list, _unquoteStr(_item))
+{{- else if eq $fa.Type "bytes"}}
+			_b, _be := base64.StdEncoding.DecodeString(string(_item))
+			if _be != nil {
+				return fmt.Errorf("item: %w", _be)
+			}
+			_list = append(_list, _b)
+{{- else if eq $fa.Type "bool"}}
+			_list = append(_list, string(_item) == "true" || string(_item) == "1")
+{{- else if eq $fa.Type "double"}}
+			_v, _ve := strconv.ParseFloat(string(_item), 64)
+			if _ve != nil {
+				return fmt.Errorf("item: %w", _ve)
+			}
+			_list = append(_list, _v)
+{{- else if eq $fa.Type "float"}}
+			_v, _ve := strconv.ParseFloat(string(_item), 32)
+			if _ve != nil {
+				return fmt.Errorf("item: %w", _ve)
+			}
+			_list = append(_list, float32(_v))
+{{- else if or (eq $fa.Type "uint64") (eq $fa.Type "fixed64")}}
+			_v, _ve := strconv.ParseUint(string(_item), 10, 64)
+			if _ve != nil {
+				return fmt.Errorf("item: %w", _ve)
+			}
+			_list = append(_list, {{elemType $fa.ReaderType}}(_v))
+{{- else if or (eq $fa.Type "uint32") (eq $fa.Type "fixed32")}}
+			_v, _ve := strconv.ParseUint(string(_item), 10, 32)
+			if _ve != nil {
+				return fmt.Errorf("item: %w", _ve)
+			}
+			_list = append(_list, {{elemType $fa.ReaderType}}(_v))
+{{- else if or (eq $fa.Type "int64") (eq $fa.Type "sint64") (eq $fa.Type "sfixed64")}}
+			_v, _ve := strconv.ParseInt(string(_item), 10, 64)
+			if _ve != nil {
+				return fmt.Errorf("item: %w", _ve)
+			}
+			_list = append(_list, {{elemType $fa.ReaderType}}(_v))
+{{- else}}
+			_v, _ve := strconv.ParseInt(string(_item), 10, 32)
+			if _ve != nil {
+				return fmt.Errorf("item: %w", _ve)
+			}
+			_list = append(_list, {{elemType $fa.ReaderType}}(_v))
+{{- end}}
+		}
+		r.{{$fa.Name}} = _list
+	}
+{{- end}}
+{{- else}}
+{{- if .AsMap}}
+{{- $f0 := index .Fields 0}}
+	if r.{{$f0.Name}} == nil {
+{{- if $f0.MapValIsMsg}}
+		r.{{$f0.Name}} = make(map[{{mapKeyGoType $f0.MapKey}}]*{{readonlyTypeName $f0.MapVal}})
+{{- else}}
+		r.{{$f0.Name}} = make({{$f0.ReaderType}})
+{{- end}}
+	}
+{{- end}}
 
 	for _i := 0; _i < len(_lines); _i++ {
 		_line := bytes.TrimRight(_lines[_i], "\r\n")
@@ -329,17 +761,123 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 		if _curIndent != _baseIndent {
 			continue
 		}
+		if len(_trimmed) > 0 && _trimmed[0] == '#' {
+			continue
+		}
 		_colonPos := bytes.IndexByte(_trimmed, ':')
 		if _colonPos < 0 {
 			continue
 		}
 		_key := _trimmed[:_colonPos]
 		_valBytes := bytes.TrimSpace(_trimmed[_colonPos+1:])
+		_ = _valBytes
 
+{{- if .AsMap}}
+{{- $f0 := index .Fields 0}}
+{{- if eq $f0.MapKey "string"}}
+		_mk := _unquoteStr(_key)
+{{- else if eq $f0.MapKey "bool"}}
+		_mk := string(_key) == "true" || string(_key) == "1"
+{{- else if or (eq $f0.MapKey "uint64") (eq $f0.MapKey "fixed64")}}
+		_mkv, _mke := strconv.ParseUint(string(_key), 10, 64)
+		if _mke != nil {
+			return fmt.Errorf("map key: %w", _mke)
+		}
+		_mk := {{mapKeyGoType $f0.MapKey}}(_mkv)
+{{- else if or (eq $f0.MapKey "uint32") (eq $f0.MapKey "fixed32")}}
+		_mkv, _mke := strconv.ParseUint(string(_key), 10, 32)
+		if _mke != nil {
+			return fmt.Errorf("map key: %w", _mke)
+		}
+		_mk := {{mapKeyGoType $f0.MapKey}}(_mkv)
+{{- else if or (eq $f0.MapKey "int64") (eq $f0.MapKey "sint64") (eq $f0.MapKey "sfixed64")}}
+		_mkv, _mke := strconv.ParseInt(string(_key), 10, 64)
+		if _mke != nil {
+			return fmt.Errorf("map key: %w", _mke)
+		}
+		_mk := {{mapKeyGoType $f0.MapKey}}(_mkv)
+{{- else}}
+		_mkv, _mke := strconv.ParseInt(string(_key), 10, 32)
+		if _mke != nil {
+			return fmt.Errorf("map key: %w", _mke)
+		}
+		_mk := {{mapKeyGoType $f0.MapKey}}(_mkv)
+{{- end}}
+{{- if $f0.MapValIsMsg}}
+		{
+			_sub := _collectBlock(&_i)
+			_mv := new({{readonlyTypeName $f0.MapVal}})
+			if _ve := _mv.FromYAML(_sub); _ve != nil {
+				return fmt.Errorf("entry: %w", _ve)
+			}
+			r.{{$f0.Name}}[_mk] = _mv
+		}
+{{- else if eq $f0.MapVal "string"}}
+		r.{{$f0.Name}}[_mk] = _unquoteStr(_valBytes)
+{{- else if eq $f0.MapVal "bytes"}}
+		{
+			_vb, _vbe := base64.StdEncoding.DecodeString(string(_valBytes))
+			if _vbe != nil {
+				return fmt.Errorf("value: %w", _vbe)
+			}
+			r.{{$f0.Name}}[_mk] = _vb
+		}
+{{- else if eq $f0.MapVal "bool"}}
+		r.{{$f0.Name}}[_mk] = string(_valBytes) == "true" || string(_valBytes) == "1"
+{{- else if eq $f0.MapVal "double"}}
+		{
+			_vf, _vfe := strconv.ParseFloat(string(_valBytes), 64)
+			if _vfe != nil {
+				return fmt.Errorf("value: %w", _vfe)
+			}
+			r.{{$f0.Name}}[_mk] = _vf
+		}
+{{- else if eq $f0.MapVal "float"}}
+		{
+			_vf, _vfe := strconv.ParseFloat(string(_valBytes), 32)
+			if _vfe != nil {
+				return fmt.Errorf("value: %w", _vfe)
+			}
+			r.{{$f0.Name}}[_mk] = float32(_vf)
+		}
+{{- else if or (eq $f0.MapVal "uint64") (eq $f0.MapVal "fixed64")}}
+		{
+			_vu, _vue := strconv.ParseUint(string(_valBytes), 10, 64)
+			if _vue != nil {
+				return fmt.Errorf("value: %w", _vue)
+			}
+			r.{{$f0.Name}}[_mk] = {{mapValGoType $f0.MapVal}}(_vu)
+		}
+{{- else if or (eq $f0.MapVal "uint32") (eq $f0.MapVal "fixed32")}}
+		{
+			_vu, _vue := strconv.ParseUint(string(_valBytes), 10, 32)
+			if _vue != nil {
+				return fmt.Errorf("value: %w", _vue)
+			}
+			r.{{$f0.Name}}[_mk] = {{mapValGoType $f0.MapVal}}(_vu)
+		}
+{{- else if or (eq $f0.MapVal "int64") (eq $f0.MapVal "sint64") (eq $f0.MapVal "sfixed64")}}
+		{
+			_vi, _vie := strconv.ParseInt(string(_valBytes), 10, 64)
+			if _vie != nil {
+				return fmt.Errorf("value: %w", _vie)
+			}
+			r.{{$f0.Name}}[_mk] = {{mapValGoType $f0.MapVal}}(_vi)
+		}
+{{- else}}
+		{
+			_vi, _vie := strconv.ParseInt(string(_valBytes), 10, 32)
+			if _vie != nil {
+				return fmt.Errorf("value: %w", _vie)
+			}
+			r.{{$f0.Name}}[_mk] = {{mapValGoType $f0.MapVal}}(_vi)
+		}
+{{- end}}
+{{- else}}
 		switch string(_key) {
 {{range .Fields}}
 {{- if .IsRawBuf}}{{continue}}{{end}}
-		case "{{yamlKey .}}":
+		case {{yamlKeyExpr $hasYamlNames $goName .}}:
 {{- if .Map}}
 			{
 				_sub := _collectBlock(&_i)
@@ -721,7 +1259,9 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 			}
 {{- end}}
 {{end}}		}
+{{- end}}
 	}
+{{- end}}
 	return nil
 }
 {{end}}{{end}}

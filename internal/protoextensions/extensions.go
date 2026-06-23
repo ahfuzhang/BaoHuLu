@@ -157,6 +157,89 @@ func ParseAndStripMessage(lines []string) (MessageExtensions, []string) {
 	return ext, clean
 }
 
+// ParseAndStripFieldNums is like ParseAndStripField but also accepts and returns
+// per-line proto file line numbers (1-based). lineNums[i] is the proto file line
+// number for lines[i]; pass nil if line numbers are not available.
+func ParseAndStripFieldNums(lines []string, lineNums []int) (FieldExtensions, []string, []int) {
+	var ext FieldExtensions
+	var clean []string
+	var cleanNums []int
+	for i, line := range lines {
+		lineNum := 0
+		if i < len(lineNums) {
+			lineNum = lineNums[i]
+		}
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "@") {
+			clean = append(clean, line)
+			cleanNums = append(cleanNums, lineNum)
+			continue
+		}
+		key, value := splitKeyValue(trimmed[1:])
+		switch key {
+		case "deprecated":
+			ext.Deprecated = true
+		case "varname":
+			ext.VarName = value
+		case "jsonname":
+			ext.JsonName = value
+		case "yamlname":
+			ext.YamlName = value
+		case "tag":
+			tagName, tagVal, ok := strings.Cut(value, ":")
+			if ok {
+				ext.Tags = append(ext.Tags, TagExt{
+					Name:  strings.TrimSpace(tagName),
+					Value: strings.TrimSpace(tagVal),
+				})
+			}
+		case "decimal":
+			_, roundStr, ok := strings.Cut(value, "round:")
+			if ok {
+				if n, err := strconv.Atoi(strings.TrimSpace(roundStr)); err == nil && n > 0 {
+					ext.DecimalRound = n
+				}
+			}
+		}
+	}
+	return ext, clean, cleanNums
+}
+
+// ParseAndStripMessageNums is like ParseAndStripMessage but also accepts and
+// returns per-line proto file line numbers. lineNums[i] is the proto file line
+// number for lines[i]; pass nil if line numbers are not available.
+func ParseAndStripMessageNums(lines []string, lineNums []int) (MessageExtensions, []string, []int) {
+	var ext MessageExtensions
+	var clean []string
+	var cleanNums []int
+	for i, line := range lines {
+		lineNum := 0
+		if i < len(lineNums) {
+			lineNum = lineNums[i]
+		}
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "@") {
+			clean = append(clean, line)
+			cleanNums = append(cleanNums, lineNum)
+			continue
+		}
+		key, _ := splitKeyValue(trimmed[1:])
+		switch key {
+		case "deprecated":
+			ext.Deprecated = true
+		case "asmap":
+			ext.AsMap = true
+		case "asarray":
+			ext.AsArray = true
+		case "urlvalues":
+			ext.UrlValues = true
+		case "yaml":
+			ext.Yaml = true
+		}
+	}
+	return ext, clean, cleanNums
+}
+
 // splitKeyValue splits a raw "Key=Value" string (the part after '@') into a
 // lowercase key and a trimmed value. If there is no '=', value is empty.
 func splitKeyValue(raw string) (key, value string) {

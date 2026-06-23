@@ -175,9 +175,13 @@ type CsOneTypeData struct {
 // CsFieldTpl carries all info needed by the C# template for one field.
 type CsFieldTpl struct {
 	// identity
-	Name     string // PascalCase name
-	JsonName string // original proto name (JSON key)
-	Number   int    // proto field number
+	Name                 string   // PascalCase name
+	JsonName             string   // original proto name (JSON key)
+	Number               int      // proto field number
+	Comment              []string // proto comment lines (without leading //), extension lines stripped
+	CommentLineNums      []int    // proto file line numbers for each Comment entry (1-based)
+	InlineComment        string   // trailing // comment on the same line as the field (text only, without //)
+	InlineCommentLineNum int      // proto file line number of the field itself (1-based), 0 if absent
 	// type classification
 	IsMap        bool
 	IsRepeated   bool
@@ -224,9 +228,11 @@ type CsFieldTpl struct {
 }
 
 type CsMsgTpl struct {
-	Name         string // proto name
-	GoName       string // stripped name (used as C# type name)
-	Fields       []CsFieldTpl
+	Name            string   // proto name
+	GoName          string   // stripped name (used as C# type name)
+	Comment         []string // proto message comment lines (without leading //), extension lines stripped
+	CommentLineNums []int    // proto file line numbers for each Comment entry (1-based)
+	Fields          []CsFieldTpl
 	NeedsWrapper bool // true when this message type needs Wrapper classes generated
 	AsMap        bool // true when @AsMap annotation present: single map field, JSON is flat map
 	UrlValues    bool // true when @UrlValues annotation present: generate ToURLValues/FromURLValues
@@ -246,10 +252,14 @@ func NewGenerator(pg *protofile.Generator) *Generator {
 func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 	isDecimal := fd.DecimalRound > 0
 	f := CsFieldTpl{
-		Name:               fd.Name,
-		JsonName:           fd.JsonName,
-		Number:             fd.Number,
-		IsMap:              fd.Map,
+		Name:                 fd.Name,
+		JsonName:             fd.JsonName,
+		Number:               fd.Number,
+		Comment:              fd.Comment,
+		CommentLineNums:      fd.CommentLineNums,
+		InlineComment:        fd.InlineComment,
+		InlineCommentLineNum: fd.InlineCommentLineNum,
+		IsMap:                fd.Map,
 		IsRepeated:         fd.Repeated,
 		IsMsg:              fd.IsMsg,
 		IsEnum:             fd.IsEnum,
@@ -351,7 +361,7 @@ func (g *Generator) buildMsgTpls() ([]CsMsgTpl, map[string]protofile.MsgLayoutIn
 		}
 		sortedFields := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedFields, writerSizeOf, writerPtrdataOf)
-		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), AsMap: md.AsMap, UrlValues: md.UrlValues, Yaml: md.Yaml}
+		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, CommentLineNums: md.CommentLineNums, AsMap: md.AsMap, UrlValues: md.UrlValues, Yaml: md.Yaml}
 		for _, fd := range sortedFields {
 			mt.Fields = append(mt.Fields, g.buildCSField(fd))
 		}
@@ -955,6 +965,43 @@ func buildCSYamlTmpl() (*template.Template, error) {
 				return f.YamlName
 			}
 			return f.JsonName
+		},
+		// csYamlCommentExpr returns a C# expression for the block comment text (without '#').
+		// When lineNums[idx] > 0 it returns a constant reference (_GoName_YamlComments.Line{N}).
+		// The caller writes "#" before this expression. Falls back to an inline string literal.
+		"csYamlCommentExpr": func(goName string, lineNums []int, idx int, text string) string {
+			if idx < len(lineNums) && lineNums[idx] > 0 {
+				return fmt.Sprintf("_%s_YamlComments.Line%d", goName, lineNums[idx])
+			}
+			return fmt.Sprintf("%q", text+"\n")
+		},
+		// csYamlInlineCommentExpr returns a C# expression for the field's trailing inline comment
+		// (without '#'). When InlineCommentLineNum > 0 it returns a constant reference.
+		"csYamlInlineCommentExpr": func(goName string, f CsFieldTpl) string {
+			if f.InlineCommentLineNum > 0 {
+				return fmt.Sprintf("_%s_YamlComments.Line%d", goName, f.InlineCommentLineNum)
+			}
+			return fmt.Sprintf("%q", f.InlineComment+"\n")
+		},
+		// hasAnyCsYamlComments reports whether the message or any of its fields have
+		// comment lines or inline trailing comments with known proto file line numbers.
+		"hasAnyCsYamlComments": func(msg CsMsgTpl) bool {
+			for _, n := range msg.CommentLineNums {
+				if n > 0 {
+					return true
+				}
+			}
+			for _, f := range msg.Fields {
+				for _, n := range f.CommentLineNums {
+					if n > 0 {
+						return true
+					}
+				}
+				if f.InlineCommentLineNum > 0 {
+					return true
+				}
+			}
+			return false
 		},
 	}
 	tmpl, err := template.New("cs_yaml").Funcs(fnMap).Parse(csYamlCodeTemplate)

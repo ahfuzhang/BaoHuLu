@@ -133,15 +133,18 @@ service Demo {
 }
 
 // @AsMap
+// 不会出现 labels 这个名字
 message MapType {
   map<string, string> labels = 1;
 }
 
 // @AsArray
+// 不会出现 items 这个名字
 message ArrayType {
   repeated string items = 1;
 }
 
+// @yaml
 message Series {
   repeated MapType data = 1;
   map<string, ArrayType> one_to_many = 2;

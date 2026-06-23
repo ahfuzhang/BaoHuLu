@@ -46,7 +46,7 @@
   - protobuf 无法支持这样的类型： `map<string, repeated string> key_to_many_value = 3;`   ✅
     - 支持扩展：`// @AsArray`
   - json decode: 字符串会使用 fastjson 中的 cache: 这里必须拷贝出来。否则 Parser Reset() 后会出现问题。  
-  - 生命周期导致的严重 bug:
+  - 生命周期导致的严重 bug:   ✅  => 通过引入 strArena 来解决，所有的字符串拷贝出来，放在一个 arena 之中
     - json decode 时:
       - json 未转义的字符串：可能因为 request buffer Reset() 而导致字符串被覆盖
       - json 已经转义的字符串：因为 parser Reset() 而导致字符串被覆盖
@@ -150,9 +150,11 @@
   - 考虑支持 yaml 格式
     - FromYAML() 时，对 map 使用 perfect hash，让读具备极高的性能
   - yaml 格式  ✅
-    - 把 proto 文件中的注释，放到 yaml 中，增加 yaml 的可读性
-    - csharp 代码增加 yaml 格式
-    - golang: @yamlName 要能够影响生成的 yaml
+    - 把 proto 文件中的注释，放到 yaml 中，增加 yaml 的可读性  ✅
+    - csharp 代码增加 yaml 格式  ✅
+    - golang: @yamlName 要能够影响生成的 yaml  ✅
+    - 支持 @AsMap  ✅
+    - 支持 @AsArray  ✅
   - url encode 格式      ✅
 * 宣传
   - 融入 buf 的生态中，否则很难做到高的使用人数

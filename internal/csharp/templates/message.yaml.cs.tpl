@@ -16,6 +16,40 @@ namespace {{.Namespace}};
 {{- define "CsYamlWriterFile"}}{{template "CsYamlFileHeader" .}}
 {{- with .Msg}}
 {{- $goName := .GoName}}
+{{- $msgCmtNums := .CommentLineNums}}
+{{$hasYamlNames := false}}
+{{- range .Fields}}{{if .YamlName}}{{$hasYamlNames = true}}{{end}}{{end -}}
+{{- if $hasYamlNames}}
+// yaml key constants for {{$goName}}.
+internal static class _{{$goName}}_YamlKeys
+{
+{{- range .Fields}}
+    internal const string {{.Name}} = "{{yamlKey .}}";
+{{- end}}
+}
+{{end}}
+{{- if hasAnyCsYamlComments .}}
+// yaml comment constants for {{$goName}}.
+internal static class _{{$goName}}_YamlComments
+{
+{{- range $i, $line := .Comment}}
+{{- if gt (index $msgCmtNums $i) 0}}
+    internal static ReadOnlySpan<byte> Line{{index $msgCmtNums $i}} => {{printf "%q" (printf "%s\n" $line)}}u8;
+{{- end}}
+{{- end}}
+{{- range .Fields}}
+{{- $f := .}}
+{{- range $i, $line := .Comment}}
+{{- if gt (index $f.CommentLineNums $i) 0}}
+    internal static ReadOnlySpan<byte> Line{{index $f.CommentLineNums $i}} => {{printf "%q" (printf "%s\n" $line)}}u8;
+{{- end}}
+{{- end}}
+{{- if gt .InlineCommentLineNum 0}}
+    internal static ReadOnlySpan<byte> Line{{.InlineCommentLineNum}} => {{printf "%q" (printf "%s\n" .InlineComment)}}u8;
+{{- end}}
+{{- end}}
+}
+{{- end}}
 // ============================================================================
 // {{$goName}} — ToYAML serialization
 // ============================================================================
@@ -36,11 +70,23 @@ public partial struct {{$goName}}
                         .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t") + "\"";
             return s;
         }
+{{- range $i, $line := .Comment}}
+        _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $msgCmtNums $i $line}});
+{{- end}}
 {{range .Fields}}
+{{- $cmt := .Comment}}
+{{- $cmtNums := .CommentLineNums}}
 {{- if .IsMap}}
         if (this.{{.Name}} != null && this.{{.Name}}.Count > 0)
         {
-            _dst.Append(_sp); _dst.Append("{{yamlKey .}}:\n");
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":  "{{else}}"{{yamlKey .}}:  "{{end}}); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":\n"{{else}}"{{yamlKey .}}:\n"{{end}});
+{{- end}}
             foreach (var _kv{{.Name}} in this.{{.Name}})
             {
                 _dst.Append(_sp2);
@@ -79,7 +125,14 @@ public partial struct {{$goName}}
 {{- else if .IsRepeated}}
         if (this.{{.Name}} != null && this.{{.Name}}.Count > 0)
         {
-            _dst.Append(_sp); _dst.Append("{{yamlKey .}}:\n");
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":  "{{else}}"{{yamlKey .}}:  "{{end}}); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":\n"{{else}}"{{yamlKey .}}:\n"{{end}});
+{{- end}}
             foreach (var _v{{.Name}} in this.{{.Name}})
             {
                 _dst.Append(_sp2); _dst.Append("- ");
@@ -105,13 +158,27 @@ public partial struct {{$goName}}
 {{- if .UseDirectWrapper}}
         if (this.{{.Name}} != null)
         {
-            _dst.Append(_sp); _dst.Append("{{yamlKey .}}:\n");
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":  "{{else}}"{{yamlKey .}}:  "{{end}}); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":\n"{{else}}"{{yamlKey .}}:\n"{{end}});
+{{- end}}
             this.{{.Name}}.Value.ToYAML(ref _dst, _indent + 2);
         }
 {{- else}}
         {
             int _mark{{.Name}} = _dst.Length;
-            _dst.Append(_sp); _dst.Append("{{yamlKey .}}:\n");
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":  "{{else}}"{{yamlKey .}}:  "{{end}}); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":\n"{{else}}"{{yamlKey .}}:\n"{{end}});
+{{- end}}
             int _hdr{{.Name}} = _dst.Length;
             this.{{.Name}}.ToYAML(ref _dst, _indent + 2);
             if (_dst.Length == _hdr{{.Name}}) _dst.Length = _mark{{.Name}};
@@ -120,31 +187,108 @@ public partial struct {{$goName}}
 {{- else if .IsDecimal}}
         if (this.{{.Name}} != 0m)
         {
-            _dst.Append(_sp); _dst.Append("{{yamlKey .}}: ");
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ": "{{else}}"{{yamlKey .}}: "{{end}});
             _dst.Append(Math.Round(this.{{.Name}}, {{.DecimalRound}}, MidpointRounding.AwayFromZero).ToString("F{{.DecimalRound}}", CultureInfo.InvariantCulture));
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append("  "); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
             _dst.Append("\n");
+{{- end}}
         }
 {{- else if .IsBool}}
         if (this.{{.Name}})
-        { _dst.Append(_sp); _dst.Append("{{yamlKey .}}: true\n"); }
+        {
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ": true"{{else}}"{{yamlKey .}}: true"{{end}});
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append("  "); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append("\n");
+{{- end}}
+        }
 {{- else if .IsString}}
         if (!string.IsNullOrEmpty(this.{{.Name}}))
-        { _dst.Append(_sp); _dst.Append("{{yamlKey .}}: "); _dst.Append(_strVal(this.{{.Name}})); _dst.Append("\n"); }
+        {
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ": "{{else}}"{{yamlKey .}}: "{{end}}); _dst.Append(_strVal(this.{{.Name}}));
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append("  "); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append("\n");
+{{- end}}
+        }
 {{- else if .IsBytes}}
         if (this.{{.Name}} != null && this.{{.Name}}.Length > 0)
-        { _dst.Append(_sp); _dst.Append("{{yamlKey .}}: "); _dst.Append(Convert.ToBase64String(this.{{.Name}})); _dst.Append("\n"); }
+        {
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ": "{{else}}"{{yamlKey .}}: "{{end}}); _dst.Append(Convert.ToBase64String(this.{{.Name}}));
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append("  "); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append("\n");
+{{- end}}
+        }
 {{- else if eq .Type "double"}}
         if (this.{{.Name}} != 0.0)
-        { _dst.Append(_sp); _dst.Append("{{yamlKey .}}: "); _dst.Append(this.{{.Name}}.ToString("R", CultureInfo.InvariantCulture)); _dst.Append("\n"); }
+        {
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ": "{{else}}"{{yamlKey .}}: "{{end}}); _dst.Append(this.{{.Name}}.ToString("R", CultureInfo.InvariantCulture));
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append("  "); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append("\n");
+{{- end}}
+        }
 {{- else if eq .Type "float"}}
         if (this.{{.Name}} != 0.0f)
-        { _dst.Append(_sp); _dst.Append("{{yamlKey .}}: "); _dst.Append(this.{{.Name}}.ToString("R", CultureInfo.InvariantCulture)); _dst.Append("\n"); }
+        {
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ": "{{else}}"{{yamlKey .}}: "{{end}}); _dst.Append(this.{{.Name}}.ToString("R", CultureInfo.InvariantCulture));
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append("  "); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append("\n");
+{{- end}}
+        }
 {{- else if .IsEnum}}
         if ((int)this.{{.Name}} != 0)
-        { _dst.Append(_sp); _dst.Append("{{yamlKey .}}: "); _dst.Append(((int)this.{{.Name}}).ToString()); _dst.Append("\n"); }
+        {
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ": "{{else}}"{{yamlKey .}}: "{{end}}); _dst.Append(((int)this.{{.Name}}).ToString());
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append("  "); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append("\n");
+{{- end}}
+        }
 {{- else}}
         if (this.{{.Name}} != {{csDefault .WriterType}})
-        { _dst.Append(_sp); _dst.Append("{{yamlKey .}}: "); _dst.Append(this.{{.Name}}.ToString()); _dst.Append("\n"); }
+        {
+{{- range $i, $line := $cmt}}
+            _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
+{{- end}}
+            _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ": "{{else}}"{{yamlKey .}}: "{{end}}); _dst.Append(this.{{.Name}}.ToString());
+{{- if gt .InlineCommentLineNum 0}}
+            _dst.Append("  "); _dst.Append("#"); _dst.Append({{csYamlInlineCommentExpr $goName .}});
+{{- else}}
+            _dst.Append("\n");
+{{- end}}
+        }
 {{- end}}
 {{end}}    }
 }
@@ -152,6 +296,8 @@ public partial struct {{$goName}}
 {{- define "CsYamlReadonlyFile"}}{{template "CsYamlFileHeader" .}}
 {{- with .Msg}}
 {{- $goName := .GoName}}
+{{$hasYamlNames := false}}
+{{- range .Fields}}{{if .YamlName}}{{$hasYamlNames = true}}{{end}}{{end -}}
 // ============================================================================
 // Readonly{{$goName}} — FromYAML deserialization
 // ============================================================================
@@ -366,13 +512,14 @@ public partial struct Readonly{{$goName}}
             ReadOnlySpan<byte> _trimmed = _trimLeftSpaces(_line);
             int _curIndent = _line.Length - _trimmed.Length;
             if (_curIndent != _baseIndent) continue;
+            if (_trimmed.Length > 0 && _trimmed[0] == (byte)'#') continue;
             int _colonPos = _trimmed.IndexOf((byte)':');
             if (_colonPos < 0) continue;
             ReadOnlySpan<byte> _key = _trimmed.Slice(0, _colonPos);
             ReadOnlySpan<byte> _valBytes = _trimSpace(_trimmed.Slice(_colonPos + 1));
 
 {{range $i, $f := .Fields}}
-            {{if $i}}else {{end}}if (_key.SequenceEqual("{{yamlKey .}}"u8))
+            {{if $i}}else {{end}}if (_key.SequenceEqual({{if $hasYamlNames}}Encoding.UTF8.GetBytes(_{{$goName}}_YamlKeys.{{.Name}}){{else}}"{{yamlKey .}}"u8{{end}}))
 {{- if .IsMap}}
             {
                 ReadOnlySpan<byte> _sub = _collectIndentedBlock(_src, _lineStarts, _lineEnds, _baseIndent, ref _i);

@@ -35,7 +35,8 @@ type FieldDef struct {
 	MapVal   string // proto val type
 	IsMsg    bool   // is embedded message
 	IsEnum   bool
-	Comment  []string // proto comment lines (without leading //), extension lines stripped
+	Comment         []string // proto comment lines (without leading //), extension lines stripped
+	CommentLineNums []int    // proto file line numbers for each Comment entry (1-based)
 
 	// Extension annotations (@keyword=value in proto comments).
 	YamlName  string                   // @yamlName override; non-empty adds yaml struct tag + constant
@@ -49,16 +50,22 @@ type FieldDef struct {
 	// DecimalRound, when > 0, marks this field as a financial decimal type with the
 	// specified number of decimal places (@decimal=round:N). Only valid on double fields.
 	DecimalRound int
+
+	// InlineComment is the trailing // comment on the same line as the field (text only, without //).
+	// InlineCommentLineNum is the proto file line number of the field (1-based), 0 if absent.
+	InlineComment        string
+	InlineCommentLineNum int
 }
 
 type MessageDef struct {
-	Name         string
-	Fields       []FieldDef
-	Comment      []string // proto comment lines (without leading //), extension lines stripped
-	AsMap        bool     // @AsMap annotation: message must contain exactly one map field
-	AsArray      bool     // @AsArray annotation: message must contain exactly one repeated field
-	UrlValues    bool     // @UrlValues annotation: generate ToURLValues / FromURLValues methods
-	Yaml         bool     // @yaml annotation: generate ToYAML / FromYAML methods
+	Name            string
+	Fields          []FieldDef
+	Comment         []string // proto comment lines (without leading //), extension lines stripped
+	CommentLineNums []int    // proto file line numbers for each Comment entry (1-based)
+	AsMap           bool     // @AsMap annotation: message must contain exactly one map field
+	AsArray         bool     // @AsArray annotation: message must contain exactly one repeated field
+	UrlValues       bool     // @UrlValues annotation: generate ToURLValues / FromURLValues methods
+	Yaml            bool     // @yaml annotation: generate ToYAML / FromYAML methods
 }
 
 type MethodDef struct {
@@ -261,19 +268,32 @@ func ExtractCommentLines(c *proto.Comment) []string {
 	return c.Lines
 }
 
+// ExtractCommentWithNums returns comment lines and per-line proto file line
+// numbers (1-based). Lines[i] is at proto file line Position.Line+i.
+func ExtractCommentWithNums(c *proto.Comment) ([]string, []int) {
+	if c == nil {
+		return nil, nil
+	}
+	lineNums := make([]int, len(c.Lines))
+	for i := range c.Lines {
+		lineNums[i] = c.Position.Line + i
+	}
+	return c.Lines, lineNums
+}
+
 func (g *Generator) CollectMessage(m *proto.Message) {
-	rawMsgComments := ExtractCommentLines(m.Comment)
-	msgExt, cleanMsgComments := protoextensions.ParseAndStripMessage(rawMsgComments)
+	rawMsgComments, rawMsgLineNums := ExtractCommentWithNums(m.Comment)
+	msgExt, cleanMsgComments, cleanMsgLineNums := protoextensions.ParseAndStripMessageNums(rawMsgComments, rawMsgLineNums)
 	if msgExt.Deprecated {
 		return // skip deprecated messages entirely
 	}
 
-	md := &MessageDef{Name: m.Name, Comment: cleanMsgComments, AsMap: msgExt.AsMap, AsArray: msgExt.AsArray, UrlValues: msgExt.UrlValues, Yaml: msgExt.Yaml}
+	md := &MessageDef{Name: m.Name, Comment: cleanMsgComments, CommentLineNums: cleanMsgLineNums, AsMap: msgExt.AsMap, AsArray: msgExt.AsArray, UrlValues: msgExt.UrlValues, Yaml: msgExt.Yaml}
 	for _, el := range m.Elements {
 		switch v := el.(type) {
 		case *proto.NormalField:
-			rawComments := ExtractCommentLines(v.Comment)
-			fieldExt, cleanComments := protoextensions.ParseAndStripField(rawComments)
+			rawComments, rawLineNums := ExtractCommentWithNums(v.Comment)
+			fieldExt, cleanComments, cleanLineNums := protoextensions.ParseAndStripFieldNums(rawComments, rawLineNums)
 			if fieldExt.Deprecated {
 				continue // skip deprecated fields entirely
 			}
@@ -286,21 +306,26 @@ func (g *Generator) CollectMessage(m *proto.Message) {
 				jsonName = fieldExt.JsonName
 			}
 			fd := FieldDef{
-				Name:         name,
-				JsonName:     jsonName,
-				Number:       v.Sequence,
-				Type:         v.Type,
-				Repeated:     v.Repeated,
-				Comment:      cleanComments,
-				YamlName:     fieldExt.YamlName,
-				ExtraTags:    fieldExt.Tags,
-				DecimalRound: fieldExt.DecimalRound,
+				Name:            name,
+				JsonName:        jsonName,
+				Number:          v.Sequence,
+				Type:            v.Type,
+				Repeated:        v.Repeated,
+				Comment:         cleanComments,
+				CommentLineNums: cleanLineNums,
+				YamlName:        fieldExt.YamlName,
+				ExtraTags:       fieldExt.Tags,
+				DecimalRound:    fieldExt.DecimalRound,
+			}
+			if v.InlineComment != nil && len(v.InlineComment.Lines) > 0 {
+				fd.InlineComment = v.InlineComment.Lines[0]
+				fd.InlineCommentLineNum = v.InlineComment.Position.Line
 			}
 			fd.GoType, fd.IsMsg, fd.IsEnum = g.ProtoTypeToGo(v.Type, v.Repeated)
 			md.Fields = append(md.Fields, fd)
 		case *proto.MapField:
-			rawComments := ExtractCommentLines(v.Comment)
-			fieldExt, cleanComments := protoextensions.ParseAndStripField(rawComments)
+			rawComments, rawLineNums := ExtractCommentWithNums(v.Comment)
+			fieldExt, cleanComments, cleanLineNums := protoextensions.ParseAndStripFieldNums(rawComments, rawLineNums)
 			if fieldExt.Deprecated {
 				continue
 			}
@@ -315,17 +340,22 @@ func (g *Generator) CollectMessage(m *proto.Message) {
 			keyGo, _, _ := g.ProtoTypeToGo(v.KeyType, false)
 			valGo, _, _ := g.ProtoTypeToGo(v.Type, false)
 			fd := FieldDef{
-				Name:      name,
-				JsonName:  jsonName,
-				Number:    v.Sequence,
-				Type:      "map",
-				GoType:    fmt.Sprintf("map[%s]%s", keyGo, valGo),
-				Map:       true,
-				MapKey:    v.KeyType,
-				MapVal:    v.Type,
-				Comment:   cleanComments,
-				YamlName:  fieldExt.YamlName,
-				ExtraTags: fieldExt.Tags,
+				Name:            name,
+				JsonName:        jsonName,
+				Number:          v.Sequence,
+				Type:            "map",
+				GoType:          fmt.Sprintf("map[%s]%s", keyGo, valGo),
+				Map:             true,
+				MapKey:          v.KeyType,
+				MapVal:          v.Type,
+				Comment:         cleanComments,
+				CommentLineNums: cleanLineNums,
+				YamlName:        fieldExt.YamlName,
+				ExtraTags:       fieldExt.Tags,
+			}
+			if v.InlineComment != nil && len(v.InlineComment.Lines) > 0 {
+				fd.InlineComment = v.InlineComment.Lines[0]
+				fd.InlineCommentLineNum = v.InlineComment.Position.Line
 			}
 			md.Fields = append(md.Fields, fd)
 		}

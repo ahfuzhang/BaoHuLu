@@ -537,16 +537,17 @@ type FieldTpl struct {
 }
 
 type MsgTpl struct {
-	Name          string     // proto message name (used as map/lookup key)
-	GoName        string     // Go type name: same as proto message name
-	Comment       []string   // proto comment lines (without leading //)
-	Fields        []FieldTpl // writer fields, sorted for optimal layout
-	ReverseFields []FieldTpl // writer fields in reverse layout order (matches marshalToSizedBufferVT output)
-	ReaderFields  []FieldTpl // readonly fields = Fields + rawBufferLen, all sorted
-	AsMap         bool       // true when @AsMap annotation is present: single map field, JSON parsed as direct map
-	AsArray       bool       // true when @AsArray annotation is present: single repeated field, JSON parsed as direct array
-	UrlValues     bool       // true when @UrlValues annotation is present: generate ToURLValues/FromURLValues methods
-	Yaml          bool       // true when @yaml annotation is present: generate ToYAML/FromYAML methods
+	Name            string     // proto message name (used as map/lookup key)
+	GoName          string     // Go type name: same as proto message name
+	Comment         []string   // proto comment lines (without leading //)
+	CommentLineNums []int      // proto file line numbers for each Comment entry (1-based)
+	Fields          []FieldTpl // writer fields, sorted for optimal layout
+	ReverseFields   []FieldTpl // writer fields in reverse layout order (matches marshalToSizedBufferVT output)
+	ReaderFields    []FieldTpl // readonly fields = Fields + rawBufferLen, all sorted
+	AsMap           bool       // true when @AsMap annotation is present: single map field, JSON parsed as direct map
+	AsArray         bool       // true when @AsArray annotation is present: single repeated field, JSON parsed as direct array
+	UrlValues       bool       // true when @UrlValues annotation is present: generate ToURLValues/FromURLValues methods
+	Yaml            bool       // true when @yaml annotation is present: generate ToYAML/FromYAML methods
 }
 
 // GoOneTypeData is passed to per-message URL-values templates so they can
@@ -2181,6 +2182,12 @@ func (g *Generator) RenderGoURLValuesFiles(outDir, baseFileName string) error {
 
 // buildGoYamlTmpl compiles the YAML template with its FuncMap.
 func (g *Generator) buildGoYamlTmpl() (*template.Template, error) {
+	yamlKeyOf := func(f FieldTpl) string {
+		if f.YamlName != "" {
+			return f.YamlName
+		}
+		return f.JsonName
+	}
 	fnMap := template.FuncMap{
 		"mapKeyGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
 		"mapValGoType":     func(s string) string { gt, _, _ := g.ProtoTypeToGo(s, false); return gt },
@@ -2188,11 +2195,70 @@ func (g *Generator) buildGoYamlTmpl() (*template.Template, error) {
 		"elemType":         func(s string) string { return strings.TrimPrefix(s, "[]") },
 		"decimalRound":     func(f FieldTpl) int { return f.DecimalRound },
 		"hasDecimalFields": HasDecimalFields,
-		"yamlKey": func(f FieldTpl) string {
-			if f.YamlName != "" {
-				return f.YamlName
+		"yamlKey":          yamlKeyOf,
+		"hasYamlFields": func(fields []FieldTpl) bool {
+			for _, f := range fields {
+				if f.YamlName != "" {
+					return true
+				}
 			}
-			return f.JsonName
+			return false
+		},
+		// yamlKeyExpr returns the Go expression for the yaml key of f:
+		// a constant reference when the message has any @yamlName fields,
+		// or a quoted string literal otherwise.
+		"yamlKeyExpr": func(hasYamlNames bool, msgGoName string, f FieldTpl) string {
+			if hasYamlNames {
+				return fmt.Sprintf("_%s_%s_yamlKey", msgGoName, f.Name)
+			}
+			return fmt.Sprintf("%q", yamlKeyOf(f))
+		},
+		// yamlKeyAppendExpr returns the Go expression for appending the yaml key
+		// plus suffix to a byte slice: either constName+suffix or a merged literal.
+		"yamlKeyAppendExpr": func(hasYamlNames bool, msgGoName string, f FieldTpl, suffix string) string {
+			if hasYamlNames {
+				return fmt.Sprintf("_%s_%s_yamlKey+%q", msgGoName, f.Name, suffix)
+			}
+			return fmt.Sprintf("%q", yamlKeyOf(f)+suffix)
+		},
+		// yamlCommentExpr returns a Go expression for the comment text (without '#').
+		// When lineNums[idx] > 0 it returns a constant reference (_yamlCommentLine{N}).
+		// The caller is responsible for writing sp and '#' before this expression.
+		// Falls back to an inline quoted string literal when no line number is known.
+		"yamlCommentExpr": func(lineNums []int, idx int, text string) string {
+			if idx < len(lineNums) && lineNums[idx] > 0 {
+				return fmt.Sprintf("_yamlCommentLine%d", lineNums[idx])
+			}
+			return fmt.Sprintf("%q", text+"\n")
+		},
+		// yamlInlineCommentExpr returns a Go expression for the field's trailing inline
+		// comment text (without '#'). When InlineCommentLineNum > 0 it returns a constant
+		// reference (_yamlInlineCommentLine{N}). The caller writes '#' before this expression.
+		"yamlInlineCommentExpr": func(f FieldTpl) string {
+			if f.InlineCommentLineNum > 0 {
+				return fmt.Sprintf("_yamlInlineCommentLine%d", f.InlineCommentLineNum)
+			}
+			return fmt.Sprintf("%q", f.InlineComment+"\n")
+		},
+		// hasAnyYamlComments reports whether the message or any of its fields have
+		// non-extension comment lines or inline trailing comments with known proto file line numbers.
+		"hasAnyYamlComments": func(msg MsgTpl) bool {
+			for _, n := range msg.CommentLineNums {
+				if n > 0 {
+					return true
+				}
+			}
+			for _, f := range msg.Fields {
+				for _, n := range f.CommentLineNums {
+					if n > 0 {
+						return true
+					}
+				}
+				if f.InlineCommentLineNum > 0 {
+					return true
+				}
+			}
+			return false
 		},
 	}
 	tmpl, err := template.New("go_yaml").Funcs(fnMap).Parse(goYamlCodeTemplate)
@@ -2284,7 +2350,7 @@ func (g *Generator) RenderGoYAMLFiles(outDir, baseFileName string) error {
 		}
 		sortedDefs := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedDefs, writerSizeOf, writerPtrdataOf)
-		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, AsMap: md.AsMap, AsArray: md.AsArray, UrlValues: md.UrlValues, Yaml: md.Yaml}
+		mt := MsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, CommentLineNums: md.CommentLineNums, AsMap: md.AsMap, AsArray: md.AsArray, UrlValues: md.UrlValues, Yaml: md.Yaml}
 		for _, fd := range sortedDefs {
 			mt.Fields = append(mt.Fields, g.makeFieldTpl(fd, name))
 		}

@@ -17,6 +17,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="QiWa.Common" Version="*" />
+    <PackageReference Include="YamlDotNet" Version="*" />
     <PackageReference Include="coverlet.collector" Version="6.*">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

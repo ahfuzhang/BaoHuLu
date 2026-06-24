@@ -6,6 +6,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+{{- if anyMsgHasYaml .Messages}}
+using YamlDotNet.Serialization;
+{{- end}}
 using QiWa.Common;
 using Xunit;
 using {{.Namespace}};
@@ -206,6 +209,18 @@ public class {{$goName}}Tests
 {{range .Fields}}{{if and (not .IsMap) (not .IsRepeated) (not .IsString) (not .IsBytes) (not .IsMsg)}}            {{.Name}} = {{csSampleLit .}},
 {{end}}{{end}}        };
     }
+{{- if .Yaml}}
+
+    /// <summary>Returns a {{$goName}} with YAML-special characters in all string fields,
+    /// exercising the quoting path in ToYAML and the unquote path in FromYAML.</summary>
+    public static {{$goName}} MakeYAMLSample{{$goName}}()
+    {
+        return new {{$goName}}
+        {
+{{range .Fields}}            {{.Name}} = {{csYamlSampleLit .}},
+{{end}}        };
+    }
+{{- end}}
 
     // ── Empty ─────────────────────────────────────────────────────────────────
 
@@ -292,6 +307,31 @@ public class {{$goName}}Tests
         var err = r.FromYAML(yamlBuf.AsSpan());
         Assert.False(err.Err(), err.Message);
 
+        {{$baseFileName}}TestValidate.CompareReadonly{{$goName}}(expected, r);
+
+        yamlBuf.Dispose();
+    }
+
+    // Verifies that:
+    // 1) string fields containing YAML-special characters (", [, {, \n, \t, #, :)
+    //    survive ToYAML → FromYAML with every field value preserved;
+    // 2) the produced YAML is accepted without error by a third-party YAML library
+    //    (YamlDotNet), confirming the output is spec-compliant.
+    [Fact]
+    public void YAMLRoundtrip_SpecialStrings_ThirdPartyValidated()
+    {
+        var expected = MakeYAMLSample{{$goName}}();
+        var yamlBuf = new RentedBuffer(512);
+        expected.ToYAML(ref yamlBuf, 0);
+        var yamlStr = System.Text.Encoding.UTF8.GetString(yamlBuf.AsSpan());
+
+        // Parse with third-party library — throws YamlException on malformed output.
+        new DeserializerBuilder().Build().Deserialize(new System.IO.StringReader(yamlStr));
+
+        // Roundtrip: deserialise then compare every field.
+        var r = new {{$roName}}();
+        var err = r.FromYAML(yamlBuf.AsSpan());
+        Assert.False(err.Err(), err.Message);
         {{$baseFileName}}TestValidate.CompareReadonly{{$goName}}(expected, r);
 
         yamlBuf.Dispose();

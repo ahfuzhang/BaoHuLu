@@ -20,8 +20,10 @@
 * 根据 *.proto 文件，生成多种语言的数据序列化/反序列化的代码
   * 支持 protobuf 二进制格式的序列化和反序列
   * 支持 JSON 格式的序列化和反序列化
+  * 支持 YAML 格式序列化和反序列化(YAML 序列化时，还会保留 proto 文件中的注释，提高可读性)
+  * 支持 URL encode 格式的序列化和反序列化
   * (在使用人数很多的情况下可以考虑) 支持 Thrift 二进制格式的序列化和反序列化
-  * 考虑支持 FlatBuffers / YAML 
+  * 考虑支持 FlatBuffers
 * 为 QiWa RPC 框架，生成从请求处理 -> 反序列化 -> 触发回调 -> 对响应序列化 这个过程的脚手架代码
 * 为多种编程语言生成代码：
   - golang
@@ -93,6 +95,8 @@
     - 使用值类型，便于利用栈空间来减少分配
 * 其他:
   * 优化 struct 中的成员布局，GC 扫描友好，且节约内存
+
+更多已开发的功能列表，请看：[TODO](./doc/TODO.md)
 
 ### Benchmark 数据
 
@@ -225,7 +229,7 @@ See: [doc/Performance](./doc/Performance.md)
 ## How to use, 命令行说明
 
 * 安装
-  - `go install github.com/ahfuzhang/BaoHuLu/cmd/hulu@v0.14.0`
+  - `go install github.com/ahfuzhang/BaoHuLu/cmd/hulu@v0.14.2`
 
 * 语法检查
   * `hulu xi ./xx.proto`
@@ -287,7 +291,6 @@ hulu tu \
   * 使用者可以自己以 golang template 的语法提供模板，然后生成代码。
 
 ### 远期目标
-* 支持 yaml 的序列化和反序列化
 * 支持 thrift 二进制格式
 * 支持 FlatBuffers 二进制格式
 * golang:

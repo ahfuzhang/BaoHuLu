@@ -334,6 +334,42 @@ public partial struct Readonly{{$goName}}
             return _v.Slice(_s);
         }
 
+        static ReadOnlySpan<byte> _stripInlineComment(ReadOnlySpan<byte> _v)
+        {
+            if (_v.Length == 0) return _v;
+            if (_v[0] == (byte)'"')
+            {
+                int _qi = 1;
+                while (_qi < _v.Length)
+                {
+                    if (_v[_qi] == (byte)'\\') { _qi += 2; continue; }
+                    if (_v[_qi] == (byte)'"') { _qi++; break; }
+                    _qi++;
+                }
+                return _v.Slice(0, _qi);
+            }
+            if (_v[0] == (byte)'\'')
+            {
+                int _qi = 1;
+                while (_qi < _v.Length)
+                {
+                    if (_v[_qi] == (byte)'\'') { _qi++; break; }
+                    _qi++;
+                }
+                return _v.Slice(0, _qi);
+            }
+            for (int _ci = 1; _ci < _v.Length; _ci++)
+            {
+                if (_v[_ci] == (byte)'#' && (_v[_ci - 1] == (byte)' ' || _v[_ci - 1] == (byte)'\t'))
+                {
+                    int _end = _ci - 1;
+                    while (_end > 0 && (_v[_end - 1] == (byte)' ' || _v[_end - 1] == (byte)'\t')) _end--;
+                    return _v.Slice(0, _end);
+                }
+            }
+            return _v;
+        }
+
         static void _splitLines(ReadOnlySpan<byte> _bytes, List<int> _starts, List<int> _ends)
         {
             _starts.Clear();
@@ -516,7 +552,7 @@ public partial struct Readonly{{$goName}}
             int _colonPos = _trimmed.IndexOf((byte)':');
             if (_colonPos < 0) continue;
             ReadOnlySpan<byte> _key = _trimmed.Slice(0, _colonPos);
-            ReadOnlySpan<byte> _valBytes = _trimSpace(_trimmed.Slice(_colonPos + 1));
+            ReadOnlySpan<byte> _valBytes = _stripInlineComment(_trimSpace(_trimmed.Slice(_colonPos + 1)));
 
 {{range $i, $f := .Fields}}
             {{if $i}}else {{end}}if (_key.SequenceEqual({{if $hasYamlNames}}Encoding.UTF8.GetBytes(_{{$goName}}_YamlKeys.{{.Name}}){{else}}"{{yamlKey .}}"u8{{end}}))
@@ -573,7 +609,7 @@ public partial struct Readonly{{$goName}}
                         if (_ss.Length - _st2.Length != _sbase) continue;
                         int _dcp = _st2.IndexOf((byte)':');
                         if (_dcp < 0) continue;
-                        ReadOnlySpan<byte> _mv = _trimSpace(_st2.Slice(_dcp + 1));
+                        ReadOnlySpan<byte> _mv = _stripInlineComment(_trimSpace(_st2.Slice(_dcp + 1)));
                         ReadOnlySpan<byte> _dkBytes = _trimSpace(_st2.Slice(0, _dcp));
 {{- if eq .MapKeyCS "string"}}
                         string _dk = _unquoteStr(_st2.Slice(0, _dcp));
@@ -658,7 +694,7 @@ public partial struct Readonly{{$goName}}
                     ReadOnlySpan<byte> _ss = _trimLine(_lineAt(_sub, _sStarts, _sEnds, _rj));
                     ReadOnlySpan<byte> _rst = _trimSpace(_ss);
                     if (_rst.Length == 0 || _rst[0] != (byte)'-') continue;
-                    ReadOnlySpan<byte> _item = _trimSpace(_rst.Slice(1));
+                    ReadOnlySpan<byte> _item = _stripInlineComment(_trimSpace(_rst.Slice(1)));
 {{- if eq .Type "string"}}
                     _list{{.Name}}.Add(_unquoteStr(_item));
 {{- else if eq .Type "bytes"}}

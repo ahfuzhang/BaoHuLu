@@ -640,6 +640,77 @@ func csDecimalFields(fields []CsFieldTpl) []CsFieldTpl {
 	return out
 }
 
+// csYamlSpecialStr is a C# string literal whose runtime value contains characters
+// that trigger YAML quoting in _strVal: double-quote, brackets, braces, newline,
+// tab, and '#' (the inline-comment marker).
+const csYamlSpecialStr = `"hello \"world\" [brk] {brc}\nnewline\ttab #comment"`
+
+// csYamlSampleLit is like csSampleLit but substitutes YAML-special C# string
+// literals for every string-typed position so that the quoting path in ToYAML
+// and the unquote path in FromYAML are exercised.
+func csYamlSampleLit(f CsFieldTpl) string {
+	if f.IsMap {
+		keySample := primitiveCSLit(f.MapKeyCS)
+		if keySample == "" {
+			keySample = "1"
+		}
+		if f.MapKeyCS == "string" {
+			// backslash triggers quoting; no colon to avoid map-key parser ambiguity
+			keySample = `"key\\slash"`
+		}
+		if f.MapValIsMsg {
+			return csSampleLit(f) // delegate for message values
+		}
+		valSample := primitiveCSLit(f.MapValCS)
+		if valSample == "" {
+			valSample = fmt.Sprintf("(%s)1", f.MapValCS)
+		}
+		if f.MapValCS == "string" {
+			valSample = `"val:has:colons"` // colon triggers quoting
+		}
+		dictType := f.EffWriterType
+		if dictType == "" {
+			dictType = f.WriterType
+		}
+		return fmt.Sprintf("new %s { { %s, %s } }", dictType, keySample, valSample)
+	}
+	if f.IsRepeated {
+		if f.ElemIsMsg {
+			return csSampleLit(f) // delegate for message elements
+		}
+		var elemSample string
+		if f.IsEnum {
+			elemSample = fmt.Sprintf("(%s)1", f.ElemTypeCS)
+		} else {
+			elemSample = primitiveCSLit(f.ElemTypeCS)
+			if elemSample == "" {
+				elemSample = fmt.Sprintf("(%s)1", f.ElemTypeCS)
+			}
+			if f.ElemTypeCS == "string" {
+				elemSample = `"item \"quoted\""` // double-quote triggers quoting
+			}
+		}
+		return fmt.Sprintf("new %s { %s }", f.WriterType, elemSample)
+	}
+	if f.IsMsg {
+		return csSampleLit(f)
+	}
+	if f.IsString {
+		return csYamlSpecialStr
+	}
+	return csSampleLit(f)
+}
+
+// anyMsgHasYaml reports whether any message in msgs has YAML serialization enabled.
+func anyMsgHasYaml(msgs []CsMsgTpl) bool {
+	for _, m := range msgs {
+		if m.Yaml {
+			return true
+		}
+	}
+	return false
+}
+
 // safeUnknownFieldNum returns a field number guaranteed to be above any field
 // defined in the message, suitable for use as an "unknown field" in tests.
 func safeUnknownFieldNum(fields []CsFieldTpl) int {
@@ -696,6 +767,8 @@ func (g *Generator) RenderCSTest(out *os.File, namespace, baseFileName string) e
 		"upperFirst":          protofile.UpperFirst,
 		"goTypeName":          protofile.GoTypeName,
 		"csSampleLit":         csSampleLit,
+		"csYamlSampleLit":     csYamlSampleLit,
+		"anyMsgHasYaml":       anyMsgHasYaml,
 		"firstCsStringField":  firstCsStringField,
 		"safeUnknownFieldNum": safeUnknownFieldNum,
 		"csTagByteArray":      csTagByteArray,

@@ -1,4 +1,4 @@
-Version ?= v0.14.2
+Version ?= v0.14.4
 
 .PHONY: build run test check check-bce
 

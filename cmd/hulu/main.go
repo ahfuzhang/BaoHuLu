@@ -337,6 +337,7 @@ func runTu(args []string) {
 	csOutWithBench := fs.Bool("csharp_out.with.bench", false, "also generate a Benchmarks/ project with BenchmarkDotNet benchmarks alongside C# output")
 	srcTemplateDir := fs.String("src.csharp_template.dir", "", "directory containing .tpl files for C# RPC code generation")
 	dstTemplateOutDir := fs.String("dst.csharp_template.out_dir", "", "output directory for files generated from C# .tpl templates")
+	noCsprojFile := fs.Bool("no.csproj.file", false, "skip generating *.csproj files when generating C# code")
 	fs.Parse(args)
 
 	if *src == "" {
@@ -410,12 +411,14 @@ func runTu(args []string) {
 		}
 		fmt.Printf("generated %s/*.cs\n", *csOut)
 
-		projPath := filepath.Join(*csOut, csBase+".csproj")
-		if err := csharp.WriteProject(projPath, csBase); err != nil {
-			fmt.Fprintf(os.Stderr, "write csproj: %v\n", err)
-			os.Exit(1)
+		if !*noCsprojFile {
+			projPath := filepath.Join(*csOut, csBase+".csproj")
+			if err := csharp.WriteProject(projPath, csBase); err != nil {
+				fmt.Fprintf(os.Stderr, "write csproj: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("generated %s\n", projPath)
 		}
-		fmt.Printf("generated %s\n", projPath)
 
 		if *csOutWithTest {
 			testsDir := filepath.Join(*csOut, "Tests")

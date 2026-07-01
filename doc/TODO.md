@@ -15,6 +15,10 @@
   - golang
     - 运行一个 test 以后，自动按照我期望的格式输出 benchmark 的结果  ✅  
     - 对象生命周期的测试， 内存踩踏测试
+  - csharp
+    - 生成的 csharp 代码，用 lint 工具跑一遍
+      - 用 lint 工具跑一遍
+      - 把肯定不是错误的 lint 告警进行 disable
   - 进一步提高代码覆盖率
   - 努力达到 100% 的代码覆盖率  
   - 性能测试报告  50%
@@ -156,7 +160,11 @@
     - 支持 @AsMap  ✅
     - 支持 @AsArray  ✅
   - url encode 格式      ✅
+    - 对 form name 的支持，否则就会直接使用 proto 中的名字      ✅
 * 宣传
   - 融入 buf 的生态中，否则很难做到高的使用人数
   - 融入 protoc 的工具链
   - 中文英文双语文档
+* 问题
+  - 一个 proto 文件，只能有一个 service
+

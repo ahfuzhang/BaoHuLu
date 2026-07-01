@@ -251,6 +251,7 @@ See: [doc/Performance](./doc/Performance.md)
       - `-csharp_out.with.bench`: 生成 csharp 的 benchmark 代码
       - `-src.csharp_template.dir=$dir`: 自定义 template, 作为输入的模板
       - `-dst.csharp_template.out_dir=$dir`: 对于自定义输入，设定对应的输出目录
+      - `-no.csproj.file`: 不生成 *.csproj 文件
 
   ![](./doc/images/2.png)
 

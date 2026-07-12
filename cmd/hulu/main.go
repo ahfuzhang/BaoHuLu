@@ -230,6 +230,7 @@ type MethodTplData struct {
 	RequestType     string
 	ResponseType    string
 	Generator       *protofile.Generator
+	Paths           []string // @path annotation values; each entry adds an extra HTTP path alias
 }
 
 func renderTplToFile(content []byte, data any, outPath string) error {
@@ -285,6 +286,7 @@ func processTplFile(pg *protofile.Generator, ns string, content []byte, outBase,
 					RequestType:     m.RequestType,
 					ResponseType:    m.ResponseType,
 					Generator:       pg,
+					Paths:           m.Paths,
 				}
 				if err := renderTplToFile(content, data, filepath.Join(dstDir, outName)); err != nil {
 					return err

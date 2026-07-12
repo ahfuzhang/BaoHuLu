@@ -2068,6 +2068,16 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 		switch k1 {
 {{- range .Fields}}
 		case NameOf{{$goName}}{{.Name}}:
+{{- $nullSc := jsonScalarClass .Type}}
+{{- $isPlainStrBytes := and (not .Map) (not .Repeated) (not .IsMsg) (not .IsEnum) (not .IsDecimal) (or (eq $nullSc "string") (eq $nullSc "bytes"))}}
+{{- if not $isPlainStrBytes}}
+			// a JSON null value means the field is absent; keep its zero value and skip.
+			// (Type() is side-effect-free here since the value is object/array/number/bool/null, never a raw string.)
+			if v.Type(parser) == fastjson.TypeNull {
+				isContinue = true
+				return
+			}
+{{- end}}
 {{- if .Map}}
 			_mapObj, _e := v.Object()
 			if _e != nil {
@@ -2491,6 +2501,12 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- if eq $sc "string"}}
 			_s, _e := v.UnescapeString(parser)
 			if _e != nil {
+				if v.Type(parser) == fastjson.TypeNull {
+					// a JSON null value means the field is absent; keep its zero value and skip.
+					// (checked on the error path so the non-null fast path never triggers Type()'s unescape side-effect.)
+					isContinue = true
+					return
+				}
 				visitErr = _e
 				return
 			}
@@ -2498,6 +2514,12 @@ func (r *Readonly{{$goName}}) fromJSONValue(obj *fastjson.Object, parser *fastjs
 {{- else if eq $sc "bytes"}}
 			_b64, _e := v.StringBytes()
 			if _e != nil {
+				if v.Type(parser) == fastjson.TypeNull {
+					// a JSON null value means the field is absent; keep its zero value and skip.
+					// (checked on the error path so the non-null fast path never triggers Type()'s unescape side-effect.)
+					isContinue = true
+					return
+				}
 				visitErr = _e
 				return
 			}

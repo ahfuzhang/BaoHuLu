@@ -437,6 +437,55 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 
     internal Error FromJSONReader(ref Utf8JsonReader reader)
     {
+{{- if .AsArray}}
+{{- $f := index .Fields 0}}
+        // @AsArray: the JSON value IS the array — read elements directly into the single repeated field.
+        // A JSON null value (e.g. a null field) means "no data": leave defaults, consume nothing further.
+        if (reader.TokenType == JsonTokenType.Null)
+            return default;
+        // If the reader is freshly created (None) or not yet at StartArray, advance.
+        // When called from a nested context, caller already advanced to StartArray.
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                return Error.WithLoc(1, "expected [");
+        }
+        var _{{$f.Name}}List = this.{{$f.Name}} ?? new {{$f.LocalType}}();
+        _{{$f.Name}}List.Clear();
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+{{- if $f.ElemIsMsg}}
+            {{$f.ReadonlyElemTypeCS}} _arrMsg{{$f.Name}} = default;
+            var _arrErr{{$f.Name}} = _arrMsg{{$f.Name}}.FromJSONReader(ref reader);
+            if (_arrErr{{$f.Name}}.Err()) return _arrErr{{$f.Name}};
+            _{{$f.Name}}List.Add(_arrMsg{{$f.Name}});
+{{- else if $f.IsString}}
+            _{{$f.Name}}List.Add(reader.GetString() ?? string.Empty);
+{{- else if $f.IsBytes}}
+            _{{$f.Name}}List.Add(reader.GetBytesFromBase64());
+{{- else if $f.IsBool}}
+            _{{$f.Name}}List.Add(reader.ValueSpan.SequenceEqual("true"u8));
+{{- else if eq $f.ElemTypeCS "double"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _arrdv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrdv{{$f.Name}}); }
+{{- else if eq $f.ElemTypeCS "float"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _arrfv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrfv{{$f.Name}}); }
+{{- else if $f.IsFixed64}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrfl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(({{$f.ElemTypeCS}})_arrfl{{$f.Name}}); }
+{{- else if eq $f.ElemTypeCS "long"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrl{{$f.Name}}); }
+{{- else if eq $f.ElemTypeCS "ulong"}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _arrul{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrul{{$f.Name}}); }
+{{- else}}
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _arriv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(({{$f.ElemTypeCS}})_arriv{{$f.Name}}); }
+{{- end}}
+        }
+        this.{{$f.Name}} = _{{$f.Name}}List;
+        return default;
+    }
+{{- else}}
+        // A JSON null value (e.g. a null message field) means "no data": leave defaults, consume nothing further.
+        if (reader.TokenType == JsonTokenType.Null)
+            return default;
         // If the reader is freshly created (None) or not yet at StartObject, advance.
         // When called from a nested context, caller already advanced to StartObject.
         if (reader.TokenType != JsonTokenType.StartObject)
@@ -515,6 +564,8 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                 return Error.WithLoc(1, "expected property name");
             var _propSpan = reader.ValueSpan;
             if (!reader.Read()) return Error.WithLoc(1, "unexpected end");
+            // JSON null 视为字段未设置：跳过任意类型字段（标量/消息/map/数组）的 null 值。
+            if (reader.TokenType == JsonTokenType.Null) { continue; }
 {{- range $i, $f := .Fields}}
             {{if $i}}else {{end}}if (_propSpan.SequenceEqual({{$goName}}Tags.JsonKey{{.Name}}))
 {{- if .IsMap}}
@@ -646,6 +697,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
         return default;
     }
+{{- end}}
 {{- end}}
 
     // ── Clone ─────────────────────────────────────────────────────────────────
@@ -1304,6 +1356,39 @@ public partial struct {{$goName}} : IResettable, IEncoder
 
     public readonly void ToJSON(ref RentedBuffer buf)
     {
+{{- if .AsArray}}
+{{- $f := index .Fields 0}}
+        // @AsArray: serialize the single repeated field directly as a bare JSON array.
+        buf.Append((byte)'[');
+        if ({{$f.Name}} != null)
+            for (int _i{{$f.Name}} = 0; _i{{$f.Name}} < {{$f.Name}}.Count; _i{{$f.Name}}++)
+            {
+                if (_i{{$f.Name}} > 0) buf.Append((byte)',');
+                var _re{{$f.Name}} = {{$f.Name}}[_i{{$f.Name}}];
+{{- if $f.ElemIsMsg}}
+                _re{{$f.Name}}.ToJSON(ref buf);
+{{- else if $f.IsString}}
+                buf.Append((byte)'"'); buf.AppendAsJsonEscapedString(_re{{$f.Name}}); buf.Append((byte)'"');
+{{- else if $f.IsBytes}}
+                buf.Append((byte)'"'); buf.Append(Convert.ToBase64String(_re{{$f.Name}})); buf.Append((byte)'"');
+{{- else if $f.IsBool}}
+                buf.Append(_re{{$f.Name}});
+{{- else if $f.IsFixed64}}
+                buf.Append((byte)'"'); buf.Append((long)_re{{$f.Name}}); buf.Append((byte)'"');
+{{- else if eq $f.ElemTypeCS "double"}}
+                buf.Append(_re{{$f.Name}});
+{{- else if eq $f.ElemTypeCS "float"}}
+                buf.Append((double)_re{{$f.Name}});
+{{- else if eq $f.ElemTypeCS "long"}}
+                buf.Append((byte)'"'); buf.Append(_re{{$f.Name}}); buf.Append((byte)'"');
+{{- else if eq $f.ElemTypeCS "ulong"}}
+                buf.Append((byte)'"'); buf.Append(_re{{$f.Name}}); buf.Append((byte)'"');
+{{- else}}
+                buf.Append((long)_re{{$f.Name}});
+{{- end}}
+            }
+        buf.Append((byte)']');
+{{- else}}
         buf.Append((byte)'{');
 {{- if .AsMap}}
 {{- $f := index .Fields 0}}
@@ -1544,6 +1629,7 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- end}}
 {{- end}}
         buf.Append((byte)'}');
+{{- end}}
     }
 
     // ── Reset ─────────────────────────────────────────────────────────────────

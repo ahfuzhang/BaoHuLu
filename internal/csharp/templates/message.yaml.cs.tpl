@@ -73,6 +73,31 @@ public partial struct {{$goName}}
 {{- range $i, $line := .Comment}}
         _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $msgCmtNums $i $line}});
 {{- end}}
+{{- if .AsArray}}
+{{- $fa := index .Fields 0}}
+        // @AsArray: serialize the single repeated field directly as bare YAML array members (no wrapper key).
+        if (this.{{$fa.Name}} != null)
+            foreach (var _va{{$fa.Name}} in this.{{$fa.Name}})
+            {
+                _dst.Append(_sp); _dst.Append("- ");
+{{- if $fa.ElemIsMsg}}
+                _dst.Append("\n");
+                _va{{$fa.Name}}.ToYAML(ref _dst, _indent + 2);
+{{- else if eq $fa.Type "string"}}
+                _dst.Append(_strVal(_va{{$fa.Name}} ?? string.Empty)); _dst.Append("\n");
+{{- else if eq $fa.Type "bytes"}}
+                _dst.Append(Convert.ToBase64String(_va{{$fa.Name}} ?? System.Array.Empty<byte>())); _dst.Append("\n");
+{{- else if eq $fa.Type "bool"}}
+                _dst.Append(_va{{$fa.Name}} ? "true" : "false"); _dst.Append("\n");
+{{- else if eq $fa.Type "double"}}
+                _dst.Append(_va{{$fa.Name}}.ToString("R", CultureInfo.InvariantCulture)); _dst.Append("\n");
+{{- else if eq $fa.Type "float"}}
+                _dst.Append(_va{{$fa.Name}}.ToString("R", CultureInfo.InvariantCulture)); _dst.Append("\n");
+{{- else}}
+                _dst.Append(_va{{$fa.Name}}.ToString()); _dst.Append("\n");
+{{- end}}
+            }
+{{- else}}
 {{range .Fields}}
 {{- $cmt := .Comment}}
 {{- $cmtNums := .CommentLineNums}}
@@ -108,7 +133,7 @@ public partial struct {{$goName}}
 {{- else if eq .MapVal "string"}}
                 _dst.Append(_strVal(_kv{{.Name}}.Value ?? string.Empty)); _dst.Append("\n");
 {{- else if eq .MapVal "bytes"}}
-                _dst.Append(Convert.ToBase64String(_kv{{.Name}}.Value ?? Array.Empty<byte>())); _dst.Append("\n");
+                _dst.Append(Convert.ToBase64String(_kv{{.Name}}.Value ?? System.Array.Empty<byte>())); _dst.Append("\n");
 {{- else if eq .MapVal "bool"}}
                 _dst.Append(_kv{{.Name}}.Value ? "true" : "false"); _dst.Append("\n");
 {{- else if eq .MapVal "double"}}
@@ -142,7 +167,7 @@ public partial struct {{$goName}}
 {{- else if eq .Type "string"}}
                 _dst.Append(_strVal(_v{{.Name}} ?? string.Empty)); _dst.Append("\n");
 {{- else if eq .Type "bytes"}}
-                _dst.Append(Convert.ToBase64String(_v{{.Name}} ?? Array.Empty<byte>())); _dst.Append("\n");
+                _dst.Append(Convert.ToBase64String(_v{{.Name}} ?? System.Array.Empty<byte>())); _dst.Append("\n");
 {{- else if eq .Type "bool"}}
                 _dst.Append(_v{{.Name}} ? "true" : "false"); _dst.Append("\n");
 {{- else if eq .Type "double"}}
@@ -290,7 +315,8 @@ public partial struct {{$goName}}
 {{- end}}
         }
 {{- end}}
-{{end}}    }
+{{end}}
+{{- end}}    }
 }
 {{end}}{{end}}
 {{- define "CsYamlReadonlyFile"}}{{template "CsYamlFileHeader" .}}
@@ -528,10 +554,10 @@ public partial struct Readonly{{$goName}}
             OperationStatus _status = Base64.DecodeFromUtf8(_v, _value, out int _consumed, out int _written);
             if (_status != OperationStatus.Done || _consumed != _v.Length)
             {
-                _value = Array.Empty<byte>();
+                _value = System.Array.Empty<byte>();
                 return false;
             }
-            if (_written != _value.Length) Array.Resize(ref _value, _written);
+            if (_written != _value.Length) System.Array.Resize(ref _value, _written);
             return true;
         }
 
@@ -541,6 +567,64 @@ public partial struct Readonly{{$goName}}
         int _baseIndent = _firstNonEmptyIndent(_src, _lineStarts, _lineEnds);
         if (_baseIndent < 0) return default;
 
+{{- if .AsArray}}
+{{- $fa := index .Fields 0}}
+        // @AsArray: parse bare YAML array members directly into the single repeated field (no wrapper key).
+        var _list{{$fa.Name}} = new {{$fa.ReadonlyType}}();
+        for (int _i = 0; _i < _lineStarts.Count; _i++)
+        {
+            ReadOnlySpan<byte> _sl = _trimLine(_lineAt(_src, _lineStarts, _lineEnds, _i));
+            ReadOnlySpan<byte> _rst = _trimSpace(_sl);
+            if (_rst.Length == 0 || _rst[0] != (byte)'-') continue;
+{{- if $fa.ElemIsMsg}}
+            ReadOnlySpan<byte> _itemBytes = _collectListItemBlock(_src, _lineStarts, _lineEnds, _baseIndent, ref _i);
+            {{$fa.ReadonlyElemTypeCS}} _elem{{$fa.Name}} = default;
+            var _eerr{{$fa.Name}} = _elem{{$fa.Name}}.FromYAML(_itemBytes);
+            if (_eerr{{$fa.Name}}.Err()) return _eerr{{$fa.Name}};
+            _list{{$fa.Name}}.Add(_elem{{$fa.Name}});
+{{- else}}
+            ReadOnlySpan<byte> _item = _stripInlineComment(_trimSpace(_rst.Slice(1)));
+{{- if eq $fa.Type "string"}}
+            _list{{$fa.Name}}.Add(_unquoteStr(_item));
+{{- else if eq $fa.Type "bytes"}}
+            if (!_decodeBase64(_item, out byte[] _bitem{{$fa.Name}}))
+                return Error.WithLoc(1, "bad base64 {{yamlKey $fa}}");
+            _list{{$fa.Name}}.Add(_bitem{{$fa.Name}});
+{{- else if eq $fa.Type "bool"}}
+            _list{{$fa.Name}}.Add(_isTrue(_item));
+{{- else if eq $fa.Type "double"}}
+            if (!_parseDouble(_item, out double _vd{{$fa.Name}}))
+                return Error.WithLoc(1, "bad double {{yamlKey $fa}}");
+            _list{{$fa.Name}}.Add(_vd{{$fa.Name}});
+{{- else if eq $fa.Type "float"}}
+            if (!_parseFloat(_item, out float _vf{{$fa.Name}}))
+                return Error.WithLoc(1, "bad float {{yamlKey $fa}}");
+            _list{{$fa.Name}}.Add(_vf{{$fa.Name}});
+{{- else if or (eq $fa.Type "uint64") (eq $fa.Type "fixed64")}}
+            if (!_parseULong(_item, out ulong _vu{{$fa.Name}}))
+                return Error.WithLoc(1, "bad uint64 {{yamlKey $fa}}");
+            _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_vu{{$fa.Name}});
+{{- else if or (eq $fa.Type "uint32") (eq $fa.Type "fixed32")}}
+            if (!_parseUInt(_item, out uint _vui{{$fa.Name}}))
+                return Error.WithLoc(1, "bad uint32 {{yamlKey $fa}}");
+            _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_vui{{$fa.Name}});
+{{- else if or (eq $fa.Type "int64") (eq $fa.Type "sint64") (eq $fa.Type "sfixed64")}}
+            if (!_parseLong(_item, out long _vl{{$fa.Name}}))
+                return Error.WithLoc(1, "bad int64 {{yamlKey $fa}}");
+            _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_vl{{$fa.Name}});
+{{- else if $fa.IsEnum}}
+            if (!_parseInt(_item, out int _ve{{$fa.Name}}))
+                return Error.WithLoc(1, "bad enum {{yamlKey $fa}}");
+            _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_ve{{$fa.Name}});
+{{- else}}
+            if (!_parseInt(_item, out int _vi{{$fa.Name}}))
+                return Error.WithLoc(1, "bad int {{yamlKey $fa}}");
+            _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_vi{{$fa.Name}});
+{{- end}}
+{{- end}}
+        }
+        this.{{$fa.Name}} = _list{{$fa.Name}};
+{{- else}}
         for (int _i = 0; _i < _lineStarts.Count; _i++)
         {
             ReadOnlySpan<byte> _line = _trimLine(_lineAt(_src, _lineStarts, _lineEnds, _i));
@@ -825,6 +909,7 @@ public partial struct Readonly{{$goName}}
 {{- end}}
 {{end}}
         }
+{{- end}}
         return default;
     }
 }

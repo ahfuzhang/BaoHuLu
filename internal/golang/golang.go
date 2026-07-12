@@ -682,7 +682,7 @@ func (g *Generator) makeFieldTpl(fd protofile.FieldDef, containingMsgName string
 			elemIsRecursive = canReachViaAllEdges(g.Messages, fd.Type, containingMsgName, visited)
 		}
 	}
-	isDecimal := fd.DecimalRound > 0
+	isDecimal := fd.DecimalRound > 0 && !fd.Repeated && !fd.Map
 	if isDecimal && fd.Type != "double" {
 		panic(fmt.Sprintf("@decimal annotation on field %q: only allowed on double fields, got %q", fd.Name, fd.Type))
 	}

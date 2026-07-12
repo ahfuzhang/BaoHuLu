@@ -107,8 +107,9 @@
     - 支持获取原始请求内容  50%
   - 支持 form 提交的解析  ✅  => 还应该更深入的检查一下实现
   - 模仿 fastjson 实现 fastjson.cs  (实现 fastjson.cs，代替 json utf8 reader)
-  - 支持 @AsMap
-  - 支持 @AsArray
+  - 支持 @AsMap  ✅
+  - 支持 @AsArray  ✅
+  - 对 map 的 value 部分提供 decimal 支持： Dictionary<int, decimal>
 
 * JSON
   - 数值类型，长度超过 53 bit 的问题

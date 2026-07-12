@@ -268,7 +268,7 @@ public partial struct Readonly{{$goName}}
                     foreach (var _part in _vals[0].Split('&', StringSplitOptions.RemoveEmptyEntries))
                     {
                         var _meq = _part.IndexOf('=');
-                        var _k = _meq < 0 ? _part : _part.Substring(0, _meq);
+                        var _mk = _meq < 0 ? _part : _part.Substring(0, _meq);
                         var _mv = _meq < 0 ? "" : _part.Substring(_meq + 1);
                         {{csUrlKeyParse .MapKeyCS .JsonName}}
 {{- if .UseMapValWrapper}}

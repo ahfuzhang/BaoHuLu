@@ -596,6 +596,52 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 	}
 	_ = _unquoteStr
 
+	// _stripInlineComment removes an unquoted trailing "# ..." comment from v.
+	// Quoted scalars ("..." or '...') are returned up to their closing quote, so
+	// a '#' inside the quotes is preserved.
+	_stripInlineComment := func(v []byte) []byte {
+		if len(v) == 0 {
+			return v
+		}
+		if v[0] == '"' {
+			_qi := 1
+			for _qi < len(v) {
+				if v[_qi] == '\\' {
+					_qi += 2
+					continue
+				}
+				if v[_qi] == '"' {
+					_qi++
+					break
+				}
+				_qi++
+			}
+			return v[:_qi]
+		}
+		if v[0] == '\'' {
+			_qi := 1
+			for _qi < len(v) {
+				if v[_qi] == '\'' {
+					_qi++
+					break
+				}
+				_qi++
+			}
+			return v[:_qi]
+		}
+		for _ci := 1; _ci < len(v); _ci++ {
+			if v[_ci] == '#' && (v[_ci-1] == ' ' || v[_ci-1] == '\t') {
+				_end := _ci - 1
+				for _end > 0 && (v[_end-1] == ' ' || v[_end-1] == '\t') {
+					_end--
+				}
+				return v[:_end]
+			}
+		}
+		return v
+	}
+	_ = _stripInlineComment
+
 	_lines := bytes.SplitAfter(src, []byte("\n"))
 
 	// Detect base indentation from the first non-empty line.
@@ -687,7 +733,7 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 			if len(_st) == 0 || !bytes.HasPrefix(_st, []byte("- ")) {
 				continue
 			}
-			_item := bytes.TrimSpace(_st[2:])
+			_item := _stripInlineComment(bytes.TrimSpace(_st[2:]))
 {{- if eq $fa.Type "string"}}
 			_list = append(_list, _unquoteStr(_item))
 {{- else if eq $fa.Type "bytes"}}
@@ -769,7 +815,7 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 			continue
 		}
 		_key := _trimmed[:_colonPos]
-		_valBytes := bytes.TrimSpace(_trimmed[_colonPos+1:])
+		_valBytes := _stripInlineComment(bytes.TrimSpace(_trimmed[_colonPos+1:]))
 		_ = _valBytes
 
 {{- if .AsMap}}
@@ -976,7 +1022,7 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 						if _cp < 0 {
 							continue
 						}
-						_mv := bytes.TrimSpace(_st[_cp+1:])
+						_mv := _stripInlineComment(bytes.TrimSpace(_st[_cp+1:]))
 {{- if eq .MapKey "string"}}
 						_k := _unquoteStr(_st[:_cp])
 {{- else if eq .MapKey "bool"}}
@@ -1109,7 +1155,7 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 					if len(_st) == 0 || !bytes.HasPrefix(_st, []byte("- ")) {
 						continue
 					}
-					_item := bytes.TrimSpace(_st[2:])
+					_item := _stripInlineComment(bytes.TrimSpace(_st[2:]))
 {{- if eq .Type "string"}}
 					_list = append(_list, _unquoteStr(_item))
 {{- else if eq .Type "bytes"}}

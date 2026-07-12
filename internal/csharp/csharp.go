@@ -235,6 +235,7 @@ type CsMsgTpl struct {
 	Fields          []CsFieldTpl
 	NeedsWrapper bool // true when this message type needs Wrapper classes generated
 	AsMap        bool // true when @AsMap annotation present: single map field, JSON is flat map
+	AsArray      bool // true when @AsArray annotation present: single repeated field, JSON is a bare array
 	UrlValues    bool // true when @UrlValues annotation present: generate ToURLValues/FromURLValues
 	Yaml         bool // true when @yaml annotation present: generate ToYAML/FromYAML methods
 }
@@ -361,7 +362,7 @@ func (g *Generator) buildMsgTpls() ([]CsMsgTpl, map[string]protofile.MsgLayoutIn
 		}
 		sortedFields := protofile.SortFieldsWithCallbacks(md.Fields, writerSizeOf, writerPtrdataOf)
 		writerLayouts[name] = protofile.ComputeStructLayout(sortedFields, writerSizeOf, writerPtrdataOf)
-		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, CommentLineNums: md.CommentLineNums, AsMap: md.AsMap, UrlValues: md.UrlValues, Yaml: md.Yaml}
+		mt := CsMsgTpl{Name: md.Name, GoName: protofile.GoTypeName(md.Name), Comment: md.Comment, CommentLineNums: md.CommentLineNums, AsMap: md.AsMap, AsArray: md.AsArray, UrlValues: md.UrlValues, Yaml: md.Yaml}
 		for _, fd := range sortedFields {
 			mt.Fields = append(mt.Fields, g.buildCSField(fd))
 		}
@@ -968,23 +969,24 @@ func (g *Generator) RenderCSBench(out *os.File, namespace, baseFileName string) 
 
 // ─── URL values helpers ───────────────────────────────────────────────────────
 
-// csUrlKeyParse returns a C# statement that parses the loop variable _k (string)
-// into a typed local variable _key of the given C# map-key type. Returns Error on failure.
+// csUrlKeyParse returns a C# statement that parses the map-key loop variable _mk
+// (string) into a typed local variable _key of the given C# map-key type. Returns
+// Error on failure.
 func csUrlKeyParse(keyCS, fieldJsonName string) string {
 	errExpr := `return Error.WithLoc(1, "bad key ` + fieldJsonName + `");`
 	switch keyCS {
 	case "string":
-		return "var _key = _k;"
+		return "var _key = _mk;"
 	case "bool":
-		return `var _key = _k == "true" || _k == "1";`
+		return `var _key = _mk == "true" || _mk == "1";`
 	case "long":
-		return "if (!long.TryParse(_k, out long _key)) " + errExpr
+		return "if (!long.TryParse(_mk, out long _key)) " + errExpr
 	case "ulong":
-		return "if (!ulong.TryParse(_k, out ulong _key)) " + errExpr
+		return "if (!ulong.TryParse(_mk, out ulong _key)) " + errExpr
 	case "uint":
-		return "if (!uint.TryParse(_k, out uint _key)) " + errExpr
+		return "if (!uint.TryParse(_mk, out uint _key)) " + errExpr
 	default: // int (int32, sint32, sfixed32, fixed32)
-		return "if (!int.TryParse(_k, out int _key)) " + errExpr
+		return "if (!int.TryParse(_mk, out int _key)) " + errExpr
 	}
 }
 

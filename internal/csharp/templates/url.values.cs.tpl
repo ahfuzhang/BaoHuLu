@@ -283,10 +283,10 @@ public partial struct Readonly{{$goName}}
 {{- else if .MapValIsMsg}}
                         _dict{{.Name}}[_key] = JsonSerializer.Deserialize<{{.ReadonlyMapValCS}}>(_mv);
 {{- else if .MapValIsEnum}}
-                        if (!int.TryParse(_mv, out int _mvi{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!int.TryParse(_mv, out int _mvi{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _dict{{.Name}}[_key] = ({{.ReadonlyMapValCS}})_mvi{{.Name}};
 {{- else}}
-                        if (!{{.MapValCS}}.TryParse(_mv, out {{.MapValCS}} _mvi{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!{{.MapValCS}}.TryParse(_mv, out {{.MapValCS}} _mvi{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _dict{{.Name}}[_key] = _mvi{{.Name}};
 {{- end}}
                     }
@@ -310,25 +310,25 @@ public partial struct Readonly{{$goName}}
 {{- else if .IsString}}
                         _list{{.Name}}.Add(_sv);
 {{- else if .IsEnum}}
-                        if (!int.TryParse(_sv, out int _el{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!int.TryParse(_sv, out int _el{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _list{{.Name}}.Add(({{.ReadonlyElemTypeCS}})_el{{.Name}});
 {{- else if eq .ElemTypeCS "double"}}
-                        if (!double.TryParse(_sv, out double _el{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!double.TryParse(_sv, out double _el{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _list{{.Name}}.Add(_el{{.Name}});
 {{- else if eq .ElemTypeCS "float"}}
-                        if (!float.TryParse(_sv, out float _el{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!float.TryParse(_sv, out float _el{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _list{{.Name}}.Add(_el{{.Name}});
 {{- else if eq .ElemTypeCS "long"}}
-                        if (!long.TryParse(_sv, out long _el{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!long.TryParse(_sv, out long _el{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _list{{.Name}}.Add(_el{{.Name}});
 {{- else if eq .ElemTypeCS "ulong"}}
-                        if (!ulong.TryParse(_sv, out ulong _el{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!ulong.TryParse(_sv, out ulong _el{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _list{{.Name}}.Add(_el{{.Name}});
 {{- else if eq .ElemTypeCS "uint"}}
-                        if (!uint.TryParse(_sv, out uint _el{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!uint.TryParse(_sv, out uint _el{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _list{{.Name}}.Add(_el{{.Name}});
 {{- else}}
-                        if (!int.TryParse(_sv, out int _el{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                        if (!int.TryParse(_sv, out int _el{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _list{{.Name}}.Add(_el{{.Name}});
 {{- end}}
                     }
@@ -363,35 +363,35 @@ public partial struct Readonly{{$goName}}
                     this.{{.Name}} = _vals[0];
                     break;
 {{- else if .IsEnum}}
-                    if (!int.TryParse(_vals[0], out int _p{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                    if (!int.TryParse(_vals[0], out int _p{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                     this.{{.Name}} = ({{.ReadonlyType}})_p{{.Name}};
                     break;
 {{- else if .IsDecimal}}
-                    if (!double.TryParse(_vals[0], out double _pd{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                    if (!double.TryParse(_vals[0], out double _pd{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                     this.{{.Name}} = (decimal)_pd{{.Name}};
                     break;
 {{- else if eq .WriterType "double"}}
-                    if (!double.TryParse(_vals[0], out double _p{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                    if (!double.TryParse(_vals[0], out double _p{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                     this.{{.Name}} = _p{{.Name}};
                     break;
 {{- else if eq .WriterType "float"}}
-                    if (!float.TryParse(_vals[0], out float _p{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                    if (!float.TryParse(_vals[0], out float _p{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                     this.{{.Name}} = _p{{.Name}};
                     break;
 {{- else if eq .WriterType "long"}}
-                    if (!long.TryParse(_vals[0], out long _p{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                    if (!long.TryParse(_vals[0], out long _p{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                     this.{{.Name}} = _p{{.Name}};
                     break;
 {{- else if eq .WriterType "ulong"}}
-                    if (!ulong.TryParse(_vals[0], out ulong _p{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                    if (!ulong.TryParse(_vals[0], out ulong _p{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                     this.{{.Name}} = _p{{.Name}};
                     break;
 {{- else if eq .WriterType "uint"}}
-                    if (!uint.TryParse(_vals[0], out uint _p{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                    if (!uint.TryParse(_vals[0], out uint _p{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                     this.{{.Name}} = _p{{.Name}};
                     break;
 {{- else}}
-                    if (!int.TryParse(_vals[0], out int _p{{.Name}})) return Error.WithLoc(1, "bad value {{.JsonName}}");
+                    if (!int.TryParse(_vals[0], out int _p{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                     this.{{.Name}} = _p{{.Name}};
                     break;
 {{- end}}

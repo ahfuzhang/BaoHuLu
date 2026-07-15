@@ -233,11 +233,11 @@ type CsMsgTpl struct {
 	Comment         []string // proto message comment lines (without leading //), extension lines stripped
 	CommentLineNums []int    // proto file line numbers for each Comment entry (1-based)
 	Fields          []CsFieldTpl
-	NeedsWrapper bool // true when this message type needs Wrapper classes generated
-	AsMap        bool // true when @AsMap annotation present: single map field, JSON is flat map
-	AsArray      bool // true when @AsArray annotation present: single repeated field, JSON is a bare array
-	UrlValues    bool // true when @UrlValues annotation present: generate ToURLValues/FromURLValues
-	Yaml         bool // true when @yaml annotation present: generate ToYAML/FromYAML methods
+	NeedsWrapper    bool // true when this message type needs Wrapper classes generated
+	AsMap           bool // true when @AsMap annotation present: single map field, JSON is flat map
+	AsArray         bool // true when @AsArray annotation present: single repeated field, JSON is a bare array
+	UrlValues       bool // true when @UrlValues annotation present: generate ToURLValues/FromURLValues
+	Yaml            bool // true when @yaml annotation present: generate ToYAML/FromYAML methods
 }
 
 // ─── generator ────────────────────────────────────────────────────────────────
@@ -261,28 +261,28 @@ func (g *Generator) buildCSField(fd protofile.FieldDef) CsFieldTpl {
 		InlineComment:        fd.InlineComment,
 		InlineCommentLineNum: fd.InlineCommentLineNum,
 		IsMap:                fd.Map,
-		IsRepeated:         fd.Repeated,
-		IsMsg:              fd.IsMsg,
-		IsEnum:             fd.IsEnum,
-		IsString:           fd.Type == "string",
-		IsBytes:            fd.Type == "bytes",
-		IsBool:             fd.Type == "bool",
-		IsSint32:           fd.Type == "sint32",
-		IsSint64:           fd.Type == "sint64",
-		IsFixed32:          fd.Type == "float" || fd.Type == "fixed32" || fd.Type == "sfixed32",
-		IsFixed64:          !isDecimal && (fd.Type == "double" || fd.Type == "fixed64" || fd.Type == "sfixed64"),
-		IsPackable:         fd.Repeated && csIsPackable(fd.Type),
-		WriterType:         g.csWriterType(fd),
-		ReadonlyType:       g.csReadonlyType(fd),
-		LocalType:          g.csReadLocalType(fd),
-		ElemTypeCS:         g.csValType(fd.Type),
-		ReadonlyElemTypeCS: g.csReadonlyValType(fd.Type),
-		MapKey:             fd.MapKey,
-		MapVal:             fd.MapVal,
-		Type:               fd.Type,
-		IsDecimal:          isDecimal,
-		DecimalRound:       fd.DecimalRound,
-		YamlName:           fd.YamlName,
+		IsRepeated:           fd.Repeated,
+		IsMsg:                fd.IsMsg,
+		IsEnum:               fd.IsEnum,
+		IsString:             fd.Type == "string",
+		IsBytes:              fd.Type == "bytes",
+		IsBool:               fd.Type == "bool",
+		IsSint32:             fd.Type == "sint32",
+		IsSint64:             fd.Type == "sint64",
+		IsFixed32:            fd.Type == "float" || fd.Type == "fixed32" || fd.Type == "sfixed32",
+		IsFixed64:            !isDecimal && (fd.Type == "double" || fd.Type == "fixed64" || fd.Type == "sfixed64"),
+		IsPackable:           fd.Repeated && csIsPackable(fd.Type),
+		WriterType:           g.csWriterType(fd),
+		ReadonlyType:         g.csReadonlyType(fd),
+		LocalType:            g.csReadLocalType(fd),
+		ElemTypeCS:           g.csValType(fd.Type),
+		ReadonlyElemTypeCS:   g.csReadonlyValType(fd.Type),
+		MapKey:               fd.MapKey,
+		MapVal:               fd.MapVal,
+		Type:                 fd.Type,
+		IsDecimal:            isDecimal,
+		DecimalRound:         fd.DecimalRound,
+		YamlName:             fd.YamlName,
 	}
 	if fd.Map {
 		f.MapKeyCS = g.csScalarType(fd.MapKey)
@@ -438,6 +438,7 @@ func (g *Generator) RenderCS(out *os.File, namespace string) error {
 func (g *Generator) RenderCSFiles(outDir, baseFileName, namespace string) error {
 	enums := g.buildEnumTpls()
 	msgs, _ := g.buildMsgTpls()
+	needsUrlValues := g.csUrlValuesNeedsSet()
 
 	// Enums file — only when the proto defines enums.
 	if len(enums) > 0 {
@@ -480,8 +481,10 @@ func (g *Generator) RenderCSFiles(outDir, baseFileName, namespace string) error 
 			return fmt.Errorf("render %s: %w", readonlyPath, err)
 		}
 
-		// Xx.UrlValues and ReadonlyXx.UrlValues — only when @UrlValues annotation present.
-		if mt.UrlValues {
+		// Xx.UrlValues and ReadonlyXx.UrlValues — generated for @UrlValues-annotated
+		// messages and every message type they transitively reference, because the
+		// generated code calls ToURLValues/FromURLValues recursively on nested types.
+		if needsUrlValues[mt.Name] {
 			writerUVPath := filepath.Join(outDir, baseFileName+"."+mt.GoName+".UrlValues.cs")
 			wuv, err := os.Create(writerUVPath)
 			if err != nil {
@@ -973,7 +976,7 @@ func (g *Generator) RenderCSBench(out *os.File, namespace, baseFileName string) 
 // (string) into a typed local variable _key of the given C# map-key type. Returns
 // Error on failure.
 func csUrlKeyParse(keyCS, fieldJsonName string) string {
-	errExpr := `return Error.WithLoc(1, "bad key ` + fieldJsonName + `");`
+	errExpr := `return global::QiWa.Common.Error.WithLoc(1, "bad key ` + fieldJsonName + `");`
 	switch keyCS {
 	case "string":
 		return "var _key = _mk;"
@@ -1010,6 +1013,39 @@ func renderCSUrlValuesTmpl(w io.Writer, name string, data CsOneTypeData) error {
 		return err
 	}
 	return tmpl.ExecuteTemplate(w, name, data)
+}
+
+// csUrlValuesNeedsSet computes the transitive closure of message names that need
+// ToURLValues/FromURLValues methods generated. It starts with @UrlValues-annotated
+// messages, then expands to every message type reachable through a direct or
+// repeated message field, because the generated code calls ToURLValues/FromURLValues
+// recursively on those nested types. Map message values are excluded: URL-values
+// serializes them via JsonSerializer, not via ToURLValues/FromURLValues.
+func (g *Generator) csUrlValuesNeedsSet() map[string]bool {
+	needs := make(map[string]bool)
+	for name, md := range g.Messages {
+		if md.UrlValues {
+			needs[name] = true
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for name := range needs {
+			for _, fd := range g.Messages[name].Fields {
+				// Only direct and repeated message fields recurse into
+				// ToURLValues/FromURLValues; map values use JsonSerializer.
+				if fd.Map || !fd.IsMsg {
+					continue
+				}
+				ref := fd.Type
+				if _, ok := g.Messages[ref]; ok && !needs[ref] {
+					needs[ref] = true
+					changed = true
+				}
+			}
+		}
+	}
+	return needs
 }
 
 // ─── C# code template ─────────────────────────────────────────────────────────
@@ -1115,7 +1151,11 @@ func (g *Generator) csYamlNeedsSet() map[string]bool {
 						ref = fd.MapVal
 					}
 				} else if fd.IsMsg {
-					ref = fd.Type
+					// Only recurse into message types defined in this proto; a
+					// type generated by a separate run emits its own YAML methods.
+					if _, ok := g.Messages[fd.Type]; ok {
+						ref = fd.Type
+					}
 				}
 				if ref != "" && !needs[ref] {
 					needs[ref] = true

@@ -59,7 +59,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
         while (_pos < binary.Length)
         {
             if (!TryReadVarint(binary, _pos, out ulong _tagRaw, out int _tagBytes))
-                return Error.WithLoc(1, "failed to read tag");
+                return global::QiWa.Common.Error.WithLoc(1, "failed to read tag");
             _pos += _tagBytes;
             int _fieldNum = (int)(_tagRaw >> 3);
             int _wireType = (int)(_tagRaw & 7);
@@ -70,7 +70,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- if .IsMap}}
                     {
                         if (!TryReadVarint(binary, _pos, out ulong _elen{{.Name}}, out int _elb{{.Name}}))
-                            return Error.WithLoc(1, "bad map {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map {{.Name}}");
                         _pos += _elb{{.Name}};
                         var _entBin{{.Name}} = binary.Slice(_pos, (int)_elen{{.Name}});
 {{- if eq .MapKeyCS "string"}}
@@ -196,7 +196,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                         if (_wireType == WireTypeLenDelim)
                         { // packed
                             if (!TryReadVarint(binary, _pos, out ulong _plen{{.Name}}, out int _plb{{.Name}}))
-                                return Error.WithLoc(1, "bad packed {{.Name}}");
+                                return global::QiWa.Common.Error.WithLoc(1, "bad packed {{.Name}}");
                             _pos += _plb{{.Name}};
                             int _packEnd{{.Name}} = _pos + (int)_plen{{.Name}};
                             while (_pos < _packEnd{{.Name}})
@@ -240,7 +240,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                         { // non-packed single element
 {{- if .IsFixed32}}
                             if (!TryReadFixed32(binary, _pos, out uint _npf32{{.Name}}))
-                                return Error.WithLoc(1, "bad fixed32 {{.Name}}");
+                                return global::QiWa.Common.Error.WithLoc(1, "bad fixed32 {{.Name}}");
 {{- if eq .Type "float"}}
                             _{{.Name}}List.Add(BitConverter.UInt32BitsToSingle(_npf32{{.Name}})); _pos += 4;
 {{- else if eq .Type "sfixed32"}}
@@ -250,7 +250,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
 {{- else if .IsFixed64}}
                             if (!TryReadFixed64(binary, _pos, out ulong _npf64{{.Name}}))
-                                return Error.WithLoc(1, "bad fixed64 {{.Name}}");
+                                return global::QiWa.Common.Error.WithLoc(1, "bad fixed64 {{.Name}}");
 {{- if eq .Type "double"}}
                             _{{.Name}}List.Add(BitConverter.UInt64BitsToDouble(_npf64{{.Name}})); _pos += 8;
 {{- else if eq .Type "sfixed64"}}
@@ -260,19 +260,19 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
 {{- else if .IsBool}}
                             if (!TryReadVarint(binary, _pos, out ulong _npbool{{.Name}}, out int _npboolb{{.Name}}))
-                                return Error.WithLoc(1, "bad bool {{.Name}}");
+                                return global::QiWa.Common.Error.WithLoc(1, "bad bool {{.Name}}");
                             _{{.Name}}List.Add(_npbool{{.Name}} != 0); _pos += _npboolb{{.Name}};
 {{- else if .IsSint32}}
                             if (!TryReadVarint(binary, _pos, out ulong _npsz{{.Name}}, out int _npszb{{.Name}}))
-                                return Error.WithLoc(1, "bad sint32 {{.Name}}");
+                                return global::QiWa.Common.Error.WithLoc(1, "bad sint32 {{.Name}}");
                             _{{.Name}}List.Add(ZigZagDecode32(_npsz{{.Name}})); _pos += _npszb{{.Name}};
 {{- else if .IsSint64}}
                             if (!TryReadVarint(binary, _pos, out ulong _npsz64{{.Name}}, out int _npsz64b{{.Name}}))
-                                return Error.WithLoc(1, "bad sint64 {{.Name}}");
+                                return global::QiWa.Common.Error.WithLoc(1, "bad sint64 {{.Name}}");
                             _{{.Name}}List.Add(ZigZagDecode64(_npsz64{{.Name}})); _pos += _npsz64b{{.Name}};
 {{- else}}
                             if (!TryReadVarint(binary, _pos, out ulong _npv{{.Name}}, out int _npvb{{.Name}}))
-                                return Error.WithLoc(1, "bad varint {{.Name}}");
+                                return global::QiWa.Common.Error.WithLoc(1, "bad varint {{.Name}}");
                             _{{.Name}}List.Add(({{.ElemTypeCS}})_npv{{.Name}}); _pos += _npvb{{.Name}};
 {{- end}}
                         }
@@ -281,17 +281,17 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                         _{{.Name}}List ??= new {{.LocalType}}();
 {{- if .IsString}}
                         if (!TryReadVarint(binary, _pos, out ulong _rslen{{.Name}}, out int _rslb{{.Name}}))
-                            return Error.WithLoc(1, "bad string {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad string {{.Name}}");
                         _pos += _rslb{{.Name}};
                         _{{.Name}}List.Add(Encoding.UTF8.GetString(binary.Slice(_pos, (int)_rslen{{.Name}}))); _pos += (int)_rslen{{.Name}};
 {{- else if .IsBytes}}
                         if (!TryReadVarint(binary, _pos, out ulong _rblen{{.Name}}, out int _rblb{{.Name}}))
-                            return Error.WithLoc(1, "bad bytes {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad bytes {{.Name}}");
                         _pos += _rblb{{.Name}};
                         _{{.Name}}List.Add(binary.Slice(_pos, (int)_rblen{{.Name}}).ToArray()); _pos += (int)_rblen{{.Name}};
 {{- else if .ElemIsMsg}}
                         if (!TryReadVarint(binary, _pos, out ulong _rmlen{{.Name}}, out int _rmlb{{.Name}}))
-                            return Error.WithLoc(1, "bad msg {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad msg {{.Name}}");
                         _pos += _rmlb{{.Name}};
                         {{.ReadonlyElemTypeCS}} _rsub{{.Name}} = default;
                         var _rsuberr{{.Name}} = _rsub{{.Name}}.FromProtobuf(binary.Slice(_pos, (int)_rmlen{{.Name}}));
@@ -299,7 +299,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                         _{{.Name}}List.Add(_rsub{{.Name}}); _pos += (int)_rmlen{{.Name}};
 {{- else}}
                         if (!TryReadVarint(binary, _pos, out ulong _rvar{{.Name}}, out int _rvarb{{.Name}}))
-                            return Error.WithLoc(1, "bad elem {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad elem {{.Name}}");
                         _{{.Name}}List.Add(({{.ElemTypeCS}})_rvar{{.Name}}); _pos += _rvarb{{.Name}};
 {{- end}}
 {{- end}}
@@ -307,7 +307,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsMsg}}
                     {
                         if (!TryReadVarint(binary, _pos, out ulong _mlen{{.Name}}, out int _mlb{{.Name}}))
-                            return Error.WithLoc(1, "bad msg {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad msg {{.Name}}");
                         _pos += _mlb{{.Name}};
 {{- if .UseDirectWrapper}}
                         if (this.{{.Name}} == null) this.{{.Name}} = new {{.EffReadonlyType}}();
@@ -321,7 +321,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsString}}
                     {
                         if (!TryReadVarint(binary, _pos, out ulong _slen{{.Name}}, out int _slb{{.Name}}))
-                            return Error.WithLoc(1, "bad string {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad string {{.Name}}");
                         _pos += _slb{{.Name}};
                         this.{{.Name}} = Encoding.UTF8.GetString(binary.Slice(_pos, (int)_slen{{.Name}}));
                         _pos += (int)_slen{{.Name}};
@@ -329,7 +329,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsBytes}}
                     {
                         if (!TryReadVarint(binary, _pos, out ulong _blen{{.Name}}, out int _blb{{.Name}}))
-                            return Error.WithLoc(1, "bad bytes {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad bytes {{.Name}}");
                         _pos += _blb{{.Name}};
                         this.{{.Name}} = binary.Slice(_pos, (int)_blen{{.Name}}).ToArray();
                         _pos += (int)_blen{{.Name}};
@@ -337,7 +337,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsFixed32}}
                     {
                         if (!TryReadFixed32(binary, _pos, out uint _f32v{{.Name}}))
-                            return Error.WithLoc(1, "bad fixed32 {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad fixed32 {{.Name}}");
 {{- if eq .Type "float"}}
                         this.{{.Name}} = BitConverter.UInt32BitsToSingle(_f32v{{.Name}});
 {{- else if eq .Type "sfixed32"}}
@@ -350,14 +350,14 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsDecimal}}
                     {
                         if (!TryReadFixed64(binary, _pos, out ulong _f64v{{.Name}}))
-                            return Error.WithLoc(1, "bad fixed64 {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad fixed64 {{.Name}}");
                         this.{{.Name}} = Math.Round((decimal)BitConverter.UInt64BitsToDouble(_f64v{{.Name}}), {{.DecimalRound}}, MidpointRounding.AwayFromZero);
                         _pos += 8;
                     }
 {{- else if .IsFixed64}}
                     {
                         if (!TryReadFixed64(binary, _pos, out ulong _f64v{{.Name}}))
-                            return Error.WithLoc(1, "bad fixed64 {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad fixed64 {{.Name}}");
 {{- if eq .Type "double"}}
                         this.{{.Name}} = BitConverter.UInt64BitsToDouble(_f64v{{.Name}});
 {{- else if eq .Type "sfixed64"}}
@@ -370,21 +370,21 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsBool}}
                     {
                         if (!TryReadVarint(binary, _pos, out ulong _boolv{{.Name}}, out int _boolb{{.Name}}))
-                            return Error.WithLoc(1, "bad bool {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad bool {{.Name}}");
                         this.{{.Name}} = _boolv{{.Name}} != 0;
                         _pos += _boolb{{.Name}};
                     }
 {{- else if .IsSint32}}
                     {
                         if (!TryReadVarint(binary, _pos, out ulong _sz32v{{.Name}}, out int _sz32b{{.Name}}))
-                            return Error.WithLoc(1, "bad sint32 {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad sint32 {{.Name}}");
                         this.{{.Name}} = ZigZagDecode32(_sz32v{{.Name}});
                         _pos += _sz32b{{.Name}};
                     }
 {{- else if .IsSint64}}
                     {
                         if (!TryReadVarint(binary, _pos, out ulong _sz64v{{.Name}}, out int _sz64b{{.Name}}))
-                            return Error.WithLoc(1, "bad sint64 {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad sint64 {{.Name}}");
                         this.{{.Name}} = ZigZagDecode64(_sz64v{{.Name}});
                         _pos += _sz64b{{.Name}};
                     }
@@ -392,7 +392,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                     {
                         // varint / enum
                         if (!TryReadVarint(binary, _pos, out ulong _varv{{.Name}}, out int _varb{{.Name}}))
-                            return Error.WithLoc(1, "bad varint {{.Name}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad varint {{.Name}}");
                         this.{{.Name}} = ({{.WriterType}})_varv{{.Name}};
                         _pos += _varb{{.Name}};
                     }
@@ -401,7 +401,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
                 default:
                     if (!SkipField(binary, _pos, _wireType, out int _skip))
-                        return Error.WithLoc(1, "truncated binary data");
+                        return global::QiWa.Common.Error.WithLoc(1, "truncated binary data");
                     _pos += _skip;
                     break;
             }
@@ -431,7 +431,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
         }
         catch (System.Text.Json.JsonException ex)
         {
-            return Error.WithLoc(1, ex.Message);
+            return global::QiWa.Common.Error.WithLoc(1, ex.Message);
         }
     }
 
@@ -448,7 +448,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
         if (reader.TokenType != JsonTokenType.StartArray)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
-                return Error.WithLoc(1, "expected [");
+                return global::QiWa.Common.Error.WithLoc(1, "expected [");
         }
         var _{{$f.Name}}List = this.{{$f.Name}} ?? new {{$f.LocalType}}();
         _{{$f.Name}}List.Clear();
@@ -466,17 +466,17 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if $f.IsBool}}
             _{{$f.Name}}List.Add(reader.ValueSpan.SequenceEqual("true"u8));
 {{- else if eq $f.ElemTypeCS "double"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _arrdv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrdv{{$f.Name}}); }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _arrdv{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrdv{{$f.Name}}); }
 {{- else if eq $f.ElemTypeCS "float"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _arrfv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrfv{{$f.Name}}); }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _arrfv{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrfv{{$f.Name}}); }
 {{- else if $f.IsFixed64}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrfl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(({{$f.ElemTypeCS}})_arrfl{{$f.Name}}); }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrfl{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(({{$f.ElemTypeCS}})_arrfl{{$f.Name}}); }
 {{- else if eq $f.ElemTypeCS "long"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrl{{$f.Name}}); }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrl{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrl{{$f.Name}}); }
 {{- else if eq $f.ElemTypeCS "ulong"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _arrul{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrul{{$f.Name}}); }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _arrul{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(_arrul{{$f.Name}}); }
 {{- else}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _arriv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(({{$f.ElemTypeCS}})_arriv{{$f.Name}}); }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _arriv{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{$f.Name}}"); _{{$f.Name}}List.Add(({{$f.ElemTypeCS}})_arriv{{$f.Name}}); }
 {{- end}}
         }
         this.{{$f.Name}} = _{{$f.Name}}List;
@@ -491,7 +491,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
         if (reader.TokenType != JsonTokenType.StartObject)
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return Error.WithLoc(1, "expected {");
+                return global::QiWa.Common.Error.WithLoc(1, "expected {");
         }
 {{- if .AsMap}}
 {{- $f := index .Fields 0}}
@@ -500,14 +500,14 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             if (reader.TokenType != JsonTokenType.PropertyName)
-                return Error.WithLoc(1, "expected property name");
+                return global::QiWa.Common.Error.WithLoc(1, "expected property name");
 {{- if eq $f.MapKeyCS "string"}}
             string _mke{{$f.Name}} = reader.GetString()!;
 {{- else if eq $f.MapKeyCS "bool"}}
             bool _mke{{$f.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else}}
             if (!Utf8Parser.TryParse(reader.ValueSpan, out {{$f.MapKeyCS}} _mke{{$f.Name}}, out _))
-                return Error.WithLoc(1, "bad map key {{$f.Name}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad map key {{$f.Name}}");
 {{- end}}
             reader.Read();
 {{- if $f.MapValIsMsg}}
@@ -526,21 +526,21 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if eq $f.MapVal "bool"}}
             _{{$f.Name}}Dict[_mke{{$f.Name}}] = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else if eq $f.MapVal "double"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _mvdv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvdv{{$f.Name}}; }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _mvdv{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvdv{{$f.Name}}; }
 {{- else if eq $f.MapVal "float"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _mvfv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvfv{{$f.Name}}; }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _mvfv{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvfv{{$f.Name}}; }
 {{- else if eq $f.MapVal "int64"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
 {{- else if eq $f.MapVal "uint64"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvul{{$f.Name}}; }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvul{{$f.Name}}; }
 {{- else if eq $f.MapVal "sint64"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
 {{- else if eq $f.MapVal "sfixed64"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvl{{$f.Name}}; }
 {{- else if eq $f.MapVal "fixed64"}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvul{{$f.Name}}; }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = _mvul{{$f.Name}}; }
 {{- else}}
-            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _mviv{{$f.Name}}, out _)) return Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = ({{$f.MapValCS}})_mviv{{$f.Name}}; }
+            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _mviv{{$f.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{$f.Name}}"); _{{$f.Name}}Dict[_mke{{$f.Name}}] = ({{$f.MapValCS}})_mviv{{$f.Name}}; }
 {{- end}}
         }
         this.{{$f.Name}} = _{{$f.Name}}Dict;
@@ -561,9 +561,9 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             if (reader.TokenType != JsonTokenType.PropertyName)
-                return Error.WithLoc(1, "expected property name");
+                return global::QiWa.Common.Error.WithLoc(1, "expected property name");
             var _propSpan = reader.ValueSpan;
-            if (!reader.Read()) return Error.WithLoc(1, "unexpected end");
+            if (!reader.Read()) return global::QiWa.Common.Error.WithLoc(1, "unexpected end");
             // JSON null 视为字段未设置：跳过任意类型字段（标量/消息/map/数组）的 null 值。
             if (reader.TokenType == JsonTokenType.Null) { continue; }
 {{- range $i, $f := .Fields}}
@@ -580,7 +580,7 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
                             bool _mke{{.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else}}
                             if (!Utf8Parser.TryParse(reader.ValueSpan, out {{.MapKeyCS}} _mke{{.Name}}, out _))
-                                return Error.WithLoc(1, "bad map key {{.Name}}");
+                                return global::QiWa.Common.Error.WithLoc(1, "bad map key {{.Name}}");
 {{- end}}
                             reader.Read();
 {{- if .MapValIsMsg}}
@@ -599,21 +599,21 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if eq .MapVal "bool"}}
                             _{{.Name}}Dict[_mke{{.Name}}] = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else if eq .MapVal "double"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _mvdv{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvdv{{.Name}}; }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _mvdv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvdv{{.Name}}; }
 {{- else if eq .MapVal "float"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _mvfv{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvfv{{.Name}}; }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _mvfv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvfv{{.Name}}; }
 {{- else if eq .MapVal "int64"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
 {{- else if eq .MapVal "uint64"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvul{{.Name}}; }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvul{{.Name}}; }
 {{- else if eq .MapVal "sint64"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
 {{- else if eq .MapVal "sfixed64"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _mvl{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvl{{.Name}}; }
 {{- else if eq .MapVal "fixed64"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvul{{.Name}}; }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _mvul{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = _mvul{{.Name}}; }
 {{- else}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _mviv{{.Name}}, out _)) return Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = ({{.MapValCS}})_mviv{{.Name}}; }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _mviv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad map value {{.Name}}"); _{{.Name}}Dict[_mke{{.Name}}] = ({{.MapValCS}})_mviv{{.Name}}; }
 {{- end}}
                         }
                     }
@@ -637,17 +637,17 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsBool}}
                             _{{.Name}}List.Add(reader.ValueSpan.SequenceEqual("true"u8));
 {{- else if eq .ElemTypeCS "double"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _arrdv{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrdv{{.Name}}); }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _arrdv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrdv{{.Name}}); }
 {{- else if eq .ElemTypeCS "float"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _arrfv{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrfv{{.Name}}); }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _arrfv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrfv{{.Name}}); }
 {{- else if .IsFixed64}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrfl{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(({{.ElemTypeCS}})_arrfl{{.Name}}); }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrfl{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(({{.ElemTypeCS}})_arrfl{{.Name}}); }
 {{- else if eq .ElemTypeCS "long"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrl{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrl{{.Name}}); }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _arrl{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrl{{.Name}}); }
 {{- else if eq .ElemTypeCS "ulong"}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _arrul{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrul{{.Name}}); }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _arrul{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(_arrul{{.Name}}); }
 {{- else}}
-                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _arriv{{.Name}}, out _)) return Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(({{.ElemTypeCS}})_arriv{{.Name}}); }
+                            { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _arriv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad list elem {{.Name}}"); _{{.Name}}List.Add(({{.ElemTypeCS}})_arriv{{.Name}}); }
 {{- end}}
                         }
                     }
@@ -669,21 +669,21 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- else if .IsBool}}
                     this.{{.Name}} = reader.ValueSpan.SequenceEqual("true"u8);
 {{- else if .IsEnum}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _ev{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_ev{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _ev{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_ev{{.Name}}; }
 {{- else if .IsDecimal}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = Math.Round((decimal)_dv{{.Name}}, {{.DecimalRound}}, MidpointRounding.AwayFromZero); }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = Math.Round((decimal)_dv{{.Name}}, {{.DecimalRound}}, MidpointRounding.AwayFromZero); }
 {{- else if eq .WriterType "double"}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _dv{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out double _dv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _dv{{.Name}}; }
 {{- else if eq .WriterType "float"}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _fv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _fv{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out float _fv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _fv{{.Name}}; }
 {{- else if .IsFixed64}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_fl{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_fl{{.Name}}; }
 {{- else if eq .WriterType "long"}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _fl{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out long _fl{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _fl{{.Name}}; }
 {{- else if eq .WriterType "ulong"}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _ful{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _ful{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out ulong _ful{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = _ful{{.Name}}; }
 {{- else}}
-                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _iv{{.Name}}, out _)) return Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_iv{{.Name}}; }
+                    { if (!Utf8Parser.TryParse(reader.ValueSpan, out int _iv{{.Name}}, out _)) return global::QiWa.Common.Error.WithLoc(1, "bad {{.Name}}"); this.{{.Name}} = ({{.WriterType}})_iv{{.Name}}; }
 {{- end}}
 {{- end}}
             else { reader.Skip(); }
@@ -808,13 +808,13 @@ public partial struct Readonly{{$goName}} : IResettable, IDecoder
 {{- end}}
     }
 }
-{{- if .NeedsWrapper}}
+
 
 public class Readonly{{$goName}}Wrapper
 {
     public Readonly{{$goName}} Value;
 }
-{{- end}}
+
 {{end}}
 {{- define "CsWriterBlock"}}
 {{- $goName := .GoName}}
@@ -1655,13 +1655,13 @@ public partial struct {{$goName}} : IResettable, IEncoder
 {{- end}}
     }
 }
-{{- if .NeedsWrapper}}
+
 
 public class {{$goName}}Wrapper
 {
     public {{$goName}} Value;
 }
-{{- end}}
+
 {{end}}
 {{- define "CsTagsWriterFile"}}{{template "CsFileHeader" .}}
 {{with .Msg}}

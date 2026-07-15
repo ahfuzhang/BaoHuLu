@@ -70,8 +70,12 @@ public partial struct {{$goName}}
                         .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t") + "\"";
             return s;
         }
+{{- if .Comment}}
+        int _msgCmtMark = _dst.Length;
 {{- range $i, $line := .Comment}}
         _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $msgCmtNums $i $line}});
+{{- end}}
+        int _msgCmtBody = _dst.Length;
 {{- end}}
 {{- if .AsArray}}
 {{- $fa := index .Fields 0}}
@@ -183,6 +187,7 @@ public partial struct {{$goName}}
 {{- if .UseDirectWrapper}}
         if (this.{{.Name}} != null)
         {
+            int _mark{{.Name}} = _dst.Length;
 {{- range $i, $line := $cmt}}
             _dst.Append(_sp); _dst.Append("#"); _dst.Append({{csYamlCommentExpr $goName $cmtNums $i $line}});
 {{- end}}
@@ -191,7 +196,9 @@ public partial struct {{$goName}}
 {{- else}}
             _dst.Append(_sp); _dst.Append({{if $hasYamlNames}}_{{$goName}}_YamlKeys.{{.Name}} + ":\n"{{else}}"{{yamlKey .}}:\n"{{end}});
 {{- end}}
+            int _hdr{{.Name}} = _dst.Length;
             this.{{.Name}}.Value.ToYAML(ref _dst, _indent + 2);
+            if (_dst.Length == _hdr{{.Name}}) _dst.Length = _mark{{.Name}};
         }
 {{- else}}
         {
@@ -316,7 +323,11 @@ public partial struct {{$goName}}
         }
 {{- end}}
 {{end}}
-{{- end}}    }
+{{- end}}
+{{- if .Comment}}
+        if (_dst.Length == _msgCmtBody) _dst.Length = _msgCmtMark;
+{{- end}}
+    }
 }
 {{end}}{{end}}
 {{- define "CsYamlReadonlyFile"}}{{template "CsYamlFileHeader" .}}
@@ -588,37 +599,37 @@ public partial struct Readonly{{$goName}}
             _list{{$fa.Name}}.Add(_unquoteStr(_item));
 {{- else if eq $fa.Type "bytes"}}
             if (!_decodeBase64(_item, out byte[] _bitem{{$fa.Name}}))
-                return Error.WithLoc(1, "bad base64 {{yamlKey $fa}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad base64 {{yamlKey $fa}}");
             _list{{$fa.Name}}.Add(_bitem{{$fa.Name}});
 {{- else if eq $fa.Type "bool"}}
             _list{{$fa.Name}}.Add(_isTrue(_item));
 {{- else if eq $fa.Type "double"}}
             if (!_parseDouble(_item, out double _vd{{$fa.Name}}))
-                return Error.WithLoc(1, "bad double {{yamlKey $fa}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad double {{yamlKey $fa}}");
             _list{{$fa.Name}}.Add(_vd{{$fa.Name}});
 {{- else if eq $fa.Type "float"}}
             if (!_parseFloat(_item, out float _vf{{$fa.Name}}))
-                return Error.WithLoc(1, "bad float {{yamlKey $fa}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad float {{yamlKey $fa}}");
             _list{{$fa.Name}}.Add(_vf{{$fa.Name}});
 {{- else if or (eq $fa.Type "uint64") (eq $fa.Type "fixed64")}}
             if (!_parseULong(_item, out ulong _vu{{$fa.Name}}))
-                return Error.WithLoc(1, "bad uint64 {{yamlKey $fa}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad uint64 {{yamlKey $fa}}");
             _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_vu{{$fa.Name}});
 {{- else if or (eq $fa.Type "uint32") (eq $fa.Type "fixed32")}}
             if (!_parseUInt(_item, out uint _vui{{$fa.Name}}))
-                return Error.WithLoc(1, "bad uint32 {{yamlKey $fa}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad uint32 {{yamlKey $fa}}");
             _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_vui{{$fa.Name}});
 {{- else if or (eq $fa.Type "int64") (eq $fa.Type "sint64") (eq $fa.Type "sfixed64")}}
             if (!_parseLong(_item, out long _vl{{$fa.Name}}))
-                return Error.WithLoc(1, "bad int64 {{yamlKey $fa}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad int64 {{yamlKey $fa}}");
             _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_vl{{$fa.Name}});
 {{- else if $fa.IsEnum}}
             if (!_parseInt(_item, out int _ve{{$fa.Name}}))
-                return Error.WithLoc(1, "bad enum {{yamlKey $fa}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad enum {{yamlKey $fa}}");
             _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_ve{{$fa.Name}});
 {{- else}}
             if (!_parseInt(_item, out int _vi{{$fa.Name}}))
-                return Error.WithLoc(1, "bad int {{yamlKey $fa}}");
+                return global::QiWa.Common.Error.WithLoc(1, "bad int {{yamlKey $fa}}");
             _list{{$fa.Name}}.Add(({{$fa.ElemTypeCS}})_vi{{$fa.Name}});
 {{- end}}
 {{- end}}
@@ -666,16 +677,16 @@ public partial struct Readonly{{$goName}}
                         bool _mk = _isTrue(_mkBytes);
 {{- else if eq .MapKeyCS "ulong"}}
                         if (!_parseULong(_mkBytes, out ulong _mk))
-                            return Error.WithLoc(1, "bad map key {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map key {{yamlKey .}}");
 {{- else if eq .MapKeyCS "long"}}
                         if (!_parseLong(_mkBytes, out long _mk))
-                            return Error.WithLoc(1, "bad map key {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map key {{yamlKey .}}");
 {{- else if eq .MapKeyCS "uint"}}
                         if (!_parseUInt(_mkBytes, out uint _mk))
-                            return Error.WithLoc(1, "bad map key {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map key {{yamlKey .}}");
 {{- else}}
                         if (!_parseInt(_mkBytes, out int _mk))
-                            return Error.WithLoc(1, "bad map key {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map key {{yamlKey .}}");
 {{- end}}
                         ReadOnlySpan<byte> _entryBytes = _collectIndentedBlock(_sub, _sStarts, _sEnds, _sbase, ref _mj);
                         var _mval{{.Name}} = new {{.WrapReadonlyMapValCS}}();
@@ -701,48 +712,48 @@ public partial struct Readonly{{$goName}}
                         bool _dk = _isTrue(_dkBytes);
 {{- else if eq .MapKeyCS "ulong"}}
                         if (!_parseULong(_dkBytes, out ulong _dk))
-                            return Error.WithLoc(1, "bad map key {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map key {{yamlKey .}}");
 {{- else if eq .MapKeyCS "long"}}
                         if (!_parseLong(_dkBytes, out long _dk))
-                            return Error.WithLoc(1, "bad map key {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map key {{yamlKey .}}");
 {{- else if eq .MapKeyCS "uint"}}
                         if (!_parseUInt(_dkBytes, out uint _dk))
-                            return Error.WithLoc(1, "bad map key {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map key {{yamlKey .}}");
 {{- else}}
                         if (!_parseInt(_dkBytes, out int _dk))
-                            return Error.WithLoc(1, "bad map key {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad map key {{yamlKey .}}");
 {{- end}}
 {{- if eq .MapVal "string"}}
                         _dict{{.Name}}[_dk] = _unquoteStr(_mv);
 {{- else if eq .MapVal "bytes"}}
                         if (!_decodeBase64(_mv, out byte[] _bv{{.Name}}))
-                            return Error.WithLoc(1, "bad base64 {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad base64 {{yamlKey .}}");
                         _dict{{.Name}}[_dk] = _bv{{.Name}};
 {{- else if eq .MapVal "bool"}}
                         _dict{{.Name}}[_dk] = _isTrue(_mv);
 {{- else if eq .MapVal "double"}}
                         if (!_parseDouble(_mv, out double _mvd{{.Name}}))
-                            return Error.WithLoc(1, "bad double {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad double {{yamlKey .}}");
                         _dict{{.Name}}[_dk] = _mvd{{.Name}};
 {{- else if eq .MapVal "float"}}
                         if (!_parseFloat(_mv, out float _mvf{{.Name}}))
-                            return Error.WithLoc(1, "bad float {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad float {{yamlKey .}}");
                         _dict{{.Name}}[_dk] = _mvf{{.Name}};
 {{- else if or (eq .MapVal "uint64") (eq .MapVal "fixed64")}}
                         if (!_parseULong(_mv, out ulong _mvu{{.Name}}))
-                            return Error.WithLoc(1, "bad uint64 {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad uint64 {{yamlKey .}}");
                         _dict{{.Name}}[_dk] = ({{.MapValCS}})_mvu{{.Name}};
 {{- else if or (eq .MapVal "int64") (eq .MapVal "sint64") (eq .MapVal "sfixed64")}}
                         if (!_parseLong(_mv, out long _mvl{{.Name}}))
-                            return Error.WithLoc(1, "bad int64 {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad int64 {{yamlKey .}}");
                         _dict{{.Name}}[_dk] = ({{.MapValCS}})_mvl{{.Name}};
 {{- else if or (eq .MapVal "uint32") (eq .MapVal "fixed32")}}
                         if (!_parseUInt(_mv, out uint _mvui{{.Name}}))
-                            return Error.WithLoc(1, "bad uint32 {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad uint32 {{yamlKey .}}");
                         _dict{{.Name}}[_dk] = ({{.MapValCS}})_mvui{{.Name}};
 {{- else}}
                         if (!_parseInt(_mv, out int _mvi{{.Name}}))
-                            return Error.WithLoc(1, "bad int {{yamlKey .}}");
+                            return global::QiWa.Common.Error.WithLoc(1, "bad int {{yamlKey .}}");
                         _dict{{.Name}}[_dk] = ({{.MapValCS}})_mvi{{.Name}};
 {{- end}}
                     }
@@ -783,37 +794,37 @@ public partial struct Readonly{{$goName}}
                     _list{{.Name}}.Add(_unquoteStr(_item));
 {{- else if eq .Type "bytes"}}
                     if (!_decodeBase64(_item, out byte[] _bitem{{.Name}}))
-                        return Error.WithLoc(1, "bad base64 {{yamlKey .}}");
+                        return global::QiWa.Common.Error.WithLoc(1, "bad base64 {{yamlKey .}}");
                     _list{{.Name}}.Add(_bitem{{.Name}});
 {{- else if eq .Type "bool"}}
                     _list{{.Name}}.Add(_isTrue(_item));
 {{- else if eq .Type "double"}}
                     if (!_parseDouble(_item, out double _vd{{.Name}}))
-                        return Error.WithLoc(1, "bad double {{yamlKey .}}");
+                        return global::QiWa.Common.Error.WithLoc(1, "bad double {{yamlKey .}}");
                     _list{{.Name}}.Add(_vd{{.Name}});
 {{- else if eq .Type "float"}}
                     if (!_parseFloat(_item, out float _vf{{.Name}}))
-                        return Error.WithLoc(1, "bad float {{yamlKey .}}");
+                        return global::QiWa.Common.Error.WithLoc(1, "bad float {{yamlKey .}}");
                     _list{{.Name}}.Add(_vf{{.Name}});
 {{- else if or (eq .Type "uint64") (eq .Type "fixed64")}}
                     if (!_parseULong(_item, out ulong _vu{{.Name}}))
-                        return Error.WithLoc(1, "bad uint64 {{yamlKey .}}");
+                        return global::QiWa.Common.Error.WithLoc(1, "bad uint64 {{yamlKey .}}");
                     _list{{.Name}}.Add(({{.ElemTypeCS}})_vu{{.Name}});
 {{- else if or (eq .Type "uint32") (eq .Type "fixed32")}}
                     if (!_parseUInt(_item, out uint _vui{{.Name}}))
-                        return Error.WithLoc(1, "bad uint32 {{yamlKey .}}");
+                        return global::QiWa.Common.Error.WithLoc(1, "bad uint32 {{yamlKey .}}");
                     _list{{.Name}}.Add(({{.ElemTypeCS}})_vui{{.Name}});
 {{- else if or (eq .Type "int64") (eq .Type "sint64") (eq .Type "sfixed64")}}
                     if (!_parseLong(_item, out long _vl{{.Name}}))
-                        return Error.WithLoc(1, "bad int64 {{yamlKey .}}");
+                        return global::QiWa.Common.Error.WithLoc(1, "bad int64 {{yamlKey .}}");
                     _list{{.Name}}.Add(({{.ElemTypeCS}})_vl{{.Name}});
 {{- else if .IsEnum}}
                     if (!_parseInt(_item, out int _ve{{.Name}}))
-                        return Error.WithLoc(1, "bad enum {{yamlKey .}}");
+                        return global::QiWa.Common.Error.WithLoc(1, "bad enum {{yamlKey .}}");
                     _list{{.Name}}.Add(({{.ElemTypeCS}})_ve{{.Name}});
 {{- else}}
                     if (!_parseInt(_item, out int _vi{{.Name}}))
-                        return Error.WithLoc(1, "bad int {{yamlKey .}}");
+                        return global::QiWa.Common.Error.WithLoc(1, "bad int {{yamlKey .}}");
                     _list{{.Name}}.Add(({{.ElemTypeCS}})_vi{{.Name}});
 {{- end}}
                 }
@@ -836,7 +847,7 @@ public partial struct Readonly{{$goName}}
 {{- else if .IsDecimal}}
             {
                 if (!_parseDouble(_valBytes, out double _dval{{.Name}}))
-                    return Error.WithLoc(1, "bad decimal {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad decimal {{yamlKey .}}");
                 this.{{.Name}} = Math.Round((decimal)_dval{{.Name}}, {{.DecimalRound}}, MidpointRounding.AwayFromZero);
                 continue;
             }
@@ -853,56 +864,56 @@ public partial struct Readonly{{$goName}}
 {{- else if .IsBytes}}
             {
                 if (!_decodeBase64(_valBytes, out byte[] _bval{{.Name}}))
-                    return Error.WithLoc(1, "bad base64 {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad base64 {{yamlKey .}}");
                 this.{{.Name}} = _bval{{.Name}};
                 continue;
             }
 {{- else if eq .Type "double"}}
             {
                 if (!_parseDouble(_valBytes, out double _dv{{.Name}}))
-                    return Error.WithLoc(1, "bad double {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad double {{yamlKey .}}");
                 this.{{.Name}} = _dv{{.Name}};
                 continue;
             }
 {{- else if eq .Type "float"}}
             {
                 if (!_parseFloat(_valBytes, out float _fv{{.Name}}))
-                    return Error.WithLoc(1, "bad float {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad float {{yamlKey .}}");
                 this.{{.Name}} = _fv{{.Name}};
                 continue;
             }
 {{- else if or (eq .Type "uint64") (eq .Type "fixed64")}}
             {
                 if (!_parseULong(_valBytes, out ulong _uv{{.Name}}))
-                    return Error.WithLoc(1, "bad uint64 {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad uint64 {{yamlKey .}}");
                 this.{{.Name}} = ({{.ReadonlyType}})_uv{{.Name}};
                 continue;
             }
 {{- else if or (eq .Type "uint32") (eq .Type "fixed32")}}
             {
                 if (!_parseUInt(_valBytes, out uint _uiv{{.Name}}))
-                    return Error.WithLoc(1, "bad uint32 {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad uint32 {{yamlKey .}}");
                 this.{{.Name}} = ({{.ReadonlyType}})_uiv{{.Name}};
                 continue;
             }
 {{- else if or (eq .Type "int64") (eq .Type "sint64") (eq .Type "sfixed64")}}
             {
                 if (!_parseLong(_valBytes, out long _lv{{.Name}}))
-                    return Error.WithLoc(1, "bad int64 {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad int64 {{yamlKey .}}");
                 this.{{.Name}} = ({{.ReadonlyType}})_lv{{.Name}};
                 continue;
             }
 {{- else if .IsEnum}}
             {
                 if (!_parseInt(_valBytes, out int _ev{{.Name}}))
-                    return Error.WithLoc(1, "bad enum {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad enum {{yamlKey .}}");
                 this.{{.Name}} = ({{.ReadonlyType}})_ev{{.Name}};
                 continue;
             }
 {{- else}}
             {
                 if (!_parseInt(_valBytes, out int _iv{{.Name}}))
-                    return Error.WithLoc(1, "bad int {{yamlKey .}}");
+                    return global::QiWa.Common.Error.WithLoc(1, "bad int {{yamlKey .}}");
                 this.{{.Name}} = ({{.ReadonlyType}})_iv{{.Name}};
                 continue;
             }

@@ -169,3 +169,12 @@
 * 问题
   - 一个 proto 文件，只能有一个 service
   - bug: ToURLValues() 应该是传染性的，父类型带了这个标记，子类型也应该带这个标记
+  - 需要支持 RawJson 类型，因为业务有的情况下可能不知道详细定义是什么
+  - 空 message 类型需要合理的处理
+  - bug: ToURLValues() 中为什么会有 json 序列化的逻辑?
+* 待对比的库
+  - https://github.com/go-faster/jx
+  - https://github.com/goccy/go-json
+* 精简
+  - golang / csharp: 元数据的结构体用同一套，仅模板文件不同
+    

@@ -1,3 +1,6 @@
+* 2026-07-22:
+  - csharp:
+    - bug fix: 解决 url values 中因为使用 JsonSerializer.Serialize 而带来的 AOT 编译告警。
 * 2026-07-15: v0.16.0
   - csharp:
     - bug fix: 当某个 message 中包含了不在当前 proto 文件中的 message 时，程序会生成一个空的 message 的处理代码。

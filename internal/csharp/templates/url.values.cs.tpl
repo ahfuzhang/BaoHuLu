@@ -7,7 +7,6 @@ using System;
 using System.Collections.Generic;
 using System.Web;
 using System.Text;
-using System.Text.Json;
 using QiWa.Common;
 
 namespace {{.Namespace}};
@@ -46,9 +45,9 @@ public partial struct {{$goName}}
 {{- end}}
                 _mapBuf{{.Name}}.Append((byte)'=');
 {{- if .UseMapValWrapper}}
-                _mapBuf{{.Name}}.Append(JsonSerializer.Serialize(_kv.Value.Value));
+                _kv.Value.Value.ToJSON(ref _mapBuf{{.Name}});
 {{- else if .MapValIsMsg}}
-                _mapBuf{{.Name}}.Append(JsonSerializer.Serialize(_kv.Value));
+                _kv.Value.ToJSON(ref _mapBuf{{.Name}});
 {{- else if eq .MapValCS "string"}}
                 _mapBuf{{.Name}}.Append(_kv.Value ?? "");
 {{- else if eq .MapValCS "byte[]"}}
@@ -272,7 +271,9 @@ public partial struct Readonly{{$goName}}
                         var _mv = _meq < 0 ? "" : _part.Substring(_meq + 1);
                         {{csUrlKeyParse .MapKeyCS .JsonName}}
 {{- if .UseMapValWrapper}}
-                        var _mval{{.Name}} = JsonSerializer.Deserialize<{{.ReadonlyMapValCS}}>(_mv);
+                        var _mval{{.Name}} = new {{.ReadonlyMapValCS}}();
+                        var _mvalErr{{.Name}} = _mval{{.Name}}.FromJSON(Encoding.UTF8.GetBytes(_mv));
+                        if (_mvalErr{{.Name}}.Err()) return _mvalErr{{.Name}};
                         _dict{{.Name}}[_key] = new {{.WrapReadonlyMapValCS}} { Value = _mval{{.Name}} };
 {{- else if eq .MapValCS "string"}}
                         _dict{{.Name}}[_key] = _mv;
@@ -281,7 +282,10 @@ public partial struct Readonly{{$goName}}
 {{- else if eq .MapValCS "bool"}}
                         _dict{{.Name}}[_key] = _mv == "true" || _mv == "1";
 {{- else if .MapValIsMsg}}
-                        _dict{{.Name}}[_key] = JsonSerializer.Deserialize<{{.ReadonlyMapValCS}}>(_mv);
+                        var _mval{{.Name}} = new {{.ReadonlyMapValCS}}();
+                        var _mvalErr{{.Name}} = _mval{{.Name}}.FromJSON(Encoding.UTF8.GetBytes(_mv));
+                        if (_mvalErr{{.Name}}.Err()) return _mvalErr{{.Name}};
+                        _dict{{.Name}}[_key] = _mval{{.Name}};
 {{- else if .MapValIsEnum}}
                         if (!int.TryParse(_mv, out int _mvi{{.Name}})) return global::QiWa.Common.Error.WithLoc(1, "bad value {{.JsonName}}");
                         _dict{{.Name}}[_key] = ({{.ReadonlyMapValCS}})_mvi{{.Name}};

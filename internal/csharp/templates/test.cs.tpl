@@ -349,7 +349,7 @@ public class {{$goName}}Tests
     public void StdlibJSONRoundtrip_PreservesAllFields()
     {
         var expected = MakeSample{{$goName}}();
-        var json = JsonSerializer.Serialize(expected, {{$baseFileName}}TestValidate.JsonOptions);
+        var json = JsonSerializer.Serialize<{{$goName}}>(expected, {{$baseFileName}}TestValidate.JsonOptions);
         var actual = JsonSerializer.Deserialize<{{$goName}}>(json, {{$baseFileName}}TestValidate.JsonOptions);
 
         {{$baseFileName}}TestValidate.Compare{{$goName}}(expected, actual);

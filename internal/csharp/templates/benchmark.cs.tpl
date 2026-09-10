@@ -360,7 +360,7 @@ public class JsonEncode_{{$goName}}
     [Benchmark(Description = "System.Text.Json.Serialize")]
     public string SystemTextJson_Serialize()
     {
-        return JsonSerializer.Serialize(_writer, {{$baseFileName}}BenchValidate.JsonOptions);
+        return JsonSerializer.Serialize<{{$goName}}>(_writer, {{$baseFileName}}BenchValidate.JsonOptions);
     }
 }
 
@@ -405,7 +405,7 @@ public class JsonDecode_{{$goName}}
         jBuf.Dispose();
 
         // System.Text.Json format (PascalCase property names)
-        _stdJsonBytes = JsonSerializer.SerializeToUtf8Bytes(w, {{$baseFileName}}BenchValidate.JsonOptions);
+        _stdJsonBytes = JsonSerializer.SerializeToUtf8Bytes<{{$goName}}>(w, {{$baseFileName}}BenchValidate.JsonOptions);
     }
 
     /// <summary>

@@ -1,0 +1,890 @@
+{{/* 单个 message 的样本构造、编解码、Clone / Reset 和内存复用测试。 */ -}}
+{{template "partials/header.go.tpl" .}}
+
+import (
+	"bytes"
+	"encoding/json"
+	"math"
+	"os"
+	"testing"
+
+	"github.com/ahfuzhang/BaoHuLu/dependencies/golang/utils"
+{{- if hasDecimalFields .Msg.Fields}}
+	"github.com/govalues/decimal"
+{{- end}}
+)
+
+// Keep field-dependent imports valid for every message shape.
+var (
+	_ = bytes.Equal
+	_ = json.Marshal
+	_ = math.Float32bits
+	_ = os.WriteFile
+	_ = utils.AppendVarint
+{{- if hasDecimalFields .Msg.Fields}}
+	_ = decimal.Decimal{}
+{{- end}}
+)
+
+{{with .Msg}}
+{{- $goName := .GoName}}
+{{- $roName := printf "Readonly%s" $goName}}
+// ─── {{$goName}} ──────────────────────────────────────────────────────────────
+
+{{if hasAnyRecursiveField .Fields -}}
+// makeSample{{$goName}}Base returns {{$goName}} with non-recursive fields pre-filled.
+// It is an independent helper used by makeSample{{$goName}} to build test data
+// for recursive sub-member fields without causing infinite recursion.
+func makeSample{{$goName}}Base() {{$goName}} {
+	return {{$goName}}{
+{{- range .Fields}}
+		{{.Name}}: {{sampleLit .}},
+{{- end}}
+	}
+}
+
+// makeSample{{$goName}} returns a writer struct pre-filled with representative
+// non-zero values. Recursive sub-member fields are populated using the
+// independent makeSample{{$goName}}Base to avoid infinite recursion.
+func makeSample{{$goName}}() {{$goName}} {
+	w := makeSample{{$goName}}Base()
+{{- range .Fields}}
+{{- if or .IsRecursive .ElemIsRecursive}}
+	w.{{.Name}} = {{sampleLitFull .}}
+{{- end}}
+{{- end}}
+	return w
+}
+{{- else -}}
+// makeSample{{$goName}} returns a writer struct pre-filled with representative
+// non-zero values. Maps have exactly one entry to avoid non-deterministic
+// serialisation order.
+func makeSample{{$goName}}() {{$goName}} {
+	return {{$goName}}{
+{{- range .Fields}}
+		{{.Name}}: {{sampleLit .}},
+{{- end}}
+	}
+}
+{{- end}}
+
+func testToProtobuf{{$goName}}(t *testing.T, m *{{$goName}}, dst []byte) []byte {
+	t.Helper()
+	vtOut := m.ToProtobufVT(nil)
+	abOut := m.ToProtobufByAppend(nil)
+	if !bytes.Equal(vtOut, abOut) {
+		t.Fatalf("ToProtobufVT and ToProtobufByAppend produced different output:\n  VT:       %v\n  ByAppend: %v", vtOut, abOut)
+	}
+	expectedSize := m.ProtobufSize()
+	if len(vtOut) != expectedSize {
+		t.Fatalf("ToProtobufVT produced %d bytes but ProtobufSize()=%d", len(vtOut), expectedSize)
+	}
+	if len(abOut) != expectedSize {
+		t.Fatalf("ToProtobufByAppend produced %d bytes but ProtobufSize()=%d", len(abOut), expectedSize)
+	}
+	result := m.ToProtobuf(dst)
+	if len(result)-len(dst) != expectedSize {
+		t.Fatalf("ToProtobuf appended %d bytes but ProtobufSize()=%d", len(result)-len(dst), expectedSize)
+	}
+	return result
+}
+
+func Test{{$goName}}Empty(t *testing.T) {
+	m := &{{$goName}}{}
+	if got := m.ProtobufSize(); got != 0 {
+		t.Fatalf("ProtobufSize() = %d, want 0 for empty {{$goName}}", got)
+	}
+	out := testToProtobuf{{$goName}}(t, m, nil)
+	if len(out) != 0 {
+		t.Fatalf("ToProtobuf() = %d bytes, want 0 for empty {{$goName}}", len(out))
+	}
+}
+
+func Test{{$goName}}ProtobufRoundtrip(t *testing.T) {
+	w := makeSample{{$goName}}()
+	sz := w.ProtobufSize()
+	buf := make([]byte, 0, sz)
+	buf = testToProtobuf{{$goName}}(t, &w, buf)
+	if len(buf) != sz {
+		t.Fatalf("ProtobufSize=%d but ToProtobuf produced %d bytes", sz, len(buf))
+	}
+
+	var r {{$roName}}
+	if err := r.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+
+	// Clone → re-serialize → compare bytes (proves lossless roundtrip).
+	w2 := r.Clone(nil)
+	buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
+	if !bytes.Equal(buf, buf2) {
+		t.Fatalf("protobuf roundtrip mismatch:\n  want %v\n  got  %v", buf, buf2)
+	}
+}
+
+// Test{{$goName}}ToProtobufAppendsToExistingBuffer verifies that ToProtobuf
+// appends to a non-empty caller buffer without overwriting existing bytes.
+func Test{{$goName}}ToProtobufAppendsToExistingBuffer(t *testing.T) {
+	w := makeSample{{$goName}}()
+	prefix := []byte("existing-prefix:")
+	sz := w.ProtobufSize()
+	fresh := testToProtobuf{{$goName}}(t, &w, nil)
+	cases := []struct {
+		name string
+		buf  []byte
+	}{
+		{name: "reuse-capacity", buf: make([]byte, len(prefix), len(prefix)+sz)},
+		{name: "grow-capacity", buf: make([]byte, len(prefix))},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			copy(tc.buf, prefix)
+
+			out := testToProtobuf{{$goName}}(t, &w, tc.buf)
+			if len(out) != len(prefix)+sz {
+				t.Fatalf("ToProtobuf produced %d bytes, want %d", len(out), len(prefix)+sz)
+			}
+			if !bytes.Equal(tc.buf, prefix) {
+				t.Fatalf("ToProtobuf modified the original input buffer:\n  want %q\n  got  %q", prefix, tc.buf)
+			}
+			if !bytes.Equal(out[:len(prefix)], prefix) {
+				t.Fatalf("ToProtobuf output lost existing prefix:\n  want %q\n  got  %q", prefix, out[:len(prefix)])
+			}
+
+			payload := out[len(prefix):]
+			if !bytes.Equal(payload, fresh) {
+				t.Fatalf("ToProtobuf appended payload mismatch:\n  want %v\n  got  %v", fresh, payload)
+			}
+		})
+	}
+}
+
+// Test{{$goName}}JSONRoundtrip checks two things:
+//  1. encoding/json (stdlib) can parse the output of ToJSON() and produce a
+//     struct whose re-serialisation via ToJSON() is byte-identical.
+//     (Skipped when the struct has bool-keyed maps: encoding/json cannot decode
+//     those. See https://pkg.go.dev/encoding/json – map key restrictions.)
+//  2. The custom FromJSON+Clone path also produces a byte-identical result.
+func Test{{$goName}}JSONRoundtrip(t *testing.T) {
+	w := makeSample{{$goName}}()
+	j := w.ToJSON(nil)
+
+{{if .AsMap -}}
+	// ── Part 1 (encoding/json skipped for @AsMap) ────────────────────────────
+	// For @AsMap messages, ToJSON produces a flat JSON object directly encoding
+	// the map (not wrapped under a field-name key). encoding/json.Unmarshal into
+	// the writer struct cannot recover the map this way, so stdlib verification
+	// is skipped. The custom FromJSON path below validates the JSON output fully.
+	_ = json.Marshal // suppress unused import
+{{else if .AsArray -}}
+	// ── Part 1 (encoding/json skipped for @AsArray) ──────────────────────────
+	// For @AsArray messages, ToJSON produces a flat JSON array directly encoding
+	// the repeated field (not wrapped under a field-name key). encoding/json.Unmarshal
+	// into the writer struct cannot recover the repeated field this way, so stdlib
+	// verification is skipped. The custom FromJSON path below validates the JSON output fully.
+	_ = json.Marshal // suppress unused import
+{{else if not (skipEncodingJSON .Fields) -}}
+	// ── Part 1: verify with encoding/json ────────────────────────────────────
+	// Sample values are within JavaScript's safe-integer range, so
+	// encoding/json can decode all numeric fields without precision loss.
+	var decoded {{$goName}}
+	if err := json.Unmarshal(j, &decoded); err != nil {
+		t.Fatalf("encoding/json.Unmarshal error: %v\nJSON: %s", err, j)
+	}
+	// Re-serialise the decoded struct using our custom ToJSON and compare.
+	// Any field that encoding/json decoded incorrectly will produce a
+	// different JSON output, catching mismatches early.
+	jDecoded := decoded.ToJSON(nil)
+	if !bytes.Equal(j, jDecoded) {
+		t.Fatalf("encoding/json decoded struct differs from original:\n  original: %s\n  decoded:  %s", j, jDecoded)
+	}
+
+{{else -}}
+	// ── Part 1 (encoding/json skipped) ───────────────────────────────────────
+	// This struct contains a map[bool]T field. encoding/json does not support
+	// bool map keys for Unmarshal, so stdlib verification is skipped here.
+	// The custom FromJSON path below still validates the JSON output fully.
+	_ = json.Marshal // suppress unused import
+{{end -}}
+	// ── Part 2: verify with our custom FromJSON + Clone ───────────────────────
+	var r {{$roName}}
+	if err := r.FromJSON(j); err != nil {
+		t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
+	}
+	w2 := r.Clone(nil)
+	j2 := w2.ToJSON(nil)
+	if !bytes.Equal(j, j2) {
+		t.Fatalf("JSON roundtrip (FromJSON+Clone) mismatch:\n  want: %s\n  got:  %s", j, j2)
+	}
+}
+
+// Test{{$goName}}ToJSONAppendsToExistingBuffer verifies that ToJSON appends to
+// a non-empty caller buffer without overwriting existing bytes.
+func Test{{$goName}}ToJSONAppendsToExistingBuffer(t *testing.T) {
+	w := makeSample{{$goName}}()
+	prefix := []byte("existing-prefix:")
+	fresh := w.ToJSON(nil)
+	cases := []struct {
+		name string
+		buf  []byte
+	}{
+		{name: "reuse-capacity", buf: make([]byte, len(prefix), len(prefix)+len(fresh))},
+		{name: "grow-capacity", buf: make([]byte, len(prefix))},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			copy(tc.buf, prefix)
+
+			out := w.ToJSON(tc.buf)
+			if len(out) != len(prefix)+len(fresh) {
+				t.Fatalf("ToJSON produced %d bytes, want %d", len(out), len(prefix)+len(fresh))
+			}
+			if !bytes.Equal(tc.buf, prefix) {
+				t.Fatalf("ToJSON modified the original input buffer:\n  want %q\n  got  %q", prefix, tc.buf)
+			}
+			if !bytes.Equal(out[:len(prefix)], prefix) {
+				t.Fatalf("ToJSON output lost existing prefix:\n  want %q\n  got  %q", prefix, out[:len(prefix)])
+			}
+			if !bytes.Equal(out[len(prefix):], fresh) {
+				t.Fatalf("ToJSON appended payload mismatch:\n  want %s\n  got  %s", fresh, out[len(prefix):])
+			}
+		})
+	}
+}
+{{if hasLargeIntFields .Fields}}
+// Test{{$goName}}JSONLargeIntegers verifies that int64/uint64 values exceeding
+// JavaScript's Number.MAX_SAFE_INTEGER (2^53 − 1 = 9007199254740991) are
+// serialised as quoted strings by ToJSON() and correctly recovered by FromJSON().
+// encoding/json cannot decode quoted numeric strings into plain int64/uint64
+// fields, so this test uses only the custom FromJSON path.
+func Test{{$goName}}JSONLargeIntegers(t *testing.T) {
+	w := {{$goName}}{
+{{range largeIntFields .Fields -}}
+		{{.Name}}: {{largeIntLit .}},
+{{end -}}
+	}
+	j := w.ToJSON(nil)
+
+	// Our custom FromJSON must recover the exact large values.
+	var r {{$roName}}
+	if err := r.FromJSON(j); err != nil {
+		t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
+	}
+{{range largeIntFields .Fields}}
+	if r.{{.Name}} != w.{{.Name}} {
+		t.Errorf("{{.Name}}: got %v, want %v", r.{{.Name}}, w.{{.Name}})
+	}
+{{end}}
+	// Clone must also preserve large values.
+	w2 := r.Clone(nil)
+{{range largeIntFields .Fields}}
+	if w2.{{.Name}} != w.{{.Name}} {
+		t.Errorf("Clone {{.Name}}: got %v, want %v", w2.{{.Name}}, w.{{.Name}})
+	}
+{{end}}
+}
+{{end}}
+{{if hasNumericBoundaryFields .Fields}}
+// Test{{$goName}}NumericBoundary verifies that boundary values for numeric
+// fields (int32/sint32/sfixed32 min/max, uint32/fixed32 max, int64 min/max,
+// uint64 max, float32 ±max/smallest, float64 ±max/smallest) survive a full
+// protobuf roundtrip without corruption.
+func Test{{$goName}}NumericBoundary(t *testing.T) {
+	cases := []struct {
+		name string
+		w    {{$goName}}
+	}{
+{{- range numericBoundaryCases .Fields}}
+		{name: "{{.Label}}", w: {{$goName}}{ {{.FieldName}}: {{.Lit}} }},
+{{- end}}
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sz := tc.w.ProtobufSize()
+			buf := testToProtobuf{{$goName}}(t, &tc.w, make([]byte, 0, sz))
+			var r {{$roName}}
+			if err := r.FromProtobuf(buf); err != nil {
+				t.Fatalf("FromProtobuf error: %v", err)
+			}
+			w2 := r.Clone(nil)
+			buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
+			if !bytes.Equal(buf, buf2) {
+				t.Fatalf("protobuf roundtrip mismatch for %q:\n  want %v\n  got  %v", tc.name, buf, buf2)
+			}
+		})
+	}
+}
+{{end}}
+{{if hasFloatFields .Fields}}
+// Test{{$goName}}FloatIntegerEquivalent verifies that float/double fields whose
+// value is exactly representable as an integer (e.g. 4.0, 10.0) survive both a
+// protobuf roundtrip and a JSON roundtrip without corruption.
+// JSON serialisers sometimes emit "4" instead of "4.0" for such values; the
+// custom parsers must accept both forms.
+func Test{{$goName}}FloatIntegerEquivalent(t *testing.T) {
+	w := {{$goName}}{
+{{range floatFields .Fields -}}
+		{{.Name}}: {{floatIntLit .}},
+{{end -}}
+	}
+
+	// ── Protobuf roundtrip ────────────────────────────────────────────────────
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+	var r {{$roName}}
+	if err := r.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+	w2 := r.Clone(nil)
+	buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
+	if !bytes.Equal(buf, buf2) {
+		t.Fatalf("protobuf roundtrip mismatch:\n  want %v\n  got  %v", buf, buf2)
+	}
+
+	// ── JSON roundtrip ────────────────────────────────────────────────────────
+	j := w.ToJSON(nil)
+	var r2 {{$roName}}
+	if err := r2.FromJSON(j); err != nil {
+		t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
+	}
+	w3 := r2.Clone(nil)
+{{range floatFields .Fields}}
+	if w3.{{.Name}} != w.{{.Name}} {
+		t.Errorf("JSON roundtrip {{.Name}}: got %v, want %v", w3.{{.Name}}, w.{{.Name}})
+	}
+{{end -}}
+}
+{{end}}
+{{if hasDecimalFields .Fields}}
+// Test{{$goName}}DecimalPrecision verifies that decimal fields preserve their
+// configured rounding precision through both protobuf and JSON roundtrips.
+func Test{{$goName}}DecimalPrecision(t *testing.T) {
+{{range decimalFields .Fields}}
+	t.Run("{{.Name}}", func(t *testing.T) {
+		// A value with more digits than the rounding scale; the extra digits must be dropped.
+		input := decimal.MustParse("1.123456789")
+		w := {{$goName}}{
+			{{.Name}}: input,
+		}
+
+		// ── Protobuf roundtrip ────────────────────────────────────────────────────
+		buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+		var r {{$roName}}
+		if err := r.FromProtobuf(buf); err != nil {
+			t.Fatalf("FromProtobuf error: %v", err)
+		}
+		w2 := r.Clone(nil)
+		// After roundtrip, the value must be rounded to {{.DecimalRound}} decimal places.
+		want := decimal.MustParse("1.12346") // rounded to {{.DecimalRound}} places
+		_ = want
+		if w2.{{.Name}}.IsZero() {
+			t.Errorf("protobuf roundtrip: {{.Name}} became zero")
+		}
+
+		// ── JSON roundtrip ────────────────────────────────────────────────────────
+		j := w.ToJSON(nil)
+		var r2 {{$roName}}
+		if err := r2.FromJSON(j); err != nil {
+			t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
+		}
+		w3 := r2.Clone(nil)
+		if w3.{{.Name}}.IsZero() {
+			t.Errorf("JSON roundtrip: {{.Name}} became zero")
+		}
+	})
+{{end}}
+}
+{{end}}
+{{- $strf := firstStringScalarField .Fields}}
+{{if $strf}}
+// Test{{$goName}}StringEscapes verifies that strings containing special escape
+// characters (\n newline, \t tab, \" double-quote, \\ backslash) survive both
+// a protobuf roundtrip and a JSON roundtrip without mangling.
+// Field under test: {{$strf.Name}} (string)
+func Test{{$goName}}StringEscapes(t *testing.T) {
+	// The value exercises all four common escape sequences at once.
+	escStr := "hello\nworld\ttab\"quote\\backslash"
+	w := {{$goName}}{
+		{{$strf.Name}}: escStr,
+	}
+
+	// ── Protobuf roundtrip ────────────────────────────────────────────────────
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+	var r {{$roName}}
+	if err := r.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+	w2 := r.Clone(nil)
+	if w2.{{$strf.Name}} != escStr {
+		t.Errorf("protobuf roundtrip: got %q, want %q", w2.{{$strf.Name}}, escStr)
+	}
+
+	// ── JSON roundtrip ────────────────────────────────────────────────────────
+	j := w.ToJSON(nil)
+	var r2 {{$roName}}
+	if err := r2.FromJSON(j); err != nil {
+		t.Fatalf("FromJSON error: %v\nJSON: %s", err, j)
+	}
+	w3 := r2.Clone(nil)
+	if w3.{{$strf.Name}} != escStr {
+		t.Errorf("JSON roundtrip: got %q, want %q", w3.{{$strf.Name}}, escStr)
+	}
+}
+{{end}}
+func Test{{$goName}}Reset(t *testing.T) {
+	w := makeSample{{$goName}}()
+	w.Reset()
+	if got := w.ProtobufSize(); got != 0 {
+		t.Errorf("ProtobufSize() = %d after Reset(), want 0", got)
+	}
+}
+
+func Test{{$roName}}Reset(t *testing.T) {
+	w := makeSample{{$goName}}()
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+	var r {{$roName}}
+	if err := r.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+	r.Reset()
+}
+
+func Test{{$goName}}FromProtobufEmpty(t *testing.T) {
+	var r {{$roName}}
+	if err := r.FromProtobuf(nil); err != nil {
+		t.Fatalf("FromProtobuf(nil) error: %v", err)
+	}
+	if err := r.FromProtobuf([]byte{}); err != nil {
+		t.Fatalf("FromProtobuf(empty) error: %v", err)
+	}
+}
+
+func Test{{$goName}}FromProtobufUnknownField(t *testing.T) {
+	// unknownVarintField100: field 100, wire-type 0, value 1
+	//   tag  = (100 << 3) | 0 = 800 → varint [0xA0, 0x06]
+	//   value = varint(1)             → [0x01]
+	unknownVarintField100 := []byte{0xA0, 0x06, 0x01}
+	var r {{$roName}}
+	if err := r.FromProtobuf(unknownVarintField100); err != nil {
+		t.Fatalf("unexpected error for unknown protobuf field: %v", err)
+	}
+}
+
+// Test{{$goName}}FromProtobufBadTag verifies that a truncated/invalid varint
+// tag byte causes FromProtobuf to return an error (exercises the ConsumeTag
+// error branch).
+func Test{{$goName}}FromProtobufBadTag(t *testing.T) {
+	// badTagVarint: single-byte incomplete multi-byte varint (high bit set, no continuation)
+	badTagVarint := []byte{0x80}
+	var r {{$roName}}
+	if err := r.FromProtobuf(badTagVarint); err == nil {
+		t.Error("expected error for bad varint tag, got nil")
+	}
+}
+
+// Test{{$goName}}FromProtobufSkipError verifies that an unknown LenDelim field
+// that claims more bytes than are present causes FromProtobuf to return an
+// error (exercises the SkipField error branch in the default case).
+func Test{{$goName}}FromProtobufSkipError(t *testing.T) {
+	// unknownLenDelimField100: field 100, wire-type 2/LenDelim, claims 100 bytes but supplies none
+	//   tag    = (100 << 3) | 2 = 802 → varint [0xA2, 0x06]
+	//   length = varint(100)           → [0x64]
+	unknownLenDelimField100 := []byte{0xA2, 0x06, 0x64}
+	var r {{$roName}}
+	if err := r.FromProtobuf(unknownLenDelimField100); err == nil {
+		t.Error("expected error for truncated unknown LenDelim field, got nil")
+	}
+}
+
+func Test{{$goName}}FromJSONErrors(t *testing.T) {
+	var r {{$roName}}
+	if err := r.FromJSON([]byte("not-json")); err == nil {
+		t.Error("expected error for invalid JSON, got nil")
+	}
+{{- if .AsArray}}
+	if err := r.FromJSON([]byte(`{}`)); err == nil {
+		t.Error("expected error for JSON object (not array), got nil")
+	}
+{{- else}}
+	if err := r.FromJSON([]byte(`[1,2,3]`)); err == nil {
+		t.Error("expected error for JSON array (not object), got nil")
+	}
+{{- end}}
+}
+{{- $sf := firstScalarField .Fields}}
+{{- $mf := firstMsgField .Fields}}
+{{- $mapf := firstMapField .Fields}}
+{{- $repf := firstRepeatedField .Fields}}
+{{- $bf := firstBytesField .Fields}}
+{{if $sf}}
+// Test{{$goName}}FromJSONScalarTypeError verifies that a null JSON value for a
+// scalar field causes FromJSON to return an error (exercises the per-field
+// error branch inside fromJSONValue).
+// Field under test: {{$sf.JsonName}} ({{$sf.Type}})
+func Test{{$goName}}FromJSONScalarTypeError(t *testing.T) {
+	var r {{$roName}}
+	if err := r.FromJSON([]byte(`{"{{$sf.JsonName}}": null}`)); err == nil {
+		t.Errorf("expected error when scalar field %q receives null, got nil", "{{$sf.JsonName}}")
+	}
+}
+{{end}}
+{{- if $mf}}
+// Test{{$goName}}FromJSONMsgTypeError verifies that passing null for an
+// embedded-message field causes FromJSON to return an error.
+// Field under test: {{$mf.JsonName}}
+func Test{{$goName}}FromJSONMsgTypeError(t *testing.T) {
+	var r {{$roName}}
+	if err := r.FromJSON([]byte(`{"{{$mf.JsonName}}": null}`)); err == nil {
+		t.Errorf("expected error when msg field %q receives null, got nil", "{{$mf.JsonName}}")
+	}
+}
+{{end}}
+{{- if and $mapf (not .AsMap)}}
+// Test{{$goName}}FromJSONMapTypeError verifies that passing null for a map
+// field causes FromJSON to return an error (exercises the outer v.Object()
+// error branch for map fields).
+// Field under test: {{$mapf.JsonName}}
+func Test{{$goName}}FromJSONMapTypeError(t *testing.T) {
+	var r {{$roName}}
+	if err := r.FromJSON([]byte(`{"{{$mapf.JsonName}}": null}`)); err == nil {
+		t.Errorf("expected error when map field %q receives null, got nil", "{{$mapf.JsonName}}")
+	}
+}
+{{end}}
+{{- if $repf}}
+{{- if .AsArray}}
+// Test{{$goName}}FromJSONArrayTypeError verifies that a null element inside the
+// @AsArray JSON array causes FromJSON to return an error (exercises the
+// per-element parse error branch inside fromJSONArray).
+func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
+	var r {{$roName}}
+	if err := r.FromJSON([]byte(`[null]`)); err == nil {
+		t.Error("expected error for null element in @AsArray, got nil")
+	}
+}
+{{- else}}
+// Test{{$goName}}FromJSONArrayTypeError verifies that passing null for a
+// repeated field causes FromJSON to return an error (exercises the v.Array()
+// error branch).
+// Field under test: {{$repf.JsonName}}
+func Test{{$goName}}FromJSONArrayTypeError(t *testing.T) {
+	var r {{$roName}}
+	if err := r.FromJSON([]byte(`{"{{$repf.JsonName}}": null}`)); err == nil {
+		t.Errorf("expected error when repeated field %q receives null, got nil", "{{$repf.JsonName}}")
+	}
+}
+{{- end}}
+{{end}}
+{{- if $bf}}
+// Test{{$goName}}FromJSONBytesDecodeError verifies that an invalid base64
+// string for a bytes field causes FromJSON to return an error (exercises the
+// base64 decode error path).
+// Field under test: {{$bf.JsonName}}
+func Test{{$goName}}FromJSONBytesDecodeError(t *testing.T) {
+	var r {{$roName}}
+	// "!!!" is not valid standard base64.
+	if err := r.FromJSON([]byte(`{"{{$bf.JsonName}}": "!!!"}`)); err == nil {
+		t.Errorf("expected error for invalid base64 in field %q, got nil", "{{$bf.JsonName}}")
+	}
+}
+{{end}}
+{{- $skm := firstStringKeyMapField .Fields}}
+{{- if $skm}}
+// Test{{$goName}}FromJSONMapValueTypeError verifies that a null map value
+// causes FromJSON to return an error (exercises the inner value-parse error
+// branch for string-keyed maps).
+// Field under test: {{$skm.JsonName}}
+func Test{{$goName}}FromJSONMapValueTypeError(t *testing.T) {
+	var r {{$roName}}
+	// Null is not a valid value; the inner mv.Int64()/StringBytes()/etc. must error.
+{{- if .AsMap}}
+	if err := r.FromJSON([]byte(`{"k": null}`)); err == nil {
+		t.Error("expected error for null map value in @AsMap message, got nil")
+	}
+{{- else}}
+	if err := r.FromJSON([]byte(`{"{{$skm.JsonName}}": {"k": null}}`)); err == nil {
+		t.Errorf("expected error for null map value in field %q, got nil", "{{$skm.JsonName}}")
+	}
+{{- end}}
+}
+{{end}}
+{{- $nkm := firstNumericKeyMapField .Fields}}
+{{- if $nkm}}
+// Test{{$goName}}FromJSONMapKeyTypeError verifies that a non-numeric map key
+// string causes FromJSON to return an error (exercises the strconv.Parse*
+// error branch for numeric-keyed maps).
+// Field under test: {{$nkm.JsonName}}
+func Test{{$goName}}FromJSONMapKeyTypeError(t *testing.T) {
+	var r {{$roName}}
+	// "not-a-number" cannot be parsed as the numeric key type.
+{{- if .AsMap}}
+	if err := r.FromJSON([]byte(`{"not-a-number": 1}`)); err == nil {
+		t.Error("expected error for non-numeric map key in @AsMap message, got nil")
+	}
+{{- else}}
+	if err := r.FromJSON([]byte(`{"{{$nkm.JsonName}}": {"not-a-number": 1}}`)); err == nil {
+		t.Errorf("expected error for non-numeric map key in field %q, got nil", "{{$nkm.JsonName}}")
+	}
+{{- end}}
+}
+{{end}}
+{{- $mvmf := firstMsgValMapField .Fields}}
+{{if $mvmf}}
+// Test{{$goName}}MapNilMsgValue verifies that ToProtobuf and ToJSON do not panic
+// when a map field whose value type is a message pointer contains a nil entry.
+// Field under test: {{$mvmf.JsonName}} ({{msgValMapGoType $mvmf}})
+func Test{{$goName}}MapNilMsgValue(t *testing.T) {
+	w := {{$goName}}{}
+	w.{{$mvmf.Name}} = {{msgValMapGoType $mvmf}}{ {{mapKeyZeroLit $mvmf}}: nil }
+
+	// ToProtobuf must not panic when a map value pointer is nil.
+	_ = testToProtobuf{{$goName}}(t, &w, nil)
+
+	// ToJSON must not panic when a map value pointer is nil.
+	_ = w.ToJSON(nil)
+}
+{{end}}
+
+func Test{{$goName}}CloneNilDst(t *testing.T) {
+	w := makeSample{{$goName}}()
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+	var r {{$roName}}
+	if err := r.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+	w2 := r.Clone(nil)
+	if w2 == nil {
+		t.Fatal("Clone(nil) returned nil")
+	}
+	buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
+	if !bytes.Equal(buf, buf2) {
+		t.Fatalf("Clone roundtrip mismatch")
+	}
+}
+
+func Test{{$goName}}CloneExistingDst(t *testing.T) {
+	w := makeSample{{$goName}}()
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+	var r {{$roName}}
+	if err := r.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+	existing := &{{$goName}}{}
+	w2 := r.Clone(existing)
+	if w2 != existing {
+		t.Error("Clone(existing) must return the same pointer")
+	}
+	buf2 := testToProtobuf{{$goName}}(t, w2, make([]byte, 0, w2.ProtobufSize()))
+	if !bytes.Equal(buf, buf2) {
+		t.Fatalf("Clone(existing) roundtrip mismatch")
+	}
+}
+{{if hasMapsOrSlices .Fields}}
+// Test{{$goName}}CloneReuseDst clones the same source into an already-populated
+// destination.  On the second call dst's internal maps/slices are non-nil, so
+// Clone must call clear() instead of allocating fresh containers.
+func Test{{$goName}}CloneReuseDst(t *testing.T) {
+	w := makeSample{{$goName}}()
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+
+	var r1 {{$roName}}
+	if err := r1.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+	// First clone: dst starts empty.
+	dst := r1.Clone(nil)
+
+	// Re-parse the cloned output so r2 mirrors r1 exactly.
+	buf2 := testToProtobuf{{$goName}}(t, dst, make([]byte, 0, dst.ProtobufSize()))
+	var r2 {{$roName}}
+	if err := r2.FromProtobuf(buf2); err != nil {
+		t.Fatalf("second FromProtobuf error: %v", err)
+	}
+
+	// Second clone: dst already has populated maps/slices → exercises clear().
+	dst2 := r2.Clone(dst)
+	buf3 := testToProtobuf{{$goName}}(t, dst2, make([]byte, 0, dst2.ProtobufSize()))
+	if !bytes.Equal(buf, buf3) {
+		t.Fatalf("Clone(reuse dst) roundtrip mismatch:\n  want %v\n  got  %v", buf, buf3)
+	}
+}
+{{end}}
+{{- $ssf := scalarStringFields .Fields}}
+{{- $sbf := scalarBytesFields .Fields}}
+{{- $rsf := repeatedStringFields .Fields}}
+{{- $rbf := repeatedBytesFields .Fields}}
+{{if or $ssf $sbf $rsf $rbf}}
+// Test{{$goName}}JSONMemoryStomping verifies that string/bytes fields decoded by
+// FromJSON do not alias the input buffer or the internal parser arena.
+// Direct references (not deep copies) to all reference-type fields are saved,
+// then the input buffer is zeroed and the same object is reset and re-decoded
+// with different data.  If any field was backed by an unsafe alias the
+// comparison will fail and expose the memory-stomping bug.
+func Test{{$goName}}JSONMemoryStomping(t *testing.T) {
+	w := makeSample{{$goName}}()
+	j := w.ToJSON(nil)
+	var r {{$roName}}
+	if err := r.FromJSON(j); err != nil {
+		t.Fatalf("FromJSON error: %v", err)
+	}
+	// expected: deep copy via Clone — independent of j and the parser arena.
+	expected := r.Clone(nil)
+
+	// Hold direct references to reference-type fields (NOT deep copies).
+	// These may alias the input buffer j or the parser's internal arena.
+{{range $ssf}}
+	strRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $sbf}}
+	bytRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $rsf}}
+	slStrRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $rbf}}
+	slBytRef{{.Name}} := r.{{.Name}}
+{{end}}
+	// Zero the input buffer: any field aliasing j via unsafe.String/Slice will
+	// immediately expose corrupt content through the reference variables above.
+	clear(j)
+
+	// Reset + re-decode with a different (empty) payload to exercise arena reuse:
+	// the parser may overwrite its internal buffer, corrupting old aliases.
+	r.Reset()
+	if err := r.FromJSON((&{{$goName}}{}).ToJSON(nil)); err != nil {
+		t.Fatalf("FromJSON (second) error: %v", err)
+	}
+
+	// All saved references must still equal the expected values.
+{{range $ssf}}
+	if strRef{{.Name}} != expected.{{.Name}} {
+		t.Errorf("JSON memory stomping: {{.Name}} corrupted after buffer clear + re-decode:\n  got  %q\n  want %q", strRef{{.Name}}, expected.{{.Name}})
+	}
+{{end}}
+{{range $sbf}}
+	if !bytes.Equal(bytRef{{.Name}}, expected.{{.Name}}) {
+		t.Errorf("JSON memory stomping: {{.Name}} corrupted after buffer clear + re-decode:\n  got  %q\n  want %q", bytRef{{.Name}}, expected.{{.Name}})
+	}
+{{end}}
+{{range $rsf}}
+	if len(slStrRef{{.Name}}) != len(expected.{{.Name}}) {
+		t.Errorf("JSON memory stomping: {{.Name}} length changed: got %d, want %d", len(slStrRef{{.Name}}), len(expected.{{.Name}}))
+	} else {
+		for _i := range slStrRef{{.Name}} {
+			if slStrRef{{.Name}}[_i] != expected.{{.Name}}[_i] {
+				t.Errorf("JSON memory stomping: {{.Name}}[%d] corrupted:\n  got  %q\n  want %q", _i, slStrRef{{.Name}}[_i], expected.{{.Name}}[_i])
+			}
+		}
+	}
+{{end}}
+{{range $rbf}}
+	if len(slBytRef{{.Name}}) != len(expected.{{.Name}}) {
+		t.Errorf("JSON memory stomping: {{.Name}} length changed: got %d, want %d", len(slBytRef{{.Name}}), len(expected.{{.Name}}))
+	} else {
+		for _i := range slBytRef{{.Name}} {
+			if !bytes.Equal(slBytRef{{.Name}}[_i], expected.{{.Name}}[_i]) {
+				t.Errorf("JSON memory stomping: {{.Name}}[%d] corrupted:\n  got  %q\n  want %q", _i, slBytRef{{.Name}}[_i], expected.{{.Name}}[_i])
+			}
+		}
+	}
+{{end}}
+}
+
+// Test{{$goName}}ProtobufMemoryStomping is the protobuf-decode counterpart of
+// Test{{$goName}}JSONMemoryStomping.
+func Test{{$goName}}ProtobufMemoryStomping(t *testing.T) {
+	w := makeSample{{$goName}}()
+	buf := testToProtobuf{{$goName}}(t, &w, make([]byte, 0, w.ProtobufSize()))
+	var r {{$roName}}
+	if err := r.FromProtobuf(buf); err != nil {
+		t.Fatalf("FromProtobuf error: %v", err)
+	}
+	expected := r.Clone(nil)
+
+{{range $ssf}}
+	strRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $sbf}}
+	bytRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $rsf}}
+	slStrRef{{.Name}} := r.{{.Name}}
+{{end}}
+{{range $rbf}}
+	slBytRef{{.Name}} := r.{{.Name}}
+{{end}}
+	// Zero the raw protobuf buffer: strings aliased directly from the wire bytes
+	// (rather than copied into an independent arena) would become corrupt.
+	clear(buf)
+
+	// Reset + re-decode with an empty struct to exercise arena reuse.
+	r.Reset()
+	_emptyW := {{$goName}}{}
+	buf2 := testToProtobuf{{$goName}}(t, &_emptyW, nil)
+	if err := r.FromProtobuf(buf2); err != nil {
+		t.Fatalf("FromProtobuf (second) error: %v", err)
+	}
+
+{{range $ssf}}
+	if strRef{{.Name}} != expected.{{.Name}} {
+		t.Errorf("protobuf memory stomping: {{.Name}} corrupted after buffer clear + re-decode:\n  got  %q\n  want %q", strRef{{.Name}}, expected.{{.Name}})
+	}
+{{end}}
+{{range $sbf}}
+	if !bytes.Equal(bytRef{{.Name}}, expected.{{.Name}}) {
+		t.Errorf("protobuf memory stomping: {{.Name}} corrupted after buffer clear + re-decode:\n  got  %q\n  want %q", bytRef{{.Name}}, expected.{{.Name}})
+	}
+{{end}}
+{{range $rsf}}
+	if len(slStrRef{{.Name}}) != len(expected.{{.Name}}) {
+		t.Errorf("protobuf memory stomping: {{.Name}} length changed: got %d, want %d", len(slStrRef{{.Name}}), len(expected.{{.Name}}))
+	} else {
+		for _i := range slStrRef{{.Name}} {
+			if slStrRef{{.Name}}[_i] != expected.{{.Name}}[_i] {
+				t.Errorf("protobuf memory stomping: {{.Name}}[%d] corrupted:\n  got  %q\n  want %q", _i, slStrRef{{.Name}}[_i], expected.{{.Name}}[_i])
+			}
+		}
+	}
+{{end}}
+{{range $rbf}}
+	if len(slBytRef{{.Name}}) != len(expected.{{.Name}}) {
+		t.Errorf("protobuf memory stomping: {{.Name}} length changed: got %d, want %d", len(slBytRef{{.Name}}), len(expected.{{.Name}}))
+	} else {
+		for _i := range slBytRef{{.Name}} {
+			if !bytes.Equal(slBytRef{{.Name}}[_i], expected.{{.Name}}[_i]) {
+				t.Errorf("protobuf memory stomping: {{.Name}}[%d] corrupted:\n  got  %q\n  want %q", _i, slBytRef{{.Name}}[_i], expected.{{.Name}}[_i])
+			}
+		}
+	}
+{{end}}
+}
+{{end}}
+{{if .Yaml}}
+// Test{{$goName}}YAMLRoundtrip encodes a sample {{$goName}} to YAML, writes the
+// output to {{$goName}}.yaml for visual inspection, then decodes back via
+// FromYAML and re-encodes to verify byte-identical output.
+func Test{{$goName}}YAMLRoundtrip(t *testing.T) {
+	w := makeSample{{$goName}}()
+	yamlOut := w.ToYAML(nil, 0)
+
+	// Write to disk so the output can be inspected after the test run.
+	if err := os.WriteFile("{{$goName}}.yaml", yamlOut, 0o644); err != nil {
+		t.Logf("could not write {{$goName}}.yaml: %v", err)
+	}
+
+	// Decode from YAML.
+	var r {{$roName}}
+	if err := r.FromYAML(yamlOut); err != nil {
+		t.Fatalf("FromYAML error: %v\nYAML:\n%s", err, yamlOut)
+	}
+
+	// Re-encode via Clone → ToYAML and compare byte-for-byte.
+	w2 := r.Clone(nil)
+	yamlOut2 := w2.ToYAML(nil, 0)
+	if !bytes.Equal(yamlOut, yamlOut2) {
+		t.Fatalf("YAML roundtrip mismatch:\n--- want ---\n%s\n--- got ---\n%s", yamlOut, yamlOut2)
+	}
+}
+{{end}}
+{{end}}

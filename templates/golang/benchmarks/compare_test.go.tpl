@@ -1,0 +1,295 @@
+{{/* 性能对照表；依赖 benchBuild 和 jsonv2 实验。 */ -}}
+//go:build with.compare && goexperiment.jsonv2
+
+{{template "partials/header.go.tpl" .}}
+
+import (
+	"encoding/json"
+	jsonv2 "encoding/json/v2"
+	"fmt"
+	"os"
+	"runtime"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/bytedance/sonic"
+)
+
+// Keep field-dependent imports valid for every message shape.
+var (
+	_ = json.Marshal
+	_ = jsonv2.Marshal
+	_ = fmt.Errorf
+	_ = os.WriteFile
+	_ = runtime.GC
+	_ = strconv.IntSize
+	_ = time.Second
+	_ = sonic.Marshal
+)
+
+{{with .Msg}}
+{{- $goName := .GoName}}
+{{- $roName := printf "Readonly%s" $goName}}
+// Test_{{$goName}}_with_compare runs sub-benchmarks (duration from env benchmark_seconds, default 30 s) and prints a
+// formatted comparison table covering JSON encode/decode and Protobuf encode/decode,
+// followed by two copy-pasteable Markdown tables.
+func Test_{{$goName}}_with_compare(t *testing.T) {
+	benchSeconds := 30
+	if s := os.Getenv("benchmark_seconds"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			benchSeconds = n
+		}
+	}
+	minDuration := time.Duration(benchSeconds) * time.Second
+
+	type metrics struct {
+		bytesPerSec float64
+		allocsPerOp int64
+		opsPerSec   float64
+	}
+
+	runBench := func(fn func() int) metrics {
+		for i := 0; i < 1000; i++ {
+			fn()
+		}
+		runtime.GC()
+
+		var m1, m2 runtime.MemStats
+		runtime.ReadMemStats(&m1)
+
+		var totalBytes, count int64
+		start := time.Now()
+		for time.Since(start) < minDuration {
+			totalBytes += int64(fn())
+			count++
+		}
+		elapsed := time.Since(start)
+
+		runtime.GC()
+		runtime.ReadMemStats(&m2)
+
+		var allocsPerOp int64
+		if count > 0 {
+			allocsPerOp = int64(m2.Mallocs-m1.Mallocs) / count
+		}
+		return metrics{
+			bytesPerSec: float64(totalBytes) / elapsed.Seconds(),
+			allocsPerOp: allocsPerOp,
+			opsPerSec:   float64(count) / elapsed.Seconds(),
+		}
+	}
+
+	fmtBPS := func(bps float64) string {
+		if bps >= 1e9 {
+			return fmt.Sprintf("%.2f GB/s", bps/1e9)
+		}
+		return fmt.Sprintf("%.2f MB/s", bps/1e6)
+	}
+
+	fmtOPS := func(ops float64) string {
+		// if ops >= 1e6 {
+		// 	return fmt.Sprintf("%.2f M times/s", ops/1e6)
+		// }
+		// if ops >= 1e3 {
+		// 	return fmt.Sprintf("%.2f K times/s", ops/1e3)
+		// }
+		return fmt.Sprintf("%.0f times/s", ops)
+	}
+
+	fmtPct := func(base, cmp float64, cmpName string) string {
+		if cmp == 0 {
+			return "N/A"
+		}
+		pct := (base - cmp) / cmp * 100
+		if pct >= 0 {
+			return fmt.Sprintf("%.1f%% faster than %s", pct, cmpName)
+		}
+		return fmt.Sprintf("%.1f%% slower than %s", -pct, cmpName)
+	}
+
+	fmtPctMD := func(base, cmp float64) string {
+		if cmp == 0 {
+			return "N/A"
+		}
+		pct := (base - cmp) / cmp * 100
+		if pct >= 0 {
+			return fmt.Sprintf(`<span style="color:red">+%.1f%%</span>`, pct)
+		}
+		return fmt.Sprintf(`<span style="color:green">%.1f%%</span>`, pct)
+	}
+
+	src := benchBuild{{$goName}}()
+	jsonData := src.ToJSON(nil)
+	pbData := src.ToProtobuf(nil)
+
+	var (
+		mJEncBHL, mJEncStd, mJEncJV2, mJEncSonic metrics
+		mJDecBHL, mJDecStd, mJDecJV2, mJDecSonic metrics
+		mPbEncReg                       metrics
+		mPbDecReg                       metrics
+	)
+
+	fmt.Println()
+	fmt.Printf("=== {{$goName}} Performance Comparison (each benchmark runs ≥ %d s) ===\n", benchSeconds)
+	fmt.Println()
+
+	// JSON encode
+	if os.Getenv("no_json_encode") != "" {
+		fmt.Println("skip json encode tests (no_json_encode is set)")
+		goto skipJSONEncode
+	}
+	{
+		buf := make([]byte, 0, len(jsonData))
+		mJEncBHL = runBench(func() int {
+			buf = src.ToJSON(buf[:0])
+			return len(buf)
+		})
+		mJEncStd = runBench(func() int {
+			j, _ := json.Marshal(src)
+			return len(j)
+		})
+		mJEncJV2 = runBench(func() int {
+			j, _ := jsonv2.Marshal(src)
+			return len(j)
+		})
+		mJEncSonic = runBench(func() int {
+			j, _ := sonic.Marshal(src)
+			return len(j)
+		})
+		fmt.Printf(
+			"json encode:  [ToJSON] %s, %d allocs/op"+
+				" | [encoding/json] %s, %d allocs/op, %s"+
+				" | [encoding/json/v2] %s, %d allocs/op, %s"+
+				" | [bytedance/sonic] %s, %d allocs/op, %s\n",
+			fmtBPS(mJEncBHL.bytesPerSec), mJEncBHL.allocsPerOp,
+			fmtBPS(mJEncStd.bytesPerSec), mJEncStd.allocsPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncStd.bytesPerSec, "encoding/json"),
+			fmtBPS(mJEncJV2.bytesPerSec), mJEncJV2.allocsPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncJV2.bytesPerSec, "encoding/json/v2"),
+			fmtBPS(mJEncSonic.bytesPerSec), mJEncSonic.allocsPerOp, fmtPct(mJEncBHL.bytesPerSec, mJEncSonic.bytesPerSec, "bytedance/sonic"),
+		)
+	}
+skipJSONEncode:
+
+	// JSON decode
+	if os.Getenv("no_json_decode") != "" {
+		fmt.Println("skip json decode tests (no_json_decode is set)")
+		goto skipJSONDecode
+	}
+	{
+		var r {{$roName}}
+		mJDecBHL = runBench(func() int {
+			r.Reset()
+			if err := r.FromJSON(jsonData); err != nil {
+				t.Fatal("FromJSON failed:", err)
+			}
+			return len(jsonData)
+		})
+		mJDecStd = runBench(func() int {
+			var w {{$goName}}
+			if err := json.Unmarshal(jsonData, &w); err != nil {
+				t.Fatal("json.Unmarshal failed:", err)
+			}
+			return len(jsonData)
+		})
+		mJDecJV2 = runBench(func() int {
+			var w {{$goName}}
+			if err := jsonv2.Unmarshal(jsonData, &w); err != nil {
+				t.Fatal("jsonv2.Unmarshal failed:", err)
+			}
+			return len(jsonData)
+		})
+		mJDecSonic = runBench(func() int {
+			var w {{$goName}}
+			if err := sonic.Unmarshal(jsonData, &w); err != nil {
+				t.Fatal("sonic.Unmarshal failed:", err)
+			}
+			return len(jsonData)
+		})
+		fmt.Printf(
+			"json decode:  [FromJSON] %s, %d allocs/op"+
+				" | [encoding/json] %s, %d allocs/op, %s"+
+				" | [encoding/json/v2] %s, %d allocs/op, %s"+
+				" | [bytedance/sonic] %s, %d allocs/op, %s\n",
+			fmtBPS(mJDecBHL.bytesPerSec), mJDecBHL.allocsPerOp,
+			fmtBPS(mJDecStd.bytesPerSec), mJDecStd.allocsPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecStd.bytesPerSec, "encoding/json"),
+			fmtBPS(mJDecJV2.bytesPerSec), mJDecJV2.allocsPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecJV2.bytesPerSec, "encoding/json/v2"),
+			fmtBPS(mJDecSonic.bytesPerSec), mJDecSonic.allocsPerOp, fmtPct(mJDecBHL.bytesPerSec, mJDecSonic.bytesPerSec, "bytedance/sonic"),
+		)
+	}
+skipJSONDecode:
+
+	// Protobuf encode
+	{
+		buf := make([]byte, 0, len(pbData))
+		mPbEncReg = runBench(func() int {
+			buf = src.ToProtobuf(buf[:0])
+			return len(buf)
+		})
+		fmt.Printf(
+			"pb encode:    [ToProtobuf] %s, %d allocs/op\n",
+			fmtBPS(mPbEncReg.bytesPerSec), mPbEncReg.allocsPerOp,
+		)
+	}
+
+	// Protobuf decode
+	{
+		var rPB {{$roName}}
+		mPbDecReg = runBench(func() int {
+			rPB.Reset()
+			if err := rPB.FromProtobuf(pbData); err != nil {
+				t.Fatal("FromProtobuf failed:", err)
+			}
+			return len(pbData)
+		})
+		fmt.Printf(
+			"pb decode:    [FromProtobuf] %s, %d allocs/op\n",
+			fmtBPS(mPbDecReg.bytesPerSec), mPbDecReg.allocsPerOp,
+		)
+	}
+
+	mdBase := func(m metrics) string {
+		return fmt.Sprintf("%s<br>%d allocs/op<br>%s", fmtBPS(m.bytesPerSec), m.allocsPerOp, fmtOPS(m.opsPerSec))
+	}
+	mdCmp := func(m, base metrics) string {
+		return fmt.Sprintf("%s<br>%d allocs/op<br>%s<br>%s",
+			fmtBPS(m.bytesPerSec), m.allocsPerOp,
+			fmtOPS(m.opsPerSec),
+			fmtPctMD(base.bytesPerSec, m.bytesPerSec),
+		)
+	}
+
+	fmt.Println()
+	fmt.Println("---")
+	fmt.Println()
+
+	if os.Getenv("no_json_decode") == "" || os.Getenv("no_json_encode") == ""{
+		fmt.Println("### JSON Performance")
+		fmt.Println()
+		fmt.Println("| Operation | BaoHuLu | encoding/json | encoding/json/v2 | bytedance/sonic |")
+		fmt.Println("|:----------|:-------:|:-------------:|:----------------:|:---------------:|")
+		fmt.Printf("| json encode | %s | %s | %s | %s |\n",
+			mdBase(mJEncBHL),
+			mdCmp(mJEncStd, mJEncBHL),
+			mdCmp(mJEncJV2, mJEncBHL),
+			mdCmp(mJEncSonic, mJEncBHL),
+		)
+		fmt.Printf("| json decode | %s | %s | %s | %s |\n",
+			mdBase(mJDecBHL),
+			mdCmp(mJDecStd, mJDecBHL),
+			mdCmp(mJDecJV2, mJDecBHL),
+			mdCmp(mJDecSonic, mJDecBHL),
+		)
+
+		fmt.Println()
+	}
+
+	fmt.Println("### Protobuf Performance")
+	fmt.Println()
+	fmt.Println("| Operation | BaoHuLu |")
+	fmt.Println("|:----------|:-------:|")
+	fmt.Printf("| pb encode | %s |\n", mdBase(mPbEncReg))
+	fmt.Printf("| pb decode | %s |\n", mdBase(mPbDecReg))
+
+	fmt.Println()
+}
+{{end}}

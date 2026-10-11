@@ -1,0 +1,52 @@
+# Go 模板配置草案；模板将在后续迁移中拆分，当前尚未实现。
+# 所有路径相对于 templates/golang/。
+# 配置只说明“代码的哪一部分由哪个 .tpl 文件生成”。
+# message/enum 每个类型生成一份；编解码按 From / To 各生成一份，包含相关辅助方法。
+
+# 同一个文件包含写类型和读类型的声明。
+message: types/message.go.tpl
+enum: types/enum.go.tpl
+
+json:
+  # 包含 fromJSONValue、fromJSONArray 等 JSON 解码辅助方法，不再单独拆文件。
+  FromJSON: methods/FromJSON.go.tpl
+  ToJSON: methods/ToJSON.go.tpl
+
+protobuf:
+  # 包含 FromProtobuf、FromProtobufWithArena 及解码辅助方法。
+  FromProtobuf: methods/FromProtobuf.go.tpl
+  # 包含 ToProtobuf、ToProtobufByAppend、ToProtobufVT、ProtobufSize、marshalToSizedBufferVT。
+  ToProtobuf: methods/ToProtobuf.go.tpl
+
+# 是否为某个 message 生成 YAML / URL Values，沿用 proto 注解及引用传播规则。
+yaml:
+  FromYAML: methods/FromYAML.go.tpl
+  ToYAML: methods/ToYAML.go.tpl
+
+url_values:
+  FromURLValues: methods/FromURLValues.go.tpl
+  ToURLValues: methods/ToURLValues.go.tpl
+
+lifecycle:
+  # 同时生成写类型和读类型的 Reset 方法，放在同一个文件。
+  Reset: methods/Reset.go.tpl
+  Clone: methods/Clone.go.tpl
+
+# tests / benchmarks 仍由命令行开关启用。
+# 这两部分的键为输出相对路径；{message} 替换为当前类型的文件名。
+tests:
+  "{message}_test.go": tests/message_test.go.tpl
+
+benchmarks:
+  "{message}_bench_builder_test.go": benchmarks/builder.go.tpl
+  "{message}_bench_test.go": benchmarks/message_bench_test.go.tpl
+  "{message}_jsonv2_bench_test.go": benchmarks/jsonv2_bench_test.go.tpl
+  "{message}_compare_test.go": benchmarks/compare_test.go.tpl
+
+# 项目文件每次生成任务只处理一份；键就是输出相对路径。
+project:
+  go.mod: project/go.mod.tpl
+  .gitignore: project/gitignore.tpl
+
+# 公共子模板统一放 partials/，由生成器加载，无需逐个配置。
+# Go RPC 不在当前迁移范围内；需要时再增加对应的模板映射。

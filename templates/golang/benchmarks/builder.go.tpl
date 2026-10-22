@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* 单个 message 的 benchmark 样本构造；由普通 benchmark、jsonv2 和 compare 共享。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -135,4 +136,5 @@ func benchBuild{{$goName}}() {{$goName}} {
 	return w
 }
 {{- end}}
+{{end}}
 {{end}}

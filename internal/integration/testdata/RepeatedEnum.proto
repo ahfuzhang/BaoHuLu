@@ -1,0 +1,11 @@
+syntax = "proto3";
+package repeatedenum;
+
+message Values {
+  repeated State states = 1;
+}
+
+enum State {
+  STATE_NONE = 0;
+  STATE_READY = 1;
+}

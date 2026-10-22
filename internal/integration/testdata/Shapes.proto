@@ -1,0 +1,45 @@
+syntax = "proto3";
+package shapes;
+option csharp_namespace = "Generated.Shapes";
+option go_package = "example.com/shapes";
+
+message Parent {
+  Child child = 1;
+  State state = 2;
+  map<string, Child> children = 3;
+  map<int32, State> statuses = 4;
+  repeated bytes chunks = 5;
+}
+
+message Child {
+  string name = 1;
+  State state = 2;
+}
+
+message Node {
+  Node next = 1;
+  repeated Node nodes = 2;
+  map<string, Node> index = 3;
+}
+
+// @AsArray
+message ArrayView {
+  repeated Child items = 1;
+}
+
+// @AsMap
+message Lookup {
+  map<int32, Child> items = 1;
+}
+
+message Price {
+  // @decimal=round:2
+  double value = 1;
+}
+
+message Empty {}
+
+enum State {
+  STATE_NONE = 0;
+  STATE_READY = 1;
+}

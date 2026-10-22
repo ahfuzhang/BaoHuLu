@@ -1,0 +1,31 @@
+message: types/message.cs.tpl
+enum: types/enum.cs.tpl
+json:
+  FromJSON: methods/FromJSON.cs.tpl
+  ToJSON: methods/ToJSON.cs.tpl
+protobuf:
+  FromProtobuf: methods/FromProtobuf.cs.tpl
+  ToProtobuf: methods/ToProtobuf.cs.tpl
+yaml:
+  FromYAML: methods/FromYAML.cs.tpl
+  ToYAML: methods/ToYAML.cs.tpl
+url_values:
+  FromURLValues: methods/FromURLValues.cs.tpl
+  ToURLValues: methods/ToURLValues.cs.tpl
+lifecycle:
+  Reset: methods/Reset.cs.tpl
+  Clone: methods/Clone.cs.tpl
+tests:
+  "Tests/{message}Tests.cs": tests/message_test.cs.tpl
+  "Tests/{file}TestValidate.cs": tests/validate.cs.tpl
+benchmarks:
+  "Benchmarks/{message}Benchmarks.cs": benchmarks/message_bench.cs.tpl
+  "Benchmarks/{file}Helpers.cs": benchmarks/helpers.cs.tpl
+  "Benchmarks/Program.cs": benchmarks/Program.cs.tpl
+  "Benchmarks/GrpcGen/{file}.proto": benchmarks/source.proto.tpl
+project:
+  "{file}.csproj": project/CSharp.csproj.tpl
+  "Tests/{file}.Tests.csproj": project/CSharp.Tests.csproj.tpl
+  "Benchmarks/{file}.Benchmarks.csproj": project/CSharp.Benchmarks.csproj.tpl
+  "Benchmarks/GrpcGen/GrpcGen.csproj": project/GrpcGen.csproj.tpl
+  ".gitignore": project/gitignore.tpl

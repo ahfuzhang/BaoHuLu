@@ -1,4 +1,4 @@
-# Go 模板拆分预览；全部映射已落盘，尚未接入 CLI。
+# Go 内置/外部模板包；统一引擎读取同一份映射。
 # 输入约定和当前边界见 README.md。
 # 所有路径相对于 templates/golang/。
 # 配置只说明“代码的哪一部分由哪个 .tpl 文件生成”。
@@ -33,7 +33,7 @@ lifecycle:
   Reset: methods/Reset.go.tpl
   Clone: methods/Clone.go.tpl
 
-# tests / benchmarks 仍由命令行开关启用。
+# tests / benchmarks 由 proto 文件级 extensions 启用。
 # 这两部分的键为输出相对路径；{message} 替换为当前类型的文件名。
 tests:
   "{message}_test.go": tests/message_test.go.tpl

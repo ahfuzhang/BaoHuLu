@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* URLValues 编码。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -305,4 +306,5 @@ func (m *{{$goName}}) ToURLValues(dst []byte) []byte {
 {{- end}}
 	return dst
 }
+{{end}}
 {{end}}

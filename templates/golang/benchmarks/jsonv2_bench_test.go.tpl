@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* 仅在 jsonv2 实验启用时编译的两个 benchmark。 */ -}}
 //go:build goexperiment.jsonv2
 
@@ -52,4 +53,5 @@ func BenchmarkFromJSON_{{$goName}}_EncodingJSONv2(b *testing.B) {
 	}
 	_ = w
 }
+{{end}}
 {{end}}

@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* JSON 编码：包含普通对象、AsMap 和 AsArray 分支。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -541,4 +542,5 @@ func (m *{{$goName}}) ToJSON(dst []byte) []byte {
 	return dst
 }
 {{- end}}
+{{end}}
 {{end}}

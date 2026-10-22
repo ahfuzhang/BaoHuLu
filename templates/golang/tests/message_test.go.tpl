@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* 单个 message 的样本构造、编解码、Clone / Reset 和内存复用测试。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -886,5 +887,6 @@ func Test{{$goName}}YAMLRoundtrip(t *testing.T) {
 		t.Fatalf("YAML roundtrip mismatch:\n--- want ---\n%s\n--- got ---\n%s", yamlOut, yamlOut2)
 	}
 }
+{{end}}
 {{end}}
 {{end}}

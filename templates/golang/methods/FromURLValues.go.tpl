@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* URLValues 解码。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -304,4 +305,5 @@ func (r *Readonly{{$goName}}) FromURLValues(src []byte) error {
 	}
 	return nil
 }
+{{end}}
 {{end}}

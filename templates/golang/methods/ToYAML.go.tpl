@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* YAML 编码。共享 YAML key 和注释常量只在本文件定义。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -564,4 +565,5 @@ func (m *{{$goName}}) ToYAML(dst []byte, indent int) []byte {
 {{- end}}
 	return dst
 }
+{{end}}
 {{end}}

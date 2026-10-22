@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* Protobuf 编码：大小计算、append / VT 编码及其辅助方法。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -981,4 +982,5 @@ func (m *{{$goName}}) ToProtobuf(dst []byte) []byte {
 	return m.ToProtobufVT(dst)
 {{- end}}
 }
+{{end}}
 {{end}}

@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* JSON 解码：FromJSON、fromJSONValue 和 fromJSONArray。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -981,4 +982,5 @@ func (r *Readonly{{$goName}}) FromJSON(src []byte) error {
 	return r.fromJSONValue(obj, parser, r.strArena)
 {{- end}}
 }
+{{end}}
 {{end}}

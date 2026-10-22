@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* Protobuf 解码：FromProtobuf 和 FromProtobufWithArena。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -338,4 +339,5 @@ func (r *Readonly{{$goName}}) FromProtobufWithArena(in []byte, arena *fastjson.A
 	r.strArena = arena
 	return r.FromProtobuf(in)
 }
+{{end}}
 {{end}}

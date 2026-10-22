@@ -231,52 +231,48 @@ See: [doc/Performance](./doc/Performance.md)
 * 安装
   - `go install github.com/ahfuzhang/BaoHuLu/cmd/hulu@v0.14.2`
 
-* 语法检查
-  * `hulu xi ./xx.proto`
-  * 或者：`hulu check ./xx.proto`
+## 统一生成命令
 
-<img src="./doc/images/1.png" style="zoom:50%;" />
-
-
-
-* 生成代码：
-  * `hulu tu -src=./xx.proto -go_out=xx_dir -csharp_out=xx_dir _qiwa_out=xx_dir`
-    - 或者 `hulu generate ...`
-    - `-src=input.proto`
-    - `-go_out=$dir`: 把 golang 代码输出到某个目录
-      - `-go_out.with.test`: 生成 golang 的测试代码
-      - `-go_out.with.bench`: 生成 golang 的 benchmark 代码
-    - `-csharp_out=$dir`: 把 csharp 代码输出到某个目录
-      - `-csharp_out.with.test`:   生成 csharp 的测试代码
-      - `-csharp_out.with.bench`: 生成 csharp 的 benchmark 代码
-      - `-src.csharp_template.dir=$dir`: 自定义 template, 作为输入的模板
-      - `-dst.csharp_template.out_dir=$dir`: 对于自定义输入，设定对应的输出目录
-      - `-no.csproj.file`: 不生成 *.csproj 文件
-
-  ![](./doc/images/2.png)
-
-* 生成测试代码
-  - `make gen`
-
-aka:
-
-```bash
-hulu tu \
-	  -src=./examples/DemoServer/proto/Demo.proto \
-	  -go_out=./build/golang/DemoServer/ \
-	  -go_out.with.test \
-	  -go_out.with.bench \
-	  -csharp_out=./build/csharp/DemoServer/ \
-	  -csharp_out.with.test \
-	  -csharp_out.with.bench
+```sh
+hulu -src=examples/DemoServer/proto/Demo.proto -template.dir=builtin:golang -out=build/generated/golang
+hulu -src=examples/DemoServer/proto/Demo.proto -template.dir=builtin:csharp -out=build/generated/csharp
 ```
+
+只有三个必填参数：输入 proto、模板包、输出目录。两种语言使用同一套参数；
+没有 `generate/check/tu/xi` 子命令，每次生成前自动校验。
+`-template.dir` 也接受外部模板目录，新增模板包不需要修改或重新编译核心。
+
+在 proto 的 `syntax` 之前声明生成开关：
+
+```protobuf
+// @gen_test_code=on
+// @gen_benchmark_code=on
+// @gen_project_file=on
+syntax = "proto3";
+```
+
+默认分别为 `off/off/on`。项目文件包括 Go 的 `go.mod`、C# 的 `.csproj`。
+没有 `-with.*`、`-dry-run`、`-types.manifest` 或语言专属参数。
+`hulu --help` 显示完整参数与迁移提示。
+
+首次迁移请使用新输出目录。生成器通过 `.hulu-manifest.json` 保护人工修改、
+项目文件及其他生成任务的文件，不会擅自删除无归属的旧产物。
+
+- `make test`：核心、解析、运行库和模板集成测试。
+- `make gen`：使用 `internal/integration/testdata/AllTypes.proto` 生成两种语言的完整测试与 benchmark。
+- `make generated-build`：编译这些独立 Go/.NET 项目，不执行已知存在历史失败的全部生成测试。
+- [模板协议与架构](doc/TemplateBundles.md)
+- [迁移及恢复指南](doc/Migration.md)
+- [本次验证结果与未完成项](doc/GenerationValidation.md)
+- [QiWa RPC 兼容包限制](templates/csharp/QiWa.rpc/README.md)：尚未通过 D16 正文适配审核，不能声称已可编译。
 
 
 
 ## 明确不支持的功能
 
 * proto 文件解析：
-  * 不支持关键字： import, required, optional, oneof, extensions, extend, stream, option
+  * 仅支持 proto3 单文件；required、optional、oneof、group、extensions、extend、stream，以及 message/service 内的 option 会报错。
+  * 支持文件 options（如 go_package、csharp_namespace）和 enum allow_alias；import 仅保留并警告，不做多文件解析。
   * 为了避免工具太复杂，一些经典的外部语法扩展先 **不支持** (暂不支持通过 import 导入其他 proto 文件)
     * Google 定义的扩展数据类型
     * 我最喜欢的 gogo proto 中的各种 extension

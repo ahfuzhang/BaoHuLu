@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* YAML 解码。YAML key 常量引用同包 ToYAML 文件中的定义。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -763,4 +764,5 @@ func (r *Readonly{{$goName}}) FromYAML(src []byte) error {
 {{- end}}
 	return nil
 }
+{{end}}
 {{end}}

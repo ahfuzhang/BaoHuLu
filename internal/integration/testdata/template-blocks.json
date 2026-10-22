@@ -1,0 +1,365 @@
+{
+  "baseline": "5ddaa30",
+  "blocks": [
+    {
+      "source": "templates/golang/benchmarks/builder.go.tpl",
+      "first": 1,
+      "last": 138,
+      "target": "templates/golang/benchmarks/builder.go.tpl",
+      "target_first": 2,
+      "sha256": "0cb5d5efa5ff387d190b1dbda4363182ed1899fd97af6d3887f3e082b05864b8"
+    },
+    {
+      "source": "templates/golang/benchmarks/compare_test.go.tpl",
+      "first": 1,
+      "last": 295,
+      "target": "templates/golang/benchmarks/compare_test.go.tpl",
+      "target_first": 2,
+      "sha256": "479cb3e57d345921a59ab562621f8f42506475c9d49a09fe81e07557eefbcc44"
+    },
+    {
+      "source": "templates/golang/benchmarks/jsonv2_bench_test.go.tpl",
+      "first": 1,
+      "last": 55,
+      "target": "templates/golang/benchmarks/jsonv2_bench_test.go.tpl",
+      "target_first": 2,
+      "sha256": "e9ac7670810ab4b06cdd6cc913788600e26c8f1a5b8dd990d0cdbf06d850e2f3"
+    },
+    {
+      "source": "templates/golang/benchmarks/message_bench_test.go.tpl",
+      "first": 1,
+      "last": 163,
+      "target": "templates/golang/benchmarks/message_bench_test.go.tpl",
+      "target_first": 2,
+      "sha256": "9df3f0cea2c8f8affc2c6ebb142574e05d805b7a336689e327d2f0724f39d6c8"
+    },
+    {
+      "source": "templates/golang/methods/Clone.go.tpl",
+      "first": 1,
+      "last": 231,
+      "target": "templates/golang/methods/Clone.go.tpl",
+      "target_first": 2,
+      "sha256": "f0a8bff023bef47b7f1a0945ae420a03320f29277ec4efa277e9036da7b3e8b9"
+    },
+    {
+      "source": "templates/golang/methods/FromJSON.go.tpl",
+      "first": 1,
+      "last": 984,
+      "target": "templates/golang/methods/FromJSON.go.tpl",
+      "target_first": 2,
+      "sha256": "ddeffd31bf7f12df76e561cd39ef1d72093bb565dad1767f33b868e691c07da4"
+    },
+    {
+      "source": "templates/golang/methods/FromProtobuf.go.tpl",
+      "first": 1,
+      "last": 341,
+      "target": "templates/golang/methods/FromProtobuf.go.tpl",
+      "target_first": 2,
+      "sha256": "76bcbdaa92fdda7306f9f070427cadfce18855840f060306242e8bfef31cbdc2"
+    },
+    {
+      "source": "templates/golang/methods/FromURLValues.go.tpl",
+      "first": 1,
+      "last": 307,
+      "target": "templates/golang/methods/FromURLValues.go.tpl",
+      "target_first": 2,
+      "sha256": "fa5669d638d21af9b3dd8dd4397ac9a0b52e9becd68e163db5294c0cbef8d80a"
+    },
+    {
+      "source": "templates/golang/methods/FromYAML.go.tpl",
+      "first": 1,
+      "last": 766,
+      "target": "templates/golang/methods/FromYAML.go.tpl",
+      "target_first": 2,
+      "sha256": "3729bc45f3396702a025f73cf8b0486a0101cef61d719d83a3062cd66e7a552e"
+    },
+    {
+      "source": "templates/golang/methods/Reset.go.tpl",
+      "first": 1,
+      "last": 75,
+      "target": "templates/golang/methods/Reset.go.tpl",
+      "target_first": 2,
+      "sha256": "7010f89abbd788e9404a47b6b491a7bba4913b8402072d67160b7b99eb7c7fb9"
+    },
+    {
+      "source": "templates/golang/methods/ToJSON.go.tpl",
+      "first": 1,
+      "last": 544,
+      "target": "templates/golang/methods/ToJSON.go.tpl",
+      "target_first": 2,
+      "sha256": "0d0d7a90b14b400c6e823504add0a3443de490d4f5d0a6b68d180692e1361657"
+    },
+    {
+      "source": "templates/golang/methods/ToProtobuf.go.tpl",
+      "first": 1,
+      "last": 984,
+      "target": "templates/golang/methods/ToProtobuf.go.tpl",
+      "target_first": 2,
+      "sha256": "82c25c0531b04208bb15c0fc448f4090f78ccb3c9e58e4b9f714d7206a12d216"
+    },
+    {
+      "source": "templates/golang/methods/ToURLValues.go.tpl",
+      "first": 1,
+      "last": 308,
+      "target": "templates/golang/methods/ToURLValues.go.tpl",
+      "target_first": 2,
+      "sha256": "cf82f1f8d3b65c41a1aa42f90646d663406aa8025ea8da9c398df09f92f52d40"
+    },
+    {
+      "source": "templates/golang/methods/ToYAML.go.tpl",
+      "first": 1,
+      "last": 567,
+      "target": "templates/golang/methods/ToYAML.go.tpl",
+      "target_first": 2,
+      "sha256": "4b029e1b56f53b1732b2b3f21d51a64327321c6a0412e33d34eb1bf06a91766b"
+    },
+    {
+      "source": "templates/golang/partials/header.go.tpl",
+      "first": 1,
+      "last": 5,
+      "target": "templates/golang/partials/header.go.tpl",
+      "target_first": 1,
+      "sha256": "2546f3eac283f8d6f78d007c712191355bb7f5b70fba1399917b893b879acb62"
+    },
+    {
+      "source": "templates/golang/project/gitignore.tpl",
+      "first": 1,
+      "last": 4,
+      "target": "templates/golang/project/gitignore.tpl",
+      "target_first": 2,
+      "sha256": "9c669c5ca7195d426dc92242743403ee47a47014c0cddb07944f48549f9af58f"
+    },
+    {
+      "source": "templates/golang/project/go.mod.tpl",
+      "first": 1,
+      "last": 29,
+      "target": "templates/golang/project/go.mod.tpl",
+      "target_first": 2,
+      "sha256": "9e8b06ec20d81deae64139565184d15749b43f26f0c5db61a83c482b923b175c"
+    },
+    {
+      "source": "templates/golang/tests/message_test.go.tpl",
+      "first": 1,
+      "last": 890,
+      "target": "templates/golang/tests/message_test.go.tpl",
+      "target_first": 2,
+      "sha256": "f40232a8799a8527acf2cc678253329eacb6a6a81a8c7ce4d60c75975aaf0029"
+    },
+    {
+      "source": "templates/golang/types/enum.go.tpl",
+      "first": 1,
+      "last": 13,
+      "target": "templates/golang/types/enum.go.tpl",
+      "target_first": 2,
+      "sha256": "4987e65df1f13421df258fa92ca2d393eb389294b5e4e64a2bcf28d9af4a3f62"
+    },
+    {
+      "source": "templates/golang/types/message.go.tpl",
+      "first": 1,
+      "last": 65,
+      "target": "templates/golang/types/message.go.tpl",
+      "target_first": 2,
+      "sha256": "0fba8e00932d7f8cfcffe9e6af98a910b34033984d1d815a055b97166ede4a0e"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 1,
+      "last": 30,
+      "target": "templates/csharp/partials/header.cs.tpl",
+      "target_first": 1,
+      "sha256": "d18ddcc016a582a973ce87ad502fd547b1af90306125d6ec54b7d7841b19945e"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 32,
+      "last": 42,
+      "target": "templates/csharp/types/message.cs.tpl",
+      "target_first": 5,
+      "sha256": "699d98a3ad8f7a574f2981077bcc15b68c9c558259270d1936b91ed7cb6bf307"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 813,
+      "last": 816,
+      "target": "templates/csharp/types/message.cs.tpl",
+      "target_first": 17,
+      "sha256": "40c312c8c997504b0ef0ed725731fe06913dca4ec3f1921e9db2ad2b11bf6302"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 820,
+      "last": 830,
+      "target": "templates/csharp/types/message.cs.tpl",
+      "target_first": 21,
+      "sha256": "a934004d5db82459791324170570a761c9c722e91dddebed3dfcf9b021e98479"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 1660,
+      "last": 1663,
+      "target": "templates/csharp/types/message.cs.tpl",
+      "target_first": 33,
+      "sha256": "6388a115d6f099d6cb492adf413d0da6d5a9a6cf5496d6d883b8e15ce7252590"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 1678,
+      "last": 1683,
+      "target": "templates/csharp/types/enum.cs.tpl",
+      "target_first": 4,
+      "sha256": "8c1a3ab07e18996082ef2c6fbd7433397d6a6c41ffaf692d40ab49cc4ccb174d"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 44,
+      "last": 417,
+      "target": "templates/csharp/methods/FromProtobuf.cs.tpl",
+      "target_first": 7,
+      "sha256": "e0c4bcd9b720d6a9e1739e1d357f695c598cd95114f293219685855530a76328"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 419,
+      "last": 701,
+      "target": "templates/csharp/methods/FromJSON.cs.tpl",
+      "target_first": 7,
+      "sha256": "df01a3a0e539d772f54a7f02fcc51cf40c522485558d6daf6b3caaa60d72bf7a"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 703,
+      "last": 782,
+      "target": "templates/csharp/methods/Clone.cs.tpl",
+      "target_first": 7,
+      "sha256": "c34a70ed83584f3f499620905c5f31b9d626979296fc2a9e7e755e05d3a010d4"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 832,
+      "last": 1353,
+      "target": "templates/csharp/methods/ToProtobuf.cs.tpl",
+      "target_first": 7,
+      "sha256": "8f5aef1bb9f43f2937aff6758e28965ef39b12358f65131ba79716f12f52a613"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 1355,
+      "last": 1633,
+      "target": "templates/csharp/methods/ToJSON.cs.tpl",
+      "target_first": 7,
+      "sha256": "d1236444710645248d77b98847ff89d46251e6d84ec60d1d7dbe71ef9b22c502"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 784,
+      "last": 809,
+      "target": "templates/csharp/methods/Reset.cs.tpl",
+      "target_first": 7,
+      "sha256": "eb5282590e65956002fdf34afd757204190bd6ae5b0672599a4e2310ed070375"
+    },
+    {
+      "source": "internal/csharp/templates/message.cs.tpl",
+      "first": 1635,
+      "last": 1656,
+      "target": "templates/csharp/methods/Reset.cs.tpl",
+      "target_first": 37,
+      "sha256": "fdfb32a6599aee2869f6a8b59bf9e39287dcdc9bb9813e7fccce7d9d1c7d91ac"
+    },
+    {
+      "source": "internal/csharp/templates/message.yaml.cs.tpl",
+      "first": 1,
+      "last": 15,
+      "target": "templates/csharp/partials/Yaml.cs.tpl",
+      "target_first": 1,
+      "sha256": "9088179ec1ad54e3e2a9ad851c8695e33ca7e8f69a77c364f146011b591ca7c0"
+    },
+    {
+      "source": "internal/csharp/templates/message.yaml.cs.tpl",
+      "first": 16,
+      "last": 332,
+      "target": "templates/csharp/methods/ToYAML.cs.tpl",
+      "target_first": 1,
+      "sha256": "9dd357000d9d7ef86c82f51b341f766f6f18f61174388c1c8d5a9e59bf4d0590"
+    },
+    {
+      "source": "internal/csharp/templates/message.yaml.cs.tpl",
+      "first": 333,
+      "last": 927,
+      "target": "templates/csharp/methods/FromYAML.cs.tpl",
+      "target_first": 1,
+      "sha256": "0cb5ca7822035c4fb89937589f449f4845686e73f113673837a3eb178e06a5a3"
+    },
+    {
+      "source": "internal/csharp/templates/url.values.cs.tpl",
+      "first": 1,
+      "last": 13,
+      "target": "templates/csharp/partials/UrlValues.cs.tpl",
+      "target_first": 1,
+      "sha256": "41f46a8bf8908751cd86fc6023efc9ae38343701c139ae2b21240c935292788a"
+    },
+    {
+      "source": "internal/csharp/templates/url.values.cs.tpl",
+      "first": 14,
+      "last": 239,
+      "target": "templates/csharp/methods/ToURLValues.cs.tpl",
+      "target_first": 1,
+      "sha256": "4758f3f2017d06864087831130919d31a47ac819a2ca361621727c4bfa567c70"
+    },
+    {
+      "source": "internal/csharp/templates/url.values.cs.tpl",
+      "first": 240,
+      "last": 408,
+      "target": "templates/csharp/methods/FromURLValues.cs.tpl",
+      "target_first": 1,
+      "sha256": "f71142b54b8b8dfe6497e532fa900e80ea59928adf053ee3f575c37bee615154"
+    },
+    {
+      "source": "internal/csharp/templates/test.cs.tpl",
+      "first": 1,
+      "last": 183,
+      "target": "templates/csharp/tests/validate.cs.tpl",
+      "target_first": 2,
+      "sha256": "ff7768706ca7f812ab1bf51099dca31efd5355eee43dfeb8beec578e27bbc390"
+    },
+    {
+      "source": "internal/csharp/templates/test.cs.tpl",
+      "first": 185,
+      "last": 700,
+      "target": "templates/csharp/tests/message_test.cs.tpl",
+      "target_first": 19,
+      "sha256": "0cf938d8ed9a34f6f58e0417ad91b39466d73b79b47950f2b085873f7ba12770"
+    },
+    {
+      "source": "internal/csharp/templates/benchmark.cs.tpl",
+      "first": 1,
+      "last": 293,
+      "target": "templates/csharp/benchmarks/helpers.cs.tpl",
+      "target_first": 2,
+      "sha256": "356877eca5070063cfb018f97ea26262100184dfb6739af7611cdeebb572273b"
+    },
+    {
+      "source": "internal/csharp/templates/benchmark.cs.tpl",
+      "first": 301,
+      "last": 554,
+      "target": "templates/csharp/benchmarks/message_bench.cs.tpl",
+      "target_first": 43,
+      "sha256": "afc39b877bb60877ce5723a2ea3262405587f35698b545bff51b511b7d941692"
+    },
+    {
+      "source": "templates/csharp/QiWa.rpc/Service.Server__rename.cs.tpl",
+      "first": 1,
+      "last": 246,
+      "target": "templates/csharp/QiWa.rpc/service/Server.cs.tpl",
+      "target_first": 2,
+      "sha256": "50e67b2ec3067dff871ef20d5ab83f6daeec2cd0f8f028a2f6b3580006c0bbda"
+    },
+    {
+      "source": "templates/csharp/QiWa.rpc/MethodContext__rename.cs.tpl",
+      "first": 1,
+      "last": 44,
+      "target": "templates/csharp/QiWa.rpc/method/Context.cs.tpl",
+      "target_first": 2,
+      "sha256": "f1bb79fea8c00739c70739c15034d83ff5b78ab6d112b1cbab3d49321d97dc3f"
+    }
+  ]
+}

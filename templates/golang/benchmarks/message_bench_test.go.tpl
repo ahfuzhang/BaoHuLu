@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* 普通 JSON / Protobuf benchmark，使用同包 benchBuild 辅助函数。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -160,4 +161,5 @@ func BenchmarkFromProtobuf_{{$goName}}(b *testing.B) {
 		}
 	}
 }
+{{end}}
 {{end}}

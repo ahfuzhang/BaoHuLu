@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* Readonly 类型到写类型的深拷贝。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -228,4 +229,5 @@ func (r *Readonly{{$goName}}) Clone(dst *{{$goName}}) *{{$goName}} {
 {{- end}}
 	return dst
 }
+{{end}}
 {{end}}

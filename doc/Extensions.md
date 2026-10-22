@@ -21,6 +21,30 @@
 
 # 细节
 
+## 文件级生成开关
+
+必须放在文件头、`syntax` 之前；名称不区分大小写，值只能为小写 `on` 或 `off`。
+同一开关最多声明一次，缺值、错值、重复或放错位置均报错。
+
+```protobuf
+// @gen_test_code=on
+// @gen_benchmark_code=on
+// @gen_project_file=on
+syntax = "proto3";
+```
+
+| extension | 默认 | 作用 |
+| --- | --- | --- |
+| `@gen_test_code` | `off` | 展开当前模板包的 tests 映射 |
+| `@gen_benchmark_code` | `off` | 展开 benchmarks 映射，不隐式开启 tests |
+| `@gen_project_file` | `on` | 创建模板包提供的项目脚手架，包括 Go `go.mod`、C# `.csproj` 和 `.gitignore` |
+
+测试/benchmark 项目文件分别还要求对应代码开关为 on。已有项目文件始终保留；关闭开关不会删除它们。
+显式 on 而模板包缺少对应映射会报错。隐式默认 project=on 允许模板包没有 project 映射。
+开关不向 import/external 文件传播；删除声明恢复默认值。命令行不再提供对应开关。
+
+未知注解保留在 Schema.Annotations，不自动解释；`@formName`、`@method` 仍不是已实现的生成功能。
+
 ## message 扩展语法
 
 ### @Deprecated
@@ -236,4 +260,3 @@ service Demo {
 ```
 
 当生成 service 的代码时，`@path` 中指定的路径变成分发的路径。
-

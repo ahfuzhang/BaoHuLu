@@ -1,12 +1,12 @@
 # BaoHuLu 语言无关代码生成架构改造规划
 
-> 状态：待审核，尚未开始实施。本文中的 TODO 均为后续工作。
+> 状态：2026-10-12 实施中。用户已要求按计划改造。数据生成主线、统一 CLI、模板迁移与旧核心清理已完成；RPC 正文适配等 D16 事项仍待 review，不能将整份计划标为完成。实际验证见 [GenerationValidation.md](../GenerationValidation.md)，可续接上下文见 [implementation-context.md](implementation-context.md)。
 >
 > 规划日期：2026-09-11。代码基线：`8d360aa445785f24d26bdb1047aa8fe82eb23020`。
 >
-> 需求依据：[2026-09-11_merge_go_csharp.md](../doc/prompts/2026-09-11_merge_go_csharp.md)。本次上下文没有提供编辑器当前文件路径；根据当天新增文件及其内容，将这份文件识别为本次改造提示词。若所指文件不同，应先调整需求基线。
+> 需求依据：[2026-09-11_merge_go_csharp.md](2026-09-11_merge_go_csharp.md)。下文的“当前/现有”源码描述是实施前基线，不代表新架构仍保留旧生成器。
 >
-> 本轮规划文件位于 `doc/prompts/`，包含本文及 `golang_tpl_config.yaml`、`csharp_tpl_config.yaml` 两份模板配置草案。不修改生成器、模板、运行库、示例或现有生成产物。
+> 配置草案已由实际模板包替代并删除，唯一有效配置为 [Go](../../templates/golang/tpl_config.yaml)、[C#](../../templates/csharp/tpl_config.yaml) 与 [RPC](../../templates/csharp/QiWa.rpc/tpl_config.yaml)。运行库公开路径不变。
 >
 > 2026-09-27 修订：按用户要求，将原 `hulu.json` 方案简化为 YAML 的“代码部分 → 模板文件”映射；尚未开始实现。
 >
@@ -259,41 +259,36 @@ flowchart TD
 
 推荐边界：`protofile` 负责读入，`schema` 负责中立数据与分析，`codegen` 负责模板执行和产物管理，CLI 负责装配。不要为每个小功能创建独立 Go 包；下面各职责可以先在少数文件中实现，规模增长后再拆。
 
-### 4.2 建议的最终目录
+### 4.2 实施后的目录（2026-10-12）
 
 ```text
 cmd/hulu/
   main.go                       # 参数解析、帮助/版本、统一生成入口
-  generate.go                   # GenerateRequest -> 内部 check -> 生成
-  compat.go                     # 旧 RPC 模板上下文的限期适配
 internal/
   protofile/
     parse.go                    # AST -> Schema，无目标语言映射
   protoextensions/
-    extensions.go               # 注解解析、原始值及位置
-  protocheck/
-    protocheck.go               # 内部 check 的薄入口，复用 schema 校验，无独立命令
+    file.go                     # 文件级开关、原始值及位置
   schema/
     schema.go                   # File/Message/Field/Enum/Service/RPC/TypeRef
-    resolve.go                  # 分两遍解析引用
-    validate.go                 # 支持范围与语义校验
-    graph.go                    # 带边类型的引用图、环与闭包
-    wire.go                     # wire type、tag、packability 等协议事实
+    analysis.go                 # 两遍解析、引用图、环与闭包
   codegen/
-    request.go                  # 请求与生成结果
+    generate.go                 # 解析/check -> plan -> render -> write
     bundle.go                   # YAML 模板映射、fs.FS、配置验证
     context.go                  # 所有模板使用的统一上下文
-    funcs.go                    # 少量无语言语义的函数
+    functions.go                # 无语言语义的函数
     layout.go                   # 显式布局描述输入 -> 顺序/尺寸
     plan.go                     # 按类型和方法展开输出、路径冲突
     render.go                   # 模板解析缓存和执行
     write.go                    # 文件归属、暂存、提交和恢复
   integration/                  # 跨模块编译及行为验证
+    testdata/                   # AllTypes、Shapes、边界 fixture、区块哈希
+    go-contract/                # 生成模块互通 runner（独立模块）
+    csharp-contract/            # 新旧/官方 oracle/语法 token runner
 templates/
   embed.go                      # 仅嵌入资源，不反向依赖 internal/codegen
-  README.md                     # 模板作者入口
   golang/
-    tpl_config.yaml             # 实施时由 golang_tpl_config.yaml 草案迁入
+    tpl_config.yaml             # 唯一有效 Go 配置
     partials/                   # 命名、类型、字段、literal、布局描述
     types/                      # message/enum/type support
     methods/                    # 各格式 From / To 模板及生命周期模板
@@ -301,7 +296,7 @@ templates/
     benchmarks/
     project/
   csharp/
-    tpl_config.yaml             # 实施时由 csharp_tpl_config.yaml 草案迁入
+    tpl_config.yaml             # 唯一有效 C# 配置
     partials/
     types/
     methods/
@@ -312,26 +307,20 @@ templates/
       tpl_config.yaml           # 同样采用“代码部分 → 模板文件”映射
       service/
       method/
-      project/
-testdata/
-  proto/                        # 小而明确的类型/注解/错误 fixtures
-  bundles/                      # 最小第三模板包及错误模板
-  golden/                       # 少量人工可读预期，不提交全部 Demo 巨量产物
-  compatibility/                # 协议向量与 API 基线
-scripts/                        # 按实际需要添加集成测试入口
+      partials/                 # 兼容旧正文；通用 handler 待 D16 审核
 dependencies/golang/            # 保留运行时公开路径
 examples/DemoServer/proto/      # 保留原有 Demo
 doc/
-  TemplateSpec.md
+  TemplateBundles.md            # 合并模板规范与架构说明
   Migration.md
-  Architecture.md
+  GenerationValidation.md
   prompts/
     plan.md
-    golang_tpl_config.yaml
-    csharp_tpl_config.yaml
+    question.md
+    implementation-context.md
 ```
 
-`internal/golang`、`internal/csharp` 只在迁移期间保留，最终删除。为接入旧模型而增加的临时适配器必须注明删除阶段，不得演变为永久后端。
+`internal/golang`、`internal/csharp` 及旧 embed 已删除。兼容旧模板所需的数据映射位于模板包 partials，不保留 Go 语言适配器。
 
 ### 4.3 embed 的具体方案
 
@@ -388,7 +377,7 @@ Go 的 embed 路径相对声明文件所在包，不能使用 `..`；命名以�
 
 ### 6.1 配置只回答“哪部分代码使用哪个模板”
 
-完整草案见 [Go 配置](golang_tpl_config.yaml) 和 [C# 配置](csharp_tpl_config.yaml)。当前文件放在 `doc/prompts/` 供讨论；实施后，各自放入模板目录并统一命名为 `tpl_config.yaml`。配置中的模板路径相对于所选模板目录，不相对于当前草案文件。
+当前完整配置见 [Go 配置](../../templates/golang/tpl_config.yaml) 和 [C# 配置](../../templates/csharp/tpl_config.yaml)。原草案已删除；模板路径相对于所选模板目录。协议与实际 API 见 [TemplateBundles.md](../TemplateBundles.md)。
 
 ```yaml
 message: types/message.go.tpl
@@ -735,6 +724,16 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 
 ## 11. 分阶段 TODO 与验收门槛
 
+勾选表示当前能力及相应验证已完成，不表示曾逐步提交；本轮未创建分支或提交。复合条目只要仍有未验证项就保持未勾选。通过、基线失败和未运行项以 [验证报告](../GenerationValidation.md) 为准。
+
+| 阶段 | 当前状态 |
+| --- | --- |
+| P0–P3 | 基线、核心及模板协议已落地；完整环境/性能及部分边界矩阵未齐 |
+| P4–P5 | 数据模板及项目迁移完成，AllTypes 编译/API 对照通过；保留历史测试失败 |
+| P6 | 统一 CLI 完成，包括脱离源码目录执行 |
+| P7 | 统一上下文和兼容生成完成；业务 partial、Clone/响应假设及框架编译待 D16 review |
+| P8 | 旧核心/配置草案已清理，文档已更新；完整跨平台/AOT/性能验收未完成 |
+
 每个阶段应形成可审核提交。工作量用 S/M/L/XL 表示相对复杂度，不作为工期承诺：S 是局部机械改动，M 是模块级工作，L 是跨模块迁移，XL 是大模板迁移及多轮验证。完整工期应在 P0/P3 后据实估算。
 
 依赖顺序：`P0 → P1/P2 → P3 → P4 → P5 → P6 → P7 → P8`。P1/P2 可交错推进；P4/P5 必须基于已冻结的同一模板协议。业务行为迁移和清理旧代码不要放在同一个不可审阅的大提交里。
@@ -748,12 +747,12 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 - [ ] P0-03 从固定源码构建旧生成器，在隔离临时目录分别生成 Go、C#、现有 QiWa 服务端样例；建立输入、命令、产物哈希清单。
 - [ ] P0-04 使用旧工具及旧参数分别验证 no-test/no-bench、test-only、bench-only、test+bench、默认项目生成和 `-no.csproj.file`，记录已有失败，并建立它们到 `@gen_test_code`/`@gen_benchmark_code`/`@gen_project_file`/统一参数的迁移基线，不把已有失败伪装成重构回归。
 - [ ] P0-05 在新生成的 Go 模块用临时 `replace` 引用当前运行库；C# 保存 restore 后的具体依赖解析结果。
-- [ ] P0-06 固定当前生成公开 API：类型、字段、方法签名、接口、Wrapper；记录真正存在的方法，纠正文档假设。
+- [x] P0-06 固定当前生成公开 API：类型、字段、方法签名、接口、Wrapper；记录真正存在的方法，纠正文档假设。
 - [ ] P0-07 从旧运行结果保存协议向量及语义预期；为 map 和字段顺序明确比较规则。
 - [ ] P0-08 建立小型 fixtures 清单，覆盖 Demo 缺失的 decimal、bool map key、空类型、前向 enum、各类递归、重名和注解组合。
 - [ ] P0-09 在同机同工具链采集 AllTypes/ValueTypes 关键 benchmark、allocs/op、生成耗时和产物尺寸；记录原始结果。
 - [ ] P0-10 对 D01–D16 形成决策记录；单列 B/C 类问题和本次允许的行为变化。
-- [ ] P0-11 建立已有 `.tpl` 的文件、类型区块、函数区块和内容哈希清单，作为后续机械拆分的正文不变基线。
+- [x] P0-11 建立已有 `.tpl` 的文件、类型区块、函数区块和内容哈希清单，作为后续机械拆分的正文不变基线。
 
 交付：基线报告、API/协议样本、fixture 清单、依赖与命令记录。
 
@@ -762,18 +761,18 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 ### P1：引入中立 Schema 和统一分析（L）
 
 - [ ] P1-01 定义带版本的模板数据契约，明确原始名称、符号 ID、原始 options、SourceLocation。
-- [ ] P1-02 保留现有 parser 依赖，分两遍完成声明收集和引用解析，增加前向 enum/message 回归测试。
-- [ ] P1-03 保留 singular/repeated/map 的独立 TypeRef；不通过语言类型字符串反推 scalar/enum/message。
-- [ ] P1-04 统一注解解析，新增文件级 `@gen_test_code=on/off`、`@gen_benchmark_code=on/off`、`@gen_project_file=on/off` 并把显式值和按 `off`/`off`/`on` 计算的生效值保存到中立 File 模型，保留未知注解、原始值和位置；文件/message/field/RPC 的解析边界清楚，带行号/不带行号入口复用逻辑。
-- [ ] P1-05 明确 deprecated message/field、引用 deprecated 类型、RPC 引用失效类型的处理顺序与诊断。
-- [ ] P1-06 实现统一语义校验：支持范围、重复声明/编号、编号范围、map key、扩展冲突及非法 decimal。
-- [ ] P1-07 分离 proto 名称校验、JSON/YAML 名称校验和目标语言名称校验；不再把 JSON 名称一律当 Go 标识符。
+- [x] P1-02 保留现有 parser 依赖，分两遍完成声明收集和引用解析，增加前向 enum/message 回归测试。
+- [x] P1-03 保留 singular/repeated/map 的独立 TypeRef；不通过语言类型字符串反推 scalar/enum/message。
+- [x] P1-04 统一注解解析，新增文件级 `@gen_test_code=on/off`、`@gen_benchmark_code=on/off`、`@gen_project_file=on/off` 并把显式值和按 `off`/`off`/`on` 计算的生效值保存到中立 File 模型，保留未知注解、原始值和位置；文件/message/field/RPC 的解析边界清楚，带行号/不带行号入口复用逻辑。
+- [x] P1-05 明确 deprecated message/field、引用 deprecated 类型、RPC 引用失效类型的处理顺序与诊断。
+- [x] P1-06 实现统一语义校验：支持范围、重复声明/编号、编号范围、map key、扩展冲突及非法 decimal。
+- [x] P1-07 分离 proto 名称校验、JSON/YAML 名称校验和目标语言名称校验；不再把 JSON 名称一律当 Go 标识符。
 - [ ] P1-08 建立带边类型的依赖图，计算值嵌入环、全引用环、逆向使用关系和稳定的依赖顺序。
-- [ ] P1-09 提取纯 protobuf 数值事实：wire type、tag bytes、tag size、scalar/enum packability、map entry 信息。
-- [ ] P1-10 外部引用保留为 external，输出稳定告警；明确其类型/codec 由外部提供，不生成空替代类型。
-- [ ] P1-11 保留 source order，与依赖顺序、字段布局顺序分离；对同一输入多次建模比较一致性。
+- [x] P1-09 提取纯 protobuf 数值事实：wire type、tag bytes、tag size、scalar/enum packability、map entry 信息。
+- [x] P1-10 外部引用保留为 external，输出稳定告警；明确其类型/codec 由外部提供，不生成空替代类型。
+- [x] P1-11 保留 source order，与依赖顺序、字段布局顺序分离；对同一输入多次建模比较一致性。
 - [ ] P1-12 为旧生成器建立限期的薄适配，并保留固定基线二进制供对照，保证本阶段不会因结构体搬迁导致两个后端一起不可用；该适配不进入最终 CLI。
-- [ ] P1-13 按第 6.2.1 节建立 Service→Methods→Request/Response TypeRef→Message 的只读关系，并计算稳定去重的 Service.ReferencedTypes。
+- [x] P1-13 按第 6.2.1 节建立 Service→Methods→Request/Response TypeRef→Message 的只读关系，并计算稳定去重的 Service.ReferencedTypes。
 
 交付：中立模型、解析/分析测试、临时适配边界说明。
 
@@ -781,17 +780,17 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 
 ### P2：模板资源和通用引擎（L）
 
-- [ ] P2-01 将两种语言现有模板先机械搬入根 `templates/` 对应子目录；按第 6.1.1 节只移动完整类型/函数区块，不改模板正文，不抽取公共子模板；保留既有 QiWa 内容。
+- [x] P2-01 将两种语言现有模板先机械搬入根 `templates/` 对应子目录；按第 6.1.1 节只移动完整类型/函数区块，不改模板正文，不抽取公共子模板；保留既有 QiWa 内容。
 - [ ] P2-02 增加资源 embed 包并调整旧入口读取位置，用基线比较证明这一步仅改变资源位置。
-- [ ] P2-03 按两份 YAML 草案实现“代码部分 → 模板文件”的严格解析和固定命名规则，同步把草案中的 tests/benchmarks/project 启用说明改为文件级 `@gen_test_code`/`@gen_benchmark_code`/`@gen_project_file` 及其默认值，不引入通用输出调度 DSL。
-- [ ] P2-04 统一外部目录与内置 `fs.FS` 加载；加载 `partials/` 及配置引用的模板。
-- [ ] P2-05 建立统一 RenderContext 和最小 FuncMap，包含 Service/RPC/TypeRef 当前对象及语言无关的 `withRPC`、`withTypeRef` 上下文重绑定；默认严格处理缺失字段及函数错误。
-- [ ] P2-06 实现命名模板调用返回字符串，解决名称冲突、递归限制和模板解析缓存。
-- [ ] P2-07 实现模板内条件分支和空白结果跳过；首次模板化的类型映射及复杂表达可复用公共子模板，已有 `.tpl` 不借此重写。
-- [ ] P2-08 先按 proto 声明类型选择模板：enum 只应用对应的 enum 模板，message 应用多个已配置且启用的 message 相关模板；再结合代码部分、三个文件级 `@gen_*` extension 的生效值和其他注解展开输出计划，稳定列出对应类型、模板文件、输出路径和变更原因。
-- [ ] P2-09 验证路径边界、重名、大小写冲突、symlink 逃逸、重复键、未知配置项和缺失模板。
-- [ ] P2-10 实现先渲染后写入、已有文件归属、人工修改冲突、受管理文件 prune、清单写入与失败恢复。
-- [ ] P2-11 添加最小无语言模板、错误模板、失败写入测试及内置/外部输出等价测试；增加已有模板区块拆分前后内容一致性检查。
+- [x] P2-03 按两份 YAML 草案实现“代码部分 → 模板文件”的严格解析和固定命名规则，同步把草案中的 tests/benchmarks/project 启用说明改为文件级 `@gen_test_code`/`@gen_benchmark_code`/`@gen_project_file` 及其默认值，不引入通用输出调度 DSL。
+- [x] P2-04 统一外部目录与内置 `fs.FS` 加载；加载 `partials/` 及配置引用的模板。
+- [x] P2-05 建立统一 RenderContext 和最小 FuncMap，包含 Service/RPC/TypeRef 当前对象及语言无关的 `withRPC`、`withTypeRef` 上下文重绑定；默认严格处理缺失字段及函数错误。
+- [x] P2-06 实现命名模板调用返回字符串，解决名称冲突、递归限制和模板解析缓存。
+- [x] P2-07 实现模板内条件分支和空白结果跳过；首次模板化的类型映射及复杂表达可复用公共子模板，已有 `.tpl` 不借此重写。
+- [x] P2-08 先按 proto 声明类型选择模板：enum 只应用对应的 enum 模板，message 应用多个已配置且启用的 message 相关模板；再结合代码部分、三个文件级 `@gen_*` extension 的生效值和其他注解展开输出计划，稳定列出对应类型、模板文件、输出路径和变更原因。
+- [x] P2-09 验证路径边界、重名、大小写冲突、symlink 逃逸、重复键、未知配置项和缺失模板。
+- [x] P2-10 实现先渲染后写入、已有文件归属、人工修改冲突、受管理文件 prune、清单写入与失败恢复。
+- [x] P2-11 添加最小无语言模板、错误模板、失败写入测试及内置/外部输出等价测试；增加已有模板区块拆分前后内容一致性检查。
 
 交付：通用引擎、模板包 v1 初稿、写入前完整预检与文件保护测试。
 
@@ -801,13 +800,13 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 
 - [ ] P3-01 用包含 int、string、enum、decimal、子 message、map/repeated 的小 fixture 验证两种语言的模板类型映射。
 - [ ] P3-02 用直接自递归、A→B→A、map/repeated 递归分别验证值表示和有限深度测试样本。
-- [ ] P3-03 实现显式布局描述与通用计算，验证没有 Go 大小硬编码泄漏进 Schema/codegen。
-- [ ] P3-04 验证 C# Wrapper 计算和 Go reader 合成字段都能仅由模板策略产生。
-- [ ] P3-05 分别机械拆出一组类型文件与完整 JSON/Protobuf 方法，不改已有模板区块正文；实际编译并确认 Go import 和 C# partial 方案可行。
-- [ ] P3-06 对原来不在 `.tpl` 中的代表性复杂 helper 使用 `render` 和公共子模板完成首次模板化：tag 字节展开、struct tag、样本 literal、map 填充；不得以此改写已有模板区块。
+- [x] P3-03 实现显式布局描述与通用计算，验证没有 Go 大小硬编码泄漏进 Schema/codegen。
+- [x] P3-04 验证 C# Wrapper 计算和 Go reader 合成字段都能仅由模板策略产生。
+- [x] P3-05 分别机械拆出一组类型文件与完整 JSON/Protobuf 方法，不改已有模板区块正文；实际编译并确认 Go import 和 C# partial 方案可行。
+- [x] P3-06 对原来不在 `.tpl` 中的代表性复杂 helper 使用 `render` 和公共子模板完成首次模板化：tag 字节展开、struct tag、样本 literal、map 填充；不得以此改写已有模板区块。
 - [ ] P3-07 验证大整数样本、转义、模板变量作用域、递归限制及错误定位；测量重复模板调用的生成开销。
-- [ ] P3-08 冻结文件命名规则、上下文和 FuncMap；验证一个 Reset 模板及生成文件同时容纳写类型和读类型的方法；若必须保留语言 util 例外，在此提交具体方案审核。
-- [ ] P3-09 增加外部极简第三模板包验证，无需重新编译 hulu，也无需新增 Go 语言处理代码。
+- [x] P3-08 冻结文件命名规则、上下文和 FuncMap；验证一个 Reset 模板及生成文件同时容纳写类型和读类型的方法；若必须保留语言 util 例外，在此提交具体方案审核。
+- [x] P3-09 增加外部极简第三模板包验证，无需重新编译 hulu，也无需新增 Go 语言处理代码。
 - [ ] P3-10 用一个包含多个 method、复用 request/response message、external 类型和多个 path 的 service fixture，验证 service/rpc 两种执行粒度、ReferencedTypes 顺序及上下文重绑定。
 
 交付：可运行的纵向原型、最终模板规范 v1、困难点验证记录。
@@ -816,20 +815,20 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 
 ### P4：迁移 Go 完整模板包（XL）
 
-- [ ] P4-01 建立旧类型/函数模板区块到新文件的逐项映射和哈希对照，按第 6.1.1 节机械搬移，确保没有遗漏私有方法和 reader 辅助字段，也没有改写模板正文。
-- [ ] P4-02 迁移 enum、writer/reader 类型、字段、tag/key 常量，保持公开 API 和私有内存表示。
+- [x] P4-01 建立旧类型/函数模板区块到新文件的逐项映射和哈希对照，按第 6.1.1 节机械搬移，确保没有遗漏私有方法和 reader 辅助字段，也没有改写模板正文。
+- [x] P4-02 迁移 enum、writer/reader 类型、字段、tag/key 常量，保持公开 API 和私有内存表示。
 - [ ] P4-03 将 writer/reader `Reset` 合并到同一个 Reset 模板及生成文件，`Clone` 单独保留；验证对齐、复用、map-message 指针及生命周期。
-- [ ] P4-04 将 `ProtobufSize`、`ToProtobufByAppend`、`marshalToSizedBufferVT`、`ToProtobufVT`、`ToProtobuf` 合并到 `ToProtobuf` 模板及生成文件，保持策略选择。
+- [x] P4-04 将 `ProtobufSize`、`ToProtobufByAppend`、`marshalToSizedBufferVT`、`ToProtobufVT`、`ToProtobuf` 合并到 `ToProtobuf` 模板及生成文件，保持策略选择。
 - [ ] P4-05 将 `FromProtobuf` 和 `FromProtobufWithArena` 合并到 `FromProtobuf` 模板及生成文件，覆盖 tag 边界、packed/unpacked、未知字段与截断数据。
 - [ ] P4-06 将 `FromJSON` 与 `fromJSONValue`、`fromJSONArray` 等私有解码方法合并到同一个模板及生成文件，`ToJSON` 单独保留；覆盖大整数、bytes、转义、null、AsMap/AsArray 和递归。
-- [ ] P4-07 迁移 YAML，保留注释、行内注释、字段别名及能力闭包；若拆分暴露内部符号冲突，只记录并单独评审，不在机械拆分中修改正文。
-- [ ] P4-08 迁移 URL Values，保留 repeated key、base64 和 map-value JSON 路径及传播范围。
+- [x] P4-07 迁移 YAML，保留注释、行内注释、字段别名及能力闭包；若拆分暴露内部符号冲突，只记录并单独评审，不在机械拆分中修改正文。
+- [x] P4-08 迁移 URL Values，保留 repeated key、base64 和 map-value JSON 路径及传播范围。
 - [ ] P4-09 拆分每个 message 的 imports；验证空 message、enum-only、单 scalar、只有 message 引用等最小产物。
 - [ ] P4-10 迁移 tests 和共享样本 builder；只有 proto 文件头 `@gen_test_code` 的生效值为 `on` 时生成，测试写样本文件时使用测试临时目录。
-- [ ] P4-11 迁移 benchmark/compare，明确 builder 和比较库依赖；只有 `@gen_benchmark_code` 的生效值为 `on` 时生成。
-- [ ] P4-12 将 go.mod 全部改为 `text/template`，`@gen_project_file` 缺省或为 `on` 时生成、为 `off` 时不生成；验证 module/package/alias、dev 构建及 decimal/test/bench 依赖组合。
+- [x] P4-11 迁移 benchmark/compare，明确 builder 和比较库依赖；只有 `@gen_benchmark_code` 的生效值为 `on` 时生成。
+- [x] P4-12 将 go.mod 全部改为 `text/template`，`@gen_project_file` 缺省或为 `on` 时生成、为 `off` 时不生成；验证 module/package/alias、dev 构建及 decimal/test/bench 依赖组合。
 - [ ] P4-13 运行所有 Go fixtures、完整 Demo、新旧交叉解码、API 对比和初步性能回归。
-- [ ] P4-14 检查新 Go 模板包不再调用语言专属 Go helper，标记尚未迁移项；若消除调用需要修改已有模板正文，按 D16 暂停并单独评审；旧 helper 仅供固定基线工具对照，统一在 P8 删除。
+- [x] P4-14 检查新 Go 模板包不再调用语言专属 Go helper，标记尚未迁移项；若消除调用需要修改已有模板正文，按 D16 暂停并单独评审；旧 helper 仅供固定基线工具对照，统一在 P8 删除。
 
 交付：完整 Go 模板包、迁移覆盖表、Go 产物验证报告。
 
@@ -837,16 +836,16 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 
 ### P5：迁移 C# 完整模板包（XL）
 
-- [ ] P5-01 建立旧类型/函数模板区块到新文件的逐项映射和哈希对照；机械迁移 namespace、enum、writer/reader、Tags、Wrapper，不改已有模板正文；一个 message 主文件容纳两种类型声明。
-- [ ] P5-02 把 `IResettable`、`IEncoder`、`IDecoder` 和属性留在明确位置，避免 partial 重复成员和意外签名变化。
-- [ ] P5-03 按 From / To 两个模板及生成文件迁移 Protobuf，`ProtobufSize` 并入 `ToProtobuf`；保持返回 Error、数字编码和 Wrapper 行为。
+- [x] P5-01 建立旧类型/函数模板区块到新文件的逐项映射和哈希对照；机械迁移 namespace、enum、writer/reader、Tags、Wrapper，不改已有模板正文；一个 message 主文件容纳两种类型声明。
+- [x] P5-02 把 `IResettable`、`IEncoder`、`IDecoder` 和属性留在明确位置，避免 partial 重复成员和意外签名变化。
+- [x] P5-03 按 From / To 两个模板及生成文件迁移 Protobuf，`ProtobufSize` 并入 `ToProtobuf`；保持返回 Error、数字编码和 Wrapper 行为。
 - [ ] P5-04 分文件迁移 To/FromJSON，覆盖两层 AsArray、map value message/enum/bytes、大整数和 null。
-- [ ] P5-05 将 writer/reader Reset 合并到同一个 Reset 模板及生成文件，Clone 单独保留；验证 list/dictionary/Wrapper 复用及递归行为。
-- [ ] P5-06 迁移 YAML/URL Values，保留注释、闭包及现有避免 AOT 告警的生成路径。
-- [ ] P5-07 按 message 拆分测试；只有 `@gen_test_code` 的生效值为 `on` 时生成，共享比较/样本辅助类采用单一 support 或 partial 分工，验证跨类型调用。
-- [ ] P5-08 按 message 拆分 benchmark；只有 `@gen_benchmark_code` 的生效值为 `on` 时生成，将列定义、配置和 Program 变成一次性产物。
-- [ ] P5-09 迁移主项目、Tests、Benchmarks、GrpcGen；`@gen_project_file` 缺省或为 `on` 时生成相应项目文件、为 `off` 时验证无项目模式；同时验证目录排除、项目引用和 namespace 隔离。
-- [ ] P5-10 验证固定依赖下的 `dotnet build`、`dotnet test` 和 benchmark 项目构建；不把 NuGet restore 失败当作模板错误。
+- [x] P5-05 将 writer/reader Reset 合并到同一个 Reset 模板及生成文件，Clone 单独保留；验证 list/dictionary/Wrapper 复用及递归行为。
+- [x] P5-06 迁移 YAML/URL Values，保留注释、闭包及现有避免 AOT 告警的生成路径。
+- [x] P5-07 按 message 拆分测试；只有 `@gen_test_code` 的生效值为 `on` 时生成，共享比较/样本辅助类采用单一 support 或 partial 分工，验证跨类型调用。
+- [x] P5-08 按 message 拆分 benchmark；只有 `@gen_benchmark_code` 的生效值为 `on` 时生成，将列定义、配置和 Program 变成一次性产物。
+- [x] P5-09 迁移主项目、Tests、Benchmarks、GrpcGen；`@gen_project_file` 缺省或为 `on` 时生成相应项目文件、为 `off` 时验证无项目模式；同时验证目录排除、项目引用和 namespace 隔离。
+- [x] P5-10 验证固定依赖下的 `dotnet build`、`dotnet test` 和 benchmark 项目构建；不把 NuGet restore 失败当作模板错误。
 - [ ] P5-11 对原来承诺兼容的 AOT/trim 场景做专项构建验证，记录告警差异；不顺便引入更高的语言版本要求。
 - [ ] P5-12 运行 C# API/协议对照、跨语言向量和初步性能回归；仍保留固定旧工具供最终对照。
 
@@ -856,14 +855,14 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 
 ### P6：接入统一 CLI（M/L）
 
-- [ ] P6-01 CLI 直接从 `hulu` 参数构造单个 GenerateRequest 和单个模板目标；生成前必须先通过内部 check，请求中不出现 Go/C# 输出字段，不再手工渲染文件。
-- [ ] P6-02 按顶部完整清单实现 `-src`、`-template.dir`、`-out` 及帮助参数；不得再定义 `-with.test`、`-with.bench`、`-with.project`、`-dry-run` 或 `-types.manifest`。
-- [ ] P6-03 移除 `generate`、`check`、`tu`、`xi` 操作子命令并测试其迁移诊断；逐项测试所有旧语言专属参数均给出确定的迁移诊断而不执行兼容分流，旧测试、benchmark、项目参数明确提示改用文件级 `@gen_test_code`、`@gen_benchmark_code`、`@gen_project_file`。旧 RPC 薄 loader 通过统一参数调用，完整模板迁移在 P7 完成。
-- [ ] P6-04 明确无参数、缺少必填参数、未知参数或位置参数、未知内置模板包和非法模板目录/YAML 等错误；帮助、版本查询不要求生成参数，也不执行生成。
-- [ ] P6-05 在统一生成入口强制先执行一次内部 check，校验与生成复用同一份 Schema；测试有效输入先校验再生成，无效输入不进入渲染且不修改输出及清单；错误带源文件位置，后续阶段错误附模板文件和输出条目上下文。
-- [ ] P6-06 内置生成迁移到统一 FS 与引擎；在仓库之外运行已构建 hulu，确认无需源码目录。
-- [ ] P6-07 引擎错误完整返回 CLI，由最外层统一决定退出码；库代码不调用 `os.Exit`，Schema 在一次生成中保持不可变。
-- [ ] P6-08 更新 help、README CLI 样例和 Makefile 的生成入口；Go、C#、QiWa.rpc 目标只改变模板包及输出值，不改变参数名。
+- [x] P6-01 CLI 直接从 `hulu` 参数构造单个 GenerateRequest 和单个模板目标；生成前必须先通过内部 check，请求中不出现 Go/C# 输出字段，不再手工渲染文件。
+- [x] P6-02 按顶部完整清单实现 `-src`、`-template.dir`、`-out` 及帮助参数；不得再定义 `-with.test`、`-with.bench`、`-with.project`、`-dry-run` 或 `-types.manifest`。
+- [x] P6-03 移除 `generate`、`check`、`tu`、`xi` 操作子命令并测试其迁移诊断；逐项测试所有旧语言专属参数均给出确定的迁移诊断而不执行兼容分流，旧测试、benchmark、项目参数明确提示改用文件级 `@gen_test_code`、`@gen_benchmark_code`、`@gen_project_file`。旧 RPC 薄 loader 通过统一参数调用，完整模板迁移在 P7 完成。
+- [x] P6-04 明确无参数、缺少必填参数、未知参数或位置参数、未知内置模板包和非法模板目录/YAML 等错误；帮助、版本查询不要求生成参数，也不执行生成。
+- [x] P6-05 在统一生成入口强制先执行一次内部 check，校验与生成复用同一份 Schema；测试有效输入先校验再生成，无效输入不进入渲染且不修改输出及清单；错误带源文件位置，后续阶段错误附模板文件和输出条目上下文。
+- [x] P6-06 内置生成迁移到统一 FS 与引擎；在仓库之外运行已构建 hulu，确认无需源码目录。
+- [x] P6-07 引擎错误完整返回 CLI，由最外层统一决定退出码；库代码不调用 `os.Exit`，Schema 在一次生成中保持不可变。
+- [x] P6-08 更新 help、README CLI 样例和 Makefile 的生成入口；Go、C#、QiWa.rpc 目标只改变模板包及输出值，不改变参数名。
 
 交付：一套统一 CLI 驱动新引擎，旧参数迁移诊断完整，语言专属编排从 main 中移除。
 
@@ -878,7 +877,7 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 - [ ] P7-05 建立旧目录模式的兼容上下文与 loader，测试当前两份实际 `.tpl`；草稿客户端不进入正式产物。
 - [ ] P7-06 验证无 service、多个 service、同名方法、外部请求/响应、重复 path、stream 拒绝等情形。
 - [ ] P7-07 用同目录模式和独立项目引用模式分别编译服务端样例；纯序列化输出不增加 RPC 文件或框架依赖。
-- [ ] P7-08 在迁移文档中静态列出 `demo.go` 等旧文件的替代关系和重复定义风险；不实现迁移预览命令。
+- [x] P7-08 在迁移文档中静态列出 `demo.go` 等旧文件的替代关系和重复定义风险；不实现迁移预览命令。
 - [ ] P7-09 验证已生成目录重跑、关闭 feature、删除 message、模板包升级、人工编辑、两个 proto 共用目录的文件归属行为。
 - [ ] P7-10 验证业务脚手架被修改后重跑仍保留；模拟模板错误、写入失败和中途恢复。
 
@@ -893,11 +892,11 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 - [ ] P8-03 在相同环境复测 AllTypes/ValueTypes 的运行性能、allocs/op、生成耗时、编译耗时和产物规模。
 - [ ] P8-04 对超过 D13 门槛的变化逐个解释并修复/审核；未解释的退化不合并为完成。
 - [ ] P8-05 验证同一输入多次运行、换输出绝对目录后产物确定；改变声明顺序时类型解析、API 和协议语义不变，仅允许已约定保留源顺序的文本变化。
-- [ ] P8-06 删除 `internal/golang`、`internal/csharp` 和临时适配中已无用途的模型/渲染路径；移除旧 embed 声明。
-- [ ] P8-07 做依赖和源码审查：新核心没有语言类型映射、语言专属 View、C# 项目字符串拼接或 Go 语句生成函数。
-- [ ] P8-08 整理 Makefile/集成测试脚本，确保仓库单测、生成 Go 子模块测试、C# 测试和 benchmark 分开执行且结果可见。
+- [x] P8-06 删除 `internal/golang`、`internal/csharp` 和临时适配中已无用途的模型/渲染路径；移除旧 embed 声明。
+- [x] P8-07 做依赖和源码审查：新核心没有语言类型映射、语言专属 View、C# 项目字符串拼接或 Go 语句生成函数。
+- [x] P8-08 整理 Makefile/集成测试脚本，确保仓库单测、生成 Go 子模块测试、C# 测试和 benchmark 分开执行且结果可见。
 - [ ] P8-09 如仓库采用 CI，增加最小所需 Go/.NET 检查；验证真实最低工具链，不强迫普通用户打开 jsonv2 benchmark 特性。
-- [ ] P8-10 完成 TemplateSpec、Architecture、Migration、`doc/Extensions.md`、README、CHANGE_LOG；记录三个文件级 `@gen_*` extension 的 `on/off` 语法、默认值、旧测试/benchmark/项目参数迁移方式、测试命令和不支持功能说明。
+- [x] P8-10 完成 TemplateBundles（合并 TemplateSpec/Architecture）、Migration、`doc/Extensions.md`、README、CHANGE_LOG；记录三个文件级 `@gen_*` extension 的 `on/off` 语法、默认值、旧测试/benchmark/项目参数迁移方式、测试命令和不支持功能说明。
 - [ ] P8-11 从干净 checkout 按文档完成内置生成、自定义生成、测试/benchmark、RPC 生成及产物迁移演练。
 - [ ] P8-12 汇总全部 TODO、明确保留的已知问题、发布候选版本和回滚说明，提交最终审核。
 
@@ -919,7 +918,7 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 | 引用 | 前向 enum、前向 message、值自递归、互递归、容器递归 | 不因声明顺序错判、不生成无限值结构、不无限构造样本 |
 | 外部类型 | 同包另次生成、未解析字段/RPC 引用 | 不生成空类型；能力缺失可诊断；不假装支持完整 import |
 | Service/RPC 模板上下文 | 一个 service 多 method、多个 service 同名 method、request/response 复用、external 请求/响应 | service 模板每个 service 一次并可遍历 Methods；rpc 模板每个 method 一次；TypeRef 指向唯一 Message；ReferencedTypes 顺序稳定且去重 |
-| 注解 | 文件级 `test`、`bench`、`project`；message/field 的 Deprecated、VarName、jsonName、yamlName、tag、decimal、AsMap、AsArray、yaml、UrlValues；RPC 多 path | 三个文件级扩展的文件头位置、重复、非法值、独立启用、组合、不传播及模板能力缺失；其他注解的大小写/空白、非法参数、组合冲突、原始注解保留 |
+| 注解 | 文件级 `gen_test_code`、`gen_benchmark_code`、`gen_project_file`；message/field 的 Deprecated、VarName、jsonName、yamlName、tag、decimal、AsMap、AsArray、yaml、UrlValues；RPC 多 path | 三个文件级扩展的文件头位置、重复、非法值、独立启用、组合、不传播及模板能力缺失；其他注解的大小写/空白、非法参数、组合冲突、原始注解保留 |
 | 格式细节 | Unicode、引号、反斜杠、空字符串、base64、JSON null、大整数、YAML 行尾注释 | 不因模板字符串转义损坏代码或数据 |
 | 能力传播 | 父有注解子无、两层嵌套、map/repeated、环、external | YAML 与 URL 的不同闭包；模板间依赖完备 |
 | 名称 | proto 重名、转化后重名、两服务同名 method、大小写文件冲突、关键字、平台后缀 | 写入前诊断；不静默覆盖或产生不能编译的符号 |
@@ -1008,7 +1007,7 @@ hulu -src=./examples/DemoServer/proto/Demo.proto \
 ## 15. 审核清单
 
 - [ ] 已确认需求依据就是 `doc/prompts/2026-09-11_merge_go_csharp.md`。
-- [ ] 核对两份 YAML 草案的代码部分与模板路径；按用户要求采用简单映射，并先做 P3 原型再全面迁移。
+- [ ] 核对两个实际模板包 YAML 的代码部分与模板路径；按用户要求采用简单映射，并先做 P3 原型再全面迁移。
 - [ ] 接受 `templates/embed.go` 资源包方案。
 - [ ] 接受类型/读类型同文件、各格式按 From / To 分模板和文件并包含相关变体及辅助方法，以及写类型和读类型的 Reset 共用一个模板及生成文件。
 - [ ] 接受已有 `.tpl` 只按类型声明和函数实现区块机械拆分，不改内部 template 实现；必要正文改动必须脱离拆分任务单独 review。

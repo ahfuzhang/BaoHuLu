@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* 写类型和 Readonly 类型的 Reset 放在同一个文件。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -72,4 +73,5 @@ func (r *Readonly{{$goName}}) Reset() {
 {{- end}}
 	r.strArena = nil  // Make the object no longer referenced, and let the GC manage its lifecycle.
 }
+{{end}}
 {{end}}

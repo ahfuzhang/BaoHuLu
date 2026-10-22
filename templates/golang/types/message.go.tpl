@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* 单个 message：字段常量、写类型及 Readonly 类型声明。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -62,4 +63,5 @@ type Readonly{{$goName}} struct {
 {{- end}}
 {{- end}}
 }
+{{end}}
 {{end}}

@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* 单个 enum：类型声明及全部枚举值。 */ -}}
 {{template "partials/header.go.tpl" .}}
 
@@ -10,4 +11,5 @@ const (
 	{{padRight (enumValueGoName .Name) $enumMaxLen}} {{$enumName}} = {{.Number}}
 {{- end}}
 )
+{{end}}
 {{end}}

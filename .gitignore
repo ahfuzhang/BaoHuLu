@@ -5,3 +5,5 @@ test.test
 *.sln
 /memory/
 .DS_Store
+/internal/integration/csharp-contract/bin/
+/internal/integration/csharp-contract/obj/

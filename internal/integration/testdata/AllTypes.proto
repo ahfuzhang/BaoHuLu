@@ -1,0 +1,154 @@
+// @gen_test_code=on
+// @gen_benchmark_code=on
+// @gen_project_file=on
+syntax = "proto3";
+
+package demo;
+
+//import "google/api/annotations.proto";
+//import "google/api/client.proto";
+
+option csharp_namespace = "Generated.Demo";
+option go_package = "github.com/ahfuzhang/BaoHuLu/examples/Demo";
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_DISABLED = 2;
+}
+
+// @deprecated
+message NotUse {
+  int64 a = 1;
+}
+
+// @UrlValues
+message Child {
+  // @varName=ChildID
+  // @jsonName=childid
+  // @yamlName=child_id_
+  // @tag=gorm:"column:child_id;type:int;not null"
+  int32 child_id = 1;
+
+  // @formName=child_name
+  string ChildName = 2;
+
+  // @deprecated
+  string not_use_3 = 6;
+}
+
+// 这个类型尝试所有的 protobuf 类型，以便测试时可以充分覆盖。
+// @yaml
+message AllTypes {
+  double DoubleValue = 1;
+  float FloatValue = 2;
+  int32 Int32Value = 3;
+  int64 Int64Value = 4;
+  uint32 Uint32Value = 5;
+  uint64 Uint64Value = 6;
+  sint32 Sint32Value = 7;
+  sint64 Sint64Value = 8;
+  fixed32 Fixed32Value = 9;
+  fixed64 Fixed64Value = 10;
+  sfixed32 Sfixed32Value = 11;
+  sfixed64 Sfixed64Value = 12;
+  bool BoolValue = 13;
+  string StringValue = 14;
+  bytes BytesValue = 15;
+
+  Status Status = 16;
+  Child Child = 17;
+
+  repeated int32 Numbers = 18;
+  repeated string Tags = 19;
+
+  // 可用 key：int32/int64/uint32/uint64/sint32/sint64/fixed32/fixed64/sfixed32/sfixed64/bool/string
+  map<int32, int32> m1 = 1000;
+  map<int64, int32> m2 = 1001;
+  map<uint32, int32> m3 = 1002;
+  map<uint64, int32> m4 = 1003;
+  map<sint32, int32> m5 = 1004;
+  map<sint64, int32> m6 = 1005;
+  map<fixed32, int32> m7 = 1006;
+  map<fixed64, int32> m8 = 1007;
+  map<sfixed32, int32> m9 = 1008;
+  map<sfixed64, int32> m10 = 1009;
+  //map<double, int32> m11 = 1100;  // 不支持以 double 为 key
+  //map<float, int32> m12 = 1101;  // 不支持以 float 为 key
+  map<string, bytes> m13 = 1102;
+  map<string, Status> m14 = 1103;
+
+  // 先注释掉这行：这里会导致 sonic 库反序列化失败
+  //map<bool, int32> m11 = 1010;
+
+  map<string, int32> Scores = 20;
+  int32 big_tag = 65536;
+  // 	19000 到 19999 是保留的
+  // tag 范围:
+  // 	•	1..18999
+  //  •	20000..536870911
+
+  // 去掉下面三项后， linux+amd64 下发现， json decode 的性能快于 sonic 70%
+  map<string, ValueTypes> values = 1010; // map value 是 message 类型的情况
+  AllTypes next = 1011; // 测试递归定义的情形
+  map<uint64, AllTypes> children = 1012;
+  // 所有字段都展开后：linux+amd64 下, json decode 的性能快于 sonic 12%
+
+  // @decimal=round:7
+  // double price = 1013;  // encoding/json 库序列化时会失败
+}
+
+// @UrlValues
+message ValueTypes {
+  double DoubleValue = 1;
+  float FloatValue = 2;
+  int32 Int32Value = 3;
+  int64 Int64Value = 4;
+  uint32 Uint32Value = 5;
+  uint64 Uint64Value = 6;
+  sint32 Sint32Value = 7;
+  sint64 Sint64Value = 8;
+  fixed32 Fixed32Value = 9;
+  fixed64 Fixed64Value = 10;
+  sfixed32 Sfixed32Value = 11;
+  sfixed64 Sfixed64Value = 12;
+  bool BoolValue = 13;
+  Status Status = 16;
+  //map<uint64, string> children = 1012; // 遍历 map 的成本很高。pb encode 中，两次遍历 map 会导致性能下降 33%
+}
+
+message HelloRequest {
+  AllTypes Data = 1;
+}
+
+message HelloResponse {
+  int32 Code = 1;
+  string Message = 2;
+  AllTypes Data = 3;
+}
+
+service Demo {
+  // @path=/api/v1/hello
+  // @path=/api/v2/hello
+  rpc Hello(HelloRequest) returns (HelloResponse) {}
+
+  rpc Query(ValueTypes) returns (Child) {}
+}
+
+// @AsMap
+// 不会出现 labels 这个名字
+message MapType {
+  map<string, string> labels = 1;
+}
+
+// @AsArray
+// 不会出现 items 这个名字
+message ArrayType {
+  repeated string items = 1;
+}
+
+// @yaml
+message Series {
+  repeated MapType data = 1;
+  map<string, ArrayType> one_to_many = 2;
+}

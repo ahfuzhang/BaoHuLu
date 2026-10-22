@@ -1,0 +1,2 @@
+service: service/Server.cs.tpl
+rpc: method/Context.cs.tpl

@@ -1,3 +1,4 @@
+{{with model .}}
 {{/* 性能对照表；依赖 benchBuild 和 jsonv2 实验。 */ -}}
 //go:build with.compare && goexperiment.jsonv2
 
@@ -292,4 +293,5 @@ skipJSONDecode:
 
 	fmt.Println()
 }
+{{end}}
 {{end}}
